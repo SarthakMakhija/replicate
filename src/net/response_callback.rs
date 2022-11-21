@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 pub(crate) type ResponseCallbackType<Response> = Rc<dyn ResponseCallback<Response> + 'static>;
 
-pub(crate) type ResponseErrorType = Box<dyn Error>;
+pub(crate) type ResponseErrorType = Box<dyn Error + 'static>;
 
 pub trait ResponseCallback<Response> {
     fn on_response(&self, response: Result<Response, ResponseErrorType>);
