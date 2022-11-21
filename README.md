@@ -10,6 +10,10 @@
 
 ## Libraries that might come in
 1. [tokio](https://tokio.rs/)
+   - asynchronous tasks 
 2. [tonic](https://github.com/hyperium/tonic)
+   - grpc 
+3. [Dashmap](https://crates.io/crates/dashmap)
+   - concurrent hashmap
 
 *Repository name will change*
