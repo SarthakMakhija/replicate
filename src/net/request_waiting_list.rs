@@ -56,6 +56,7 @@ mod tests {
 
         request_waiting_list.add(key, success_response_callback);
         request_waiting_list.handle_response(key, Ok("success response".to_string()));
+
         assert_eq!("success response", cloned_response_callback.response.take());
     }
 
@@ -63,11 +64,11 @@ mod tests {
     fn test_error_response() {
         #[derive(Debug)]
         struct TestError {
-            details: String,
+            message: String,
         }
         impl Display for TestError {
             fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-                write!(formatter, "{}", self.details)
+                write!(formatter, "{}", self.message)
             }
         }
         impl Error for TestError {}
@@ -79,7 +80,7 @@ mod tests {
             fn on_response(&self, response: Result<String, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let actual_error = response_error_type.downcast_ref::<TestError>().unwrap();
-                self.error_message.borrow_mut().push_str(actual_error.details.as_str());
+                self.error_message.borrow_mut().push_str(actual_error.message.as_str());
             }
         }
 
@@ -90,7 +91,7 @@ mod tests {
         let cloned_response_callback = error_response_callback.clone();
 
         request_waiting_list.add(key, error_response_callback);
-        request_waiting_list.handle_response(key, Err(Box::new(TestError { details: "test error".to_string() })));
+        request_waiting_list.handle_response(key, Err(Box::new(TestError { message: "test error".to_string() })));
 
         assert_eq!("test error", cloned_response_callback.error_message.take());
     }
