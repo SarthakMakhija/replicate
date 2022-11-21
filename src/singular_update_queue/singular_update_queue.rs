@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::{Arc, mpsc, RwLock};
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 
 use crate::singular_update_queue::command::Command;
@@ -27,10 +27,8 @@ impl SingularUpdateQueue {
         let singular_update_queue = SingularUpdateQueue { sender };
 
         thread::spawn(move || {
-            loop {
-                for command in &receiver {
-                    Self::work_on_command(&storage, command);
-                }
+            for command in &receiver {
+                Self::work_on_command(&storage, command);
             }
         });
         return singular_update_queue;
@@ -38,7 +36,11 @@ impl SingularUpdateQueue {
 
     fn work_on_command(storage: &Storage, command: Command) {
         match command {
-            Command::Put { key, value, respond_back } => {
+            Command::Put {
+                key,
+                value,
+                respond_back,
+            } => {
                 storage.write().unwrap().insert(key, value);
                 respond_back.send(Status::Ok).unwrap();
             }
@@ -52,8 +54,9 @@ impl SingularUpdateQueue {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use super::*;
 
     #[test]
     fn get_with_insert_by_a_single_task() {
