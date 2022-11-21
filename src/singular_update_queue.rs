@@ -43,8 +43,10 @@ impl SingularUpdateQueue {
         let singular_update_queue = SingularUpdateQueue { sender };
 
         thread::spawn(move || {
-            for (_, command) in receiver.into_iter().enumerate() {
-                Self::work_on_command(&storage, command);
+            loop {
+                for command in &receiver {
+                    Self::work_on_command(&storage, command);
+                }
             }
         });
         return singular_update_queue;
