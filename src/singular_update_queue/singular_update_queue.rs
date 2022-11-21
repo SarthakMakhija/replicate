@@ -1,6 +1,6 @@
 use std::collections::HashMap;
+use std::sync::{Arc, mpsc, RwLock};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 
 use crate::singular_update_queue::command::Command;
@@ -36,11 +36,7 @@ impl SingularUpdateQueue {
 
     fn work_on_command(storage: &Storage, command: Command) {
         match command {
-            Command::Put {
-                key,
-                value,
-                respond_back,
-            } => {
+            Command::Put { key, value, respond_back } => {
                 storage.write().unwrap().insert(key, value);
                 respond_back.send(Status::Ok).unwrap();
             }
