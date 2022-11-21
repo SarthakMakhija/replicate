@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, mpsc, RwLock};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use std::time::Duration;
 
 use crate::singular_update_queue::command::Command;
 use crate::singular_update_queue::status::Status;
@@ -54,6 +53,7 @@ impl SingularUpdateQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn get_with_insert_by_a_single_task() {

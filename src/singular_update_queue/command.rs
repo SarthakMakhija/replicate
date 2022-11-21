@@ -1,8 +1,7 @@
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Sender;
 
 use crate::singular_update_queue::status::Status;
 
-#[derive(Debug)]
 pub enum Command {
     Put {
         key: String,
