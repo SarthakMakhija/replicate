@@ -81,8 +81,8 @@ mod tests {
 
         let handle = thread::spawn(move || {
             singular_update_queue.execute(Command::Put {
-                key: String::from("key1"),
-                value: String::from("value1"),
+                key: String::from("WAL"),
+                value: String::from("write-ahead log"),
                 respond_back,
             });
             assert_eq!(Status::Ok, receiver.recv().unwrap());
@@ -90,7 +90,7 @@ mod tests {
 
         let _ = handle.join();
         let read_storage = cloned_storage.read().unwrap();
-        assert_eq!("value1", read_storage.get("key1").unwrap());
+        assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
     }
 
     #[test]
@@ -107,8 +107,8 @@ mod tests {
 
         let handle_one = thread::spawn(move || {
             cloned_queue_one.execute(Command::Put {
-                key: String::from("key1"),
-                value: String::from("value1"),
+                key: String::from("WAL"),
+                value: String::from("write-ahead log"),
                 respond_back,
             });
             assert_eq!(Status::Ok, receiver.recv().unwrap());
@@ -119,8 +119,8 @@ mod tests {
 
         let handle_two = thread::spawn(move || {
             cloned_queue_two.execute(Command::Put {
-                key: String::from("key2"),
-                value: String::from("value2"),
+                key: String::from("RAFT"),
+                value: String::from("consensus"),
                 respond_back,
             });
             assert_eq!(Status::Ok, receiver.recv().unwrap());
@@ -130,8 +130,8 @@ mod tests {
         let _ = handle_two.join();
 
         let read_storage = cloned_storage.read().unwrap();
-        assert_eq!("value1", read_storage.get("key1").unwrap());
-        assert_eq!("value2", read_storage.get("key2").unwrap());
+        assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
+        assert_eq!("consensus", read_storage.get("RAFT").unwrap());
     }
 
     #[test]
@@ -148,8 +148,8 @@ mod tests {
 
         let handle_one = thread::spawn(move || {
             cloned_queue_one.execute(Command::Put {
-                key: String::from("key1"),
-                value: String::from("value1"),
+                key: String::from("WAL"),
+                value: String::from("write-ahead log"),
                 respond_back,
             });
             assert_eq!(Status::Ok, receiver.recv().unwrap());
@@ -162,7 +162,7 @@ mod tests {
 
         let handle_two = thread::spawn(move || {
             cloned_queue_two.execute(Command::Delete {
-                key: String::from("key1"),
+                key: String::from("WAL"),
                 respond_back,
             });
             assert_eq!(Status::Ok, receiver.recv().unwrap());
@@ -172,6 +172,6 @@ mod tests {
         let _ = handle_two.join();
 
         let read_storage = cloned_storage.read().unwrap();
-        assert_eq!(None, read_storage.get("key1"));
+        assert_eq!(None, read_storage.get("WAL"));
     }
 }
