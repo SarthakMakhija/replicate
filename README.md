@@ -2,10 +2,11 @@
 
 ## Concepts to build
 1. Singular update queue
-2. Quorum
-3. Raft
-4. Viewstamped replication
-5. Group membership
+2. Request waiting list
+3. Quorum
+4. Raft
+5. Viewstamped replication
+6. Group membership
 
 ## Libraries that might come in
 1. [tokio](https://tokio.rs/)
