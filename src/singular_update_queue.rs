@@ -44,13 +44,13 @@ impl SingularUpdateQueue {
 
         thread::spawn(move || {
             for (_, command) in receiver.into_iter().enumerate() {
-                Self::receive_command(&storage, command);
+                Self::work_on_command(&storage, command);
             }
         });
         return singular_update_queue;
     }
 
-    fn receive_command(storage: &Storage, command: Command) {
+    fn work_on_command(storage: &Storage, command: Command) {
         match command {
             Command::Put { key, value, respond_back } => {
                 storage.write().unwrap().insert(key, value);
