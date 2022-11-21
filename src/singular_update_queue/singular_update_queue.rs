@@ -18,7 +18,7 @@ impl SingularUpdateQueue {
         return SingularUpdateQueue::spin_receiver(storage);
     }
 
-    pub fn execute(&self, command: Command) {
+    pub fn submit(&self, command: Command) {
         return self.sender.clone().send(command).unwrap();
     }
 
@@ -65,7 +65,7 @@ mod tests {
         let respond_back = sender.clone();
 
         let handle = thread::spawn(move || {
-            singular_update_queue.execute(Command::Put {
+            singular_update_queue.submit(Command::Put {
                 key: String::from("WAL"),
                 value: String::from("write-ahead log"),
                 respond_back,
@@ -91,7 +91,7 @@ mod tests {
         let respond_back = sender.clone();
 
         let handle_one = thread::spawn(move || {
-            cloned_queue_one.execute(Command::Put {
+            cloned_queue_one.submit(Command::Put {
                 key: String::from("WAL"),
                 value: String::from("write-ahead log"),
                 respond_back,
@@ -103,7 +103,7 @@ mod tests {
         let respond_back = sender.clone();
 
         let handle_two = thread::spawn(move || {
-            cloned_queue_two.execute(Command::Put {
+            cloned_queue_two.submit(Command::Put {
                 key: String::from("RAFT"),
                 value: String::from("consensus"),
                 respond_back,
@@ -132,7 +132,7 @@ mod tests {
         let respond_back = sender.clone();
 
         let handle_one = thread::spawn(move || {
-            cloned_queue_one.execute(Command::Put {
+            cloned_queue_one.submit(Command::Put {
                 key: String::from("WAL"),
                 value: String::from("write-ahead log"),
                 respond_back,
@@ -146,7 +146,7 @@ mod tests {
         let respond_back = sender.clone();
 
         let handle_two = thread::spawn(move || {
-            cloned_queue_two.execute(Command::Delete {
+            cloned_queue_two.submit(Command::Delete {
                 key: String::from("WAL"),
                 respond_back,
             });
