@@ -4,29 +4,14 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
+use crate::singular_update_queue::command::Command;
+use crate::singular_update_queue::status::Status;
+
 type Storage = Arc<RwLock<HashMap<String, String>>>;
 
 #[derive(Clone)]
-struct SingularUpdateQueue {
+pub struct SingularUpdateQueue {
     sender: Sender<Command>,
-}
-
-#[derive(Debug)]
-enum Command {
-    Put {
-        key: String,
-        value: String,
-        respond_back: Sender<Status>,
-    },
-    Delete {
-        key: String,
-        respond_back: Sender<Status>,
-    },
-}
-
-#[derive(Debug, Eq, PartialEq)]
-enum Status {
-    Ok
 }
 
 impl SingularUpdateQueue {
