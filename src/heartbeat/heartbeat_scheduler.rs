@@ -72,10 +72,12 @@ mod tests {
     fn start_heartbeat_scheduler() {
         let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_sender = Arc::new(heartbeat_counter);
-        let heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
+        let mut heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
 
         heartbeat_scheduler.start();
         thread::sleep(Duration::from_millis(5));
+
+        heartbeat_scheduler.stop();
 
         let heartbeat_sender_cloned = heartbeat_sender.clone();
         let count = heartbeat_sender_cloned.counter.clone().load(Ordering::SeqCst);
