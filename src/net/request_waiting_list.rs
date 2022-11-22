@@ -1,13 +1,14 @@
 use std::borrow::BorrowMut;
 use std::hash::Hash;
+use std::time::Instant;
 
 use dashmap::DashMap;
 
-use crate::net::response_callback::{ResponseCallbackType, ResponseErrorType};
+use crate::net::response_callback::{ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
 pub struct RequestWaitingList<Key, Response>
     where Key: Eq + Hash, {
-    pending_requests: DashMap<Key, ResponseCallbackType<Response>>,
+    pending_requests: DashMap<Key, TimestampedCallback<Response>>,
 }
 
 impl<Key, Response> RequestWaitingList<Key, Response>
@@ -21,14 +22,15 @@ impl<Key, Response> RequestWaitingList<Key, Response>
     }
 
     pub fn add(&mut self, key: Key, callback: ResponseCallbackType<Response>) {
-        self.pending_requests.borrow_mut().insert(key, callback);
+        let timestamped_callback = TimestampedCallback::new(callback, Instant::now());
+        self.pending_requests.borrow_mut().insert(key, timestamped_callback);
     }
 
     pub fn handle_response(&mut self, key: Key, response: Result<Response, ResponseErrorType>) {
         let key_value_existence = self.pending_requests.remove(&key);
         if let Some(callback_by_key) = key_value_existence {
-            let callback = callback_by_key.1;
-            callback.on_response(response);
+            let timestamped_callback = callback_by_key.1;
+            timestamped_callback.on_response(response);
         }
     }
 }
