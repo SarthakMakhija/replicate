@@ -4,11 +4,11 @@ use std::time::{Duration, Instant};
 
 use crate::clock::clock::Clock;
 
-pub(crate) type ResponseErrorType = Box<dyn Error + 'static>;
+pub(crate) type ResponseErrorType = Box<dyn Error>;
 
 pub(crate) type ResponseCallbackType<Response> = Arc<dyn ResponseCallback<Response> + 'static>;
 
-pub trait ResponseCallback<Response> {
+pub trait ResponseCallback<Response>: Send + Sync {
     fn on_response(&self, response: Result<Response, ResponseErrorType>);
 }
 
@@ -29,13 +29,19 @@ impl<Response> TimestampedCallback<Response> {
         self.callback.on_response(response);
     }
 
-    pub(crate) fn has_expired(&self, clock: Box<&dyn Clock>, expiry_after: &Duration) -> bool {
+    pub(crate) fn has_expired(&self, clock: &Arc<dyn Clock>, expiry_after: &Duration) -> bool {
         return clock.now().duration_since(self.creation_time).ge(expiry_after);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    use crate::clock::clock::Clock;
+    use crate::net::response_callback::tests::setup::{FutureClock, NothingCallback, PastClock};
+    use crate::net::response_callback::TimestampedCallback;
 
     mod setup {
         use std::ops::{Add, Sub};
@@ -71,27 +77,21 @@ mod tests {
         }
     }
 
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
-
-    use crate::net::response_callback::tests::setup::{FutureClock, NothingCallback, PastClock};
-    use crate::net::response_callback::TimestampedCallback;
-
     #[test]
     fn has_expired() {
         let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), Instant::now());
-        let clock = FutureClock { duration_to_add: Duration::from_secs(5) };
+        let clock: Arc<dyn Clock> = Arc::new(FutureClock { duration_to_add: Duration::from_secs(5) });
 
-        let has_expired = timestamped_callback.has_expired(Box::new(&clock), &Duration::from_secs(2));
+        let has_expired = timestamped_callback.has_expired(&clock, &Duration::from_secs(2));
         assert!(has_expired);
     }
 
     #[test]
     fn has_not_expired() {
         let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), Instant::now());
-        let clock = PastClock { duration_to_subtract: Duration::from_secs(5) };
+        let clock: Arc<dyn Clock> = Arc::new(PastClock { duration_to_subtract: Duration::from_secs(5) });
 
-        let has_expired = timestamped_callback.has_expired(Box::new(&clock), &Duration::from_secs(2));
+        let has_expired = timestamped_callback.has_expired(&clock, &Duration::from_secs(2));
         assert_eq!(false, has_expired);
     }
 }
