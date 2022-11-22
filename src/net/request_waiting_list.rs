@@ -36,7 +36,7 @@ impl<Key, Response> RequestWaitingList<Key, Response>
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use crate::net::request_waiting_list::tests::setup_callbacks::{ErrorResponseCallback, SuccessResponseCallback};
     use crate::net::request_waiting_list::tests::setup_error::TestError;
@@ -95,7 +95,7 @@ mod tests {
         let key: i32 = 1;
         let mut request_waiting_list = RequestWaitingList::<i32, String>::new();
 
-        let success_response_callback = Rc::new(SuccessResponseCallback { response: RefCell::new(String::from("")) });
+        let success_response_callback = Arc::new(SuccessResponseCallback { response: RefCell::new(String::from("")) });
         let cloned_response_callback = success_response_callback.clone();
 
         request_waiting_list.add(key, success_response_callback);
@@ -109,7 +109,7 @@ mod tests {
         let key: i32 = 1;
         let mut request_waiting_list = RequestWaitingList::<i32, String>::new_with_capacity(1);
 
-        let success_response_callback = Rc::new(SuccessResponseCallback { response: RefCell::new(String::from("")) });
+        let success_response_callback = Arc::new(SuccessResponseCallback { response: RefCell::new(String::from("")) });
         let cloned_response_callback = success_response_callback.clone();
 
         request_waiting_list.add(key, success_response_callback);
@@ -123,7 +123,7 @@ mod tests {
         let key: i32 = 1;
         let mut request_waiting_list = RequestWaitingList::<i32, String>::new();
 
-        let error_response_callback = Rc::new(ErrorResponseCallback { error_message: RefCell::new("".to_string()) });
+        let error_response_callback = Arc::new(ErrorResponseCallback { error_message: RefCell::new("".to_string()) });
         let cloned_response_callback = error_response_callback.clone();
 
         request_waiting_list.add(key, error_response_callback);
