@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -6,6 +8,7 @@ use crate::heartbeat::heartbeat_sender::HeartbeatSenderType;
 pub struct HeartbeatScheduler {
     sender: HeartbeatSenderType,
     interval_ms: u64,
+    keep_running: Arc<AtomicBool>,
 }
 
 impl HeartbeatScheduler {
@@ -13,52 +16,61 @@ impl HeartbeatScheduler {
         return HeartbeatScheduler {
             sender,
             interval_ms: heartbeat_interval_ms,
+            keep_running: Arc::new(AtomicBool::new(true)),
         };
     }
 
     pub fn start(&self) {
         let heartbeat_sender = self.sender.clone();
         let interval_ms = Duration::from_millis(self.interval_ms);
+        let keep_running = self.keep_running.clone();
 
         thread::spawn(move || {
             loop {
+                if !keep_running.load(Ordering::SeqCst) {
+                    return;
+                }
                 heartbeat_sender.send();
                 thread::sleep(interval_ms);
             }
         });
     }
+
+    pub fn stop(&mut self) {
+        self.keep_running.store(false, Ordering::SeqCst);
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    mod setup {
-        use std::collections::HashMap;
-        use std::sync::{Arc, Mutex};
-
-        use crate::heartbeat::heartbeat_sender::HeartbeatSender;
-
-        pub struct HeartbeatCounter {
-            pub overwriting_counter: Arc<Mutex<HashMap<String, u64>>>,
-        }
-
-        impl HeartbeatSender for HeartbeatCounter {
-            fn send(&self) {
-                self.overwriting_counter.clone().lock().unwrap().insert(String::from("heartbeat"), 1);
-            }
-        }
-    }
-
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU16, Ordering};
     use std::thread;
     use std::time::Duration;
 
     use crate::heartbeat::heartbeat_scheduler::HeartbeatScheduler;
     use crate::heartbeat::heartbeat_scheduler::tests::setup::HeartbeatCounter;
 
+    mod setup {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU16, Ordering};
+
+        use crate::heartbeat::heartbeat_sender::HeartbeatSender;
+
+        pub struct HeartbeatCounter {
+            pub counter: Arc<AtomicU16>,
+        }
+
+        impl HeartbeatSender for HeartbeatCounter {
+            fn send(&self) {
+                self.counter.clone().fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    }
+
     #[test]
     fn start_heartbeat_scheduler() {
-        let heartbeat_counter = HeartbeatCounter { overwriting_counter: Arc::new(Mutex::new(HashMap::new())) };
+        let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_sender = Arc::new(heartbeat_counter);
         let heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
 
@@ -66,9 +78,26 @@ mod tests {
         thread::sleep(Duration::from_millis(5));
 
         let heartbeat_sender_cloned = heartbeat_sender.clone();
-        let overwriting_counter = heartbeat_sender_cloned.overwriting_counter.lock().unwrap();
-        let count = overwriting_counter.get(&String::from("heartbeat")).unwrap();
+        let count = heartbeat_sender_cloned.counter.clone().load(Ordering::SeqCst);
 
-        assert_eq!(&1, count);
+        assert!(count >= 2);
+    }
+
+    #[test]
+    fn stop_heartbeat_scheduler() {
+        let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
+        let heartbeat_sender = Arc::new(heartbeat_counter);
+        let mut heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
+
+        heartbeat_scheduler.start();
+        thread::sleep(Duration::from_millis(1));
+
+        heartbeat_scheduler.stop();
+        thread::sleep(Duration::from_millis(2));
+
+        let heartbeat_sender_cloned = heartbeat_sender.clone();
+        let count = heartbeat_sender_cloned.counter.clone().load(Ordering::SeqCst);
+
+        assert_eq!(1, count);
     }
 }
