@@ -1,5 +1,4 @@
 use std::borrow::BorrowMut;
-use std::error::Error;
 use std::hash::Hash;
 
 use dashmap::DashMap;
