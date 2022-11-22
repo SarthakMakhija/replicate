@@ -8,4 +8,6 @@
       - done
 2. Request waiting list
    1. Incorporate expiry of keys
+      - done
    2. Decide if the callback should be given a mutable reference or not
+   3. Provide support for adding `key` in `RequestTimeoutError`
