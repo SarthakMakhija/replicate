@@ -1,5 +1,6 @@
 use std::borrow::BorrowMut;
 use std::hash::Hash;
+use std::sync::Arc;
 use std::time::Instant;
 
 use dashmap::DashMap;
@@ -8,7 +9,7 @@ use crate::net::response_callback::{ResponseCallbackType, ResponseErrorType, Tim
 
 pub struct RequestWaitingList<Key, Response>
     where Key: Eq + Hash, {
-    pending_requests: DashMap<Key, TimestampedCallback<Response>>,
+    pending_requests: Arc<DashMap<Key, TimestampedCallback<Response>>>,
 }
 
 impl<Key, Response> RequestWaitingList<Key, Response>
@@ -18,7 +19,7 @@ impl<Key, Response> RequestWaitingList<Key, Response>
     }
 
     pub fn new_with_capacity(capacity: usize) -> RequestWaitingList<Key, Response> {
-        return RequestWaitingList { pending_requests: DashMap::with_capacity(capacity) };
+        return RequestWaitingList { pending_requests: Arc::new(DashMap::with_capacity(capacity)) };
     }
 
     pub fn add(&mut self, key: Key, callback: ResponseCallbackType<Response>) {
