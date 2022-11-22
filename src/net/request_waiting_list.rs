@@ -8,14 +8,13 @@ use std::time::Duration;
 use dashmap::DashMap;
 
 use crate::clock::clock::{Clock, SystemClock};
-use crate::net::request_timeout_error::RequestTimeoutError;
+use crate::net::expired_callback_remover::ExpiredCallbackRemover;
 use crate::net::response_callback::{ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
 pub struct RequestWaitingList<Key, Response>
     where Key: Eq + Hash + Send + Sync + Debug + 'static, {
     pending_requests: Arc<DashMap<Key, TimestampedCallback<Response>>>,
     clock: Arc<dyn Clock>,
-    expire_requests_after: Duration,
 }
 
 impl<Key, Response: 'static> RequestWaitingList<Key, Response>
@@ -29,10 +28,11 @@ impl<Key, Response: 'static> RequestWaitingList<Key, Response>
         clock: Arc<dyn Clock>,
         expire_requests_after: Duration,
         pause_expired_callbacks_remover_every: Duration) -> RequestWaitingList<Key, Response> {
-        let pending_requests = Arc::new(DashMap::with_capacity(capacity));
-        let request_waiting_list = RequestWaitingList { pending_requests, clock: clock.clone(), expire_requests_after };
 
-        request_waiting_list.spin_expired_callbacks_remover(pause_expired_callbacks_remover_every);
+        let pending_requests = Arc::new(DashMap::with_capacity(capacity));
+        let request_waiting_list = RequestWaitingList { pending_requests, clock: clock.clone() };
+
+        request_waiting_list.spin_expired_callbacks_remover(expire_requests_after, pause_expired_callbacks_remover_every);
         return request_waiting_list;
     }
 
@@ -49,28 +49,13 @@ impl<Key, Response: 'static> RequestWaitingList<Key, Response>
         }
     }
 
-    fn spin_expired_callbacks_remover(&self, pause_expired_callbacks_remover_every: Duration) {
-        let pending_requests = self.pending_requests.clone();
-        let expiry_after = self.expire_requests_after;
-        let clock = self.clock.clone();
-
-        thread::spawn(move || {
-            loop {
-                Self::remove(&pending_requests, &expiry_after, &clock);
-                thread::sleep(pause_expired_callbacks_remover_every);
-            }
-        });
-    }
-
-    fn remove(pending_requests: &Arc<DashMap<Key, TimestampedCallback<Response>>>, expiry_after: &Duration, clock: &Arc<dyn Clock>) {
-        pending_requests.retain(|_, timestamped_callback| {
-            let has_expired = timestamped_callback.has_expired(&clock, &expiry_after);
-            if has_expired {
-                timestamped_callback.on_response(Err(Box::new(RequestTimeoutError {})));
-                return false;
-            }
-            return true;
-        });
+    fn spin_expired_callbacks_remover(&self, expire_requests_after: Duration, pause_expired_callbacks_remover_every: Duration) {
+        ExpiredCallbackRemover::start(
+            self.pending_requests.clone(),
+            self.clock.clone(),
+            expire_requests_after,
+            pause_expired_callbacks_remover_every,
+        );
     }
 }
 
