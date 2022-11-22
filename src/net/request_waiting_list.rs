@@ -35,8 +35,8 @@ impl<Key, Response> RequestWaitingList<Key, Response>
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-    use std::sync::Arc;
+    use std::collections::HashMap;
+    use std::sync::{Arc, RwLock};
 
     use crate::net::request_waiting_list::tests::setup_callbacks::{ErrorResponseCallback, SuccessResponseCallback};
     use crate::net::request_waiting_list::tests::setup_error::TestError;
@@ -62,22 +62,23 @@ mod tests {
     }
 
     mod setup_callbacks {
-        use std::cell::RefCell;
+        use std::collections::HashMap;
+        use std::sync::RwLock;
 
         use crate::net::request_waiting_list::tests::setup_error::TestError;
         use crate::net::response_callback::{ResponseCallback, ResponseErrorType};
 
         pub struct SuccessResponseCallback {
-            pub response: RefCell<String>,
+            pub response: RwLock<HashMap<String, String>>,
         }
 
         pub struct ErrorResponseCallback {
-            pub error_message: RefCell<String>,
+            pub error_response: RwLock<HashMap<String, String>>,
         }
 
         impl ResponseCallback<String> for SuccessResponseCallback {
             fn on_response(&self, response: Result<String, ResponseErrorType>) {
-                self.response.borrow_mut().push_str(response.unwrap().as_str());
+                self.response.write().unwrap().insert(String::from("Response"), response.unwrap());
             }
         }
 
@@ -85,7 +86,7 @@ mod tests {
             fn on_response(&self, response: Result<String, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let actual_error = response_error_type.downcast_ref::<TestError>().unwrap();
-                self.error_message.borrow_mut().push_str(actual_error.message.as_str());
+                self.error_response.write().unwrap().insert(String::from("Response"), actual_error.message.to_string());
             }
         }
     }
@@ -95,13 +96,14 @@ mod tests {
         let key: i32 = 1;
         let mut request_waiting_list = RequestWaitingList::<i32, String>::new();
 
-        let success_response_callback = Arc::new(SuccessResponseCallback { response: RefCell::new(String::from("")) });
+        let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = success_response_callback.clone();
 
         request_waiting_list.add(key, success_response_callback);
         request_waiting_list.handle_response(key, Ok("success response".to_string()));
 
-        assert_eq!("success response", cloned_response_callback.response.take());
+        let readable_response = cloned_response_callback.response.read().unwrap();
+        assert_eq!("success response", readable_response.get("Response").unwrap());
     }
 
     #[test]
@@ -109,13 +111,14 @@ mod tests {
         let key: i32 = 1;
         let mut request_waiting_list = RequestWaitingList::<i32, String>::new_with_capacity(1);
 
-        let success_response_callback = Arc::new(SuccessResponseCallback { response: RefCell::new(String::from("")) });
+        let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = success_response_callback.clone();
 
         request_waiting_list.add(key, success_response_callback);
         request_waiting_list.handle_response(key, Ok("success response".to_string()));
 
-        assert_eq!("success response", cloned_response_callback.response.take());
+        let readable_response = cloned_response_callback.response.read().unwrap();
+        assert_eq!("success response", readable_response.get("Response").unwrap());
     }
 
     #[test]
@@ -123,12 +126,13 @@ mod tests {
         let key: i32 = 1;
         let mut request_waiting_list = RequestWaitingList::<i32, String>::new();
 
-        let error_response_callback = Arc::new(ErrorResponseCallback { error_message: RefCell::new("".to_string()) });
+        let error_response_callback = Arc::new(ErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = error_response_callback.clone();
 
         request_waiting_list.add(key, error_response_callback);
         request_waiting_list.handle_response(key, Err(Box::new(TestError { message: "test error".to_string() })));
 
-        assert_eq!("test error", cloned_response_callback.error_message.take());
+        let readable_response = cloned_response_callback.error_response.read().unwrap();
+        assert_eq!("test error", readable_response.get("Response").unwrap());
     }
 }
