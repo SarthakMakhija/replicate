@@ -8,8 +8,8 @@ use std::time::Duration;
 use dashmap::DashMap;
 
 use crate::clock::clock::{Clock, SystemClock};
-use crate::net::expired_callback_remover::ExpiredCallbackRemover;
-use crate::net::response_callback::{ResponseCallbackType, ResponseErrorType, TimestampedCallback};
+use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
+use crate::net::request_waiting_list::response_callback::{ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
 pub struct RequestWaitingList<Key, Response>
     where Key: Eq + Hash + Send + Sync + Debug + 'static, {
@@ -63,9 +63,8 @@ impl<Key, Response: 'static> RequestWaitingList<Key, Response>
 mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
-
-    use crate::net::request_waiting_list::tests::setup_callbacks::{ErrorResponseCallback, RequestTimeoutErrorResponseCallback, SuccessResponseCallback};
-    use crate::net::request_waiting_list::tests::setup_error::TestError;
+    use crate::net::request_waiting_list::request_waiting_list::tests::setup_callbacks::{ErrorResponseCallback, RequestTimeoutErrorResponseCallback, SuccessResponseCallback};
+    use crate::net::request_waiting_list::request_waiting_list::tests::setup_error::TestError;
 
     use super::*;
 
@@ -90,10 +89,10 @@ mod tests {
     mod setup_callbacks {
         use std::collections::HashMap;
         use std::sync::RwLock;
+        use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
+        use crate::net::request_waiting_list::request_waiting_list::tests::setup_error::TestError;
 
-        use crate::net::request_timeout_error::RequestTimeoutError;
-        use crate::net::request_waiting_list::tests::setup_error::TestError;
-        use crate::net::response_callback::{ResponseCallback, ResponseErrorType};
+        use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseErrorType};
 
         pub struct SuccessResponseCallback {
             pub response: RwLock<HashMap<String, String>>,

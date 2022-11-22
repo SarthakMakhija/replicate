@@ -40,15 +40,15 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use crate::clock::clock::Clock;
-    use crate::net::response_callback::tests::setup::{FutureClock, NothingCallback, PastClock};
-    use crate::net::response_callback::TimestampedCallback;
+    use crate::net::request_waiting_list::response_callback::tests::setup::{FutureClock, NothingCallback, PastClock};
+    use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
     mod setup {
         use std::ops::{Add, Sub};
         use std::time::{Duration, Instant};
 
         use crate::clock::clock::Clock;
-        use crate::net::response_callback::{ResponseCallback, ResponseErrorType};
+        use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseErrorType};
 
         pub struct FutureClock {
             pub duration_to_add: Duration,

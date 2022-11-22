@@ -7,8 +7,8 @@ use std::time::Duration;
 use dashmap::DashMap;
 
 use crate::clock::clock::Clock;
-use crate::net::request_timeout_error::RequestTimeoutError;
-use crate::net::response_callback::TimestampedCallback;
+use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
+use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
 pub(crate) struct ExpiredCallbackRemover<Key, Response>
     where Key: Eq + Hash + Send + Sync + Debug + 'static, {
@@ -54,9 +54,9 @@ mod tests {
 
     use dashmap::DashMap;
 
-    use crate::net::expired_callback_remover::ExpiredCallbackRemover;
-    use crate::net::expired_callback_remover::tests::setup::{FutureClock, RequestTimeoutErrorResponseCallback};
-    use crate::net::response_callback::TimestampedCallback;
+    use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
+    use crate::net::request_waiting_list::expired_callback_remover::tests::setup::{FutureClock, RequestTimeoutErrorResponseCallback};
+    use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
     mod setup {
         use std::collections::HashMap;
@@ -65,8 +65,8 @@ mod tests {
         use std::time::{Duration, Instant};
 
         use crate::clock::clock::Clock;
-        use crate::net::request_timeout_error::RequestTimeoutError;
-        use crate::net::response_callback::{ResponseCallback, ResponseErrorType};
+        use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
+        use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseErrorType};
 
         pub struct FutureClock {
             pub duration_to_add: Duration,
