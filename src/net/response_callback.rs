@@ -36,11 +36,6 @@ impl<Response> TimestampedCallback<Response> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
-
-    use crate::net::response_callback::tests::setup::{FutureClock, NothingCallback, PastClock};
-    use crate::net::response_callback::TimestampedCallback;
 
     mod setup {
         use std::ops::{Add, Sub};
@@ -75,6 +70,12 @@ mod tests {
             fn on_response(&self, _: Result<String, ResponseErrorType>) {}
         }
     }
+
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    use crate::net::response_callback::tests::setup::{FutureClock, NothingCallback, PastClock};
+    use crate::net::response_callback::TimestampedCallback;
 
     #[test]
     fn has_expired() {
