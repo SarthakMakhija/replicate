@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package replication.net.connect;
+
+service Heartbeat {
+  rpc Acknowledge (HeartbeatRequest) returns (google.protobuf.Empty) {}
+}
+
+message HeartbeatRequest {
+  string nodeId = 1;
+}
