@@ -19,7 +19,7 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
-    use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceServerRequest;
+    use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
     use crate::net::connect::service_server_registration::{ServiceServerRegistration, ServiceServerShutdownHandle};
 
     use super::*;
@@ -46,7 +46,7 @@ mod tests {
     }
 
     async fn send_client_request(address: &HostAndPort) -> Result<Response<()>, ServiceServerError> {
-        let service_server_request = HeartbeatServiceServerRequest::new("100".to_string());
+        let service_server_request = HeartbeatServiceRequest::new("100".to_string());
         return Network::send(service_server_request, address).await;
     }
 }
