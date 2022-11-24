@@ -16,3 +16,4 @@
    2. Uses eprintln!, replace with log
 4. HeartbeatScheduler
    1. It ignores the error from HeartbeatSender `let _ = heartbeat_sender.send().await;`. Decide on the approach.
+5. Renaming the module in Cargo.toml will impact the imports in integration tests
