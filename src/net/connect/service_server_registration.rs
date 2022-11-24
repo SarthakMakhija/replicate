@@ -10,12 +10,12 @@ use crate::net::connect::service::heartbeat::service::HeartbeatService;
 pub(crate) struct ServiceRegistration {}
 
 impl ServiceRegistration {
-    pub(crate) async fn register_all_services_on(address: &HostAndPort, mut shutdown_signal_receiver: Receiver<()>) {
+    pub(crate) async fn register_all_services_on(address: &HostAndPort, mut all_services_shutdown_signal_receiver: Receiver<()>) {
         let heartbeat_service = HeartbeatService::default();
         let socket_address = address.as_socket_address().unwrap();
 
         let shutdown_block = async move {
-            shutdown_signal_receiver.recv().await.map(|_| ());
+            all_services_shutdown_signal_receiver.recv().await.map(|_| ());
             return;
         };
         Server::builder()
@@ -26,17 +26,17 @@ impl ServiceRegistration {
     }
 }
 
-pub(crate) struct ServiceServerShutdownHandle {
-    shutdown_signal_sender: Sender<()>,
+pub(crate) struct AllServicesShutdownHandle {
+    all_services_shutdown_signal_sender: Sender<()>,
 }
 
-impl ServiceServerShutdownHandle {
-    pub(crate) fn new() -> (ServiceServerShutdownHandle, Receiver<()>) {
-        let (shutdown_signal_sender, shutdown_signal_receiver) = mpsc::channel(1);
-        return (ServiceServerShutdownHandle { shutdown_signal_sender }, shutdown_signal_receiver);
+impl AllServicesShutdownHandle {
+    pub(crate) fn new() -> (AllServicesShutdownHandle, Receiver<()>) {
+        let (all_services_shutdown_signal_sender, all_services_shutdown_signal_receiver) = mpsc::channel(1);
+        return (AllServicesShutdownHandle { all_services_shutdown_signal_sender }, all_services_shutdown_signal_receiver);
     }
 
     pub(crate) async fn shutdown(&self) -> Result<(), SendError<()>> {
-        return self.shutdown_signal_sender.clone().send(()).await;
+        return self.all_services_shutdown_signal_sender.clone().send(()).await;
     }
 }

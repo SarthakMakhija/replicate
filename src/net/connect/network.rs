@@ -20,7 +20,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
     use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
-    use crate::net::connect::service_server_registration::{ServiceRegistration, ServiceServerShutdownHandle};
+    use crate::net::connect::service_server_registration::{ServiceRegistration, AllServicesShutdownHandle};
 
     use super::*;
 
@@ -30,16 +30,16 @@ mod tests {
         let server_address_clone_one = server_address.clone();
         let server_address_clone_other = server_address.clone();
 
-        let (handle, receiver) = ServiceServerShutdownHandle::new();
+        let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
         let server_handle = tokio::spawn(async move {
-            ServiceRegistration::register_all_services_on(&server_address_clone_one, receiver).await;
+            ServiceRegistration::register_all_services_on(&server_address_clone_one, all_services_shutdown_receiver).await;
         });
 
         thread::sleep(Duration::from_secs(3));
         let client_handle = tokio::spawn(async move {
             let response = send_client_request(&server_address_clone_other).await;
             assert!(response.is_ok());
-            handle.shutdown();
+            all_services_shutdown_handle.shutdown();
         });
         server_handle.await.unwrap();
         client_handle.await.unwrap();
