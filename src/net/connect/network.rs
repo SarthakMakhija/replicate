@@ -3,9 +3,9 @@ use tonic::Response;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_server_callable::{ServiceServerError, ServiceServerRequest};
 
-pub(crate) struct Network {}
+pub(crate) struct AsyncNetwork {}
 
-impl Network {
+impl AsyncNetwork {
     pub(crate) async fn send<Payload: Send, R: Send>(service_server_request: ServiceServerRequest<Payload, R>, address: &HostAndPort) -> Result<Response<R>, ServiceServerError> {
         let callable = &service_server_request.callable;
         let payload = service_server_request.payload;
@@ -47,6 +47,6 @@ mod tests {
 
     async fn send_client_request(address: &HostAndPort) -> Result<Response<()>, ServiceServerError> {
         let service_server_request = HeartbeatServiceRequest::new("100".to_string());
-        return Network::send(service_server_request, address).await;
+        return AsyncNetwork::send(service_server_request, address).await;
     }
 }
