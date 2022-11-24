@@ -20,7 +20,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
     use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
-    use crate::net::connect::service_server_registration::{ServiceServerRegistration, ServiceServerShutdownHandle};
+    use crate::net::connect::service_server_registration::{ServiceRegistration, ServiceServerShutdownHandle};
 
     use super::*;
 
@@ -32,7 +32,7 @@ mod tests {
 
         let (handle, receiver) = ServiceServerShutdownHandle::new();
         let server_handle = tokio::spawn(async move {
-            ServiceServerRegistration::register_all_services_on(&server_address_clone_one, receiver).await;
+            ServiceRegistration::register_all_services_on(&server_address_clone_one, receiver).await;
         });
 
         thread::sleep(Duration::from_secs(3));
