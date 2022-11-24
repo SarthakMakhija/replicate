@@ -1,5 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use raft::heartbeat::builtin_heartbeat_sender::BuiltinHeartbeatSender;
 use raft::heartbeat::heartbeat_sender::HeartbeatSender;
@@ -15,6 +17,8 @@ async fn builtin_heartbeat_sender_with_success() {
     let server_handle = tokio::spawn(async move {
         ServiceRegistration::register_all_services_on(&server_address_clone, all_services_shutdown_receiver).await;
     });
+
+    thread::sleep(Duration::from_secs(3));
 
     let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(server_address.clone()));
     let result = heartbeat_sender.send().await;
