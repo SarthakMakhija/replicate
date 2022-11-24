@@ -1,2 +1,2 @@
 mod request_waiting_list;
-mod connect;
+pub mod connect;

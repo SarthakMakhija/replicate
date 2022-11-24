@@ -1,12 +1,12 @@
 use std::net::{IpAddr, SocketAddr};
 
-pub(crate) struct HostAndPort {
+pub struct HostAndPort {
     host: IpAddr,
     port: u16,
 }
 
 impl HostAndPort {
-    pub(crate) fn new(host: IpAddr, port: u16) -> HostAndPort {
+    pub fn new(host: IpAddr, port: u16) -> HostAndPort {
         return HostAndPort { host, port };
     }
 
