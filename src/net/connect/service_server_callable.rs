@@ -5,7 +5,7 @@ use tonic::Response;
 
 use crate::net::connect::host_and_port::HostAndPort;
 
-pub(crate) struct ServiceServerRequest<Payload, Response>
+pub(crate) struct ServiceRequest<Payload, Response>
     where Payload: Send, Response: Send {
     pub(crate) payload: Payload,
     pub(crate) callable: Box<dyn ServiceServerCallable<Payload, Response>>,
