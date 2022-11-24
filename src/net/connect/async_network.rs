@@ -1,15 +1,19 @@
 use tonic::Response;
 
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_client::{ServiceResponseError, ServiceRequest};
+use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 
 pub(crate) struct AsyncNetwork {}
 
 impl AsyncNetwork {
-    pub(crate) async fn send<Payload: Send, R: Send>(service_server_request: ServiceRequest<Payload, R>, address: &HostAndPort) -> Result<Response<R>, ServiceResponseError> {
+    pub(crate) async fn send<Payload: Send, R: Send>(service_server_request: ServiceRequest<Payload, R>, address: &HostAndPort) -> Result<R, ServiceResponseError> {
         let client = &service_server_request.service_client;
         let payload = service_server_request.payload;
-        return client.call(payload, &address).await;
+        let result = client.call(payload, &address).await;
+        return match result {
+            Ok(response) => { Ok(response.into_inner()) }
+            Err(e) => { Err(e) }
+        };
     }
 }
 
@@ -19,8 +23,9 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
+
     use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
-    use crate::net::connect::service_registration::{ServiceRegistration, AllServicesShutdownHandle};
+    use crate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 
     use super::*;
 
@@ -45,7 +50,7 @@ mod tests {
         client_handle.await.unwrap();
     }
 
-    async fn send_client_request(address: &HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn send_client_request(address: &HostAndPort) -> Result<(), ServiceResponseError> {
         let service_server_request = HeartbeatServiceRequest::new("100".to_string());
         return AsyncNetwork::send(service_server_request, address).await;
     }
