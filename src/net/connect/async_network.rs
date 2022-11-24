@@ -1,7 +1,7 @@
 use tonic::Response;
 
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_server_callable::{ServiceResponseError, ServiceRequest};
+use crate::net::connect::service_client::{ServiceResponseError, ServiceRequest};
 
 pub(crate) struct AsyncNetwork {}
 
@@ -20,7 +20,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
     use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
-    use crate::net::connect::service_server_registration::{ServiceRegistration, AllServicesShutdownHandle};
+    use crate::net::connect::service_registration::{ServiceRegistration, AllServicesShutdownHandle};
 
     use super::*;
 

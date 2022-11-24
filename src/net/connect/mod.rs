@@ -1,5 +1,5 @@
-mod network;
+mod async_network;
 mod service;
-mod service_server_registration;
-mod service_server_callable;
+mod service_registration;
+mod service_client;
 mod host_and_port;
