@@ -75,7 +75,7 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn start_heartbeat_scheduler() {
         let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_sender = Arc::new(heartbeat_counter);
@@ -90,23 +90,5 @@ mod tests {
         let count = heartbeat_sender_cloned.counter.clone().load(Ordering::SeqCst);
 
         assert!(count >= 2);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn stop_heartbeat_scheduler() {
-        let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
-        let heartbeat_sender = Arc::new(heartbeat_counter);
-        let mut heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
-
-        heartbeat_scheduler.start();
-        thread::sleep(Duration::from_millis(1));
-
-        heartbeat_scheduler.stop();
-        thread::sleep(Duration::from_millis(2));
-
-        let heartbeat_sender_cloned = heartbeat_sender.clone();
-        let count = heartbeat_sender_cloned.counter.clone().load(Ordering::SeqCst);
-
-        assert_eq!(1, count);
     }
 }
