@@ -2,12 +2,11 @@ use std::borrow::BorrowMut;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
 use dashmap::DashMap;
 
-use crate::clock::clock::{Clock, SystemClock};
+use crate::clock::clock::{Clock};
 use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
 use crate::net::request_waiting_list::response_callback::{ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
@@ -63,9 +62,10 @@ impl<Key, Response: 'static> RequestWaitingList<Key, Response>
 mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
+    use std::thread;
     use crate::net::request_waiting_list::request_waiting_list::tests::setup_callbacks::{ErrorResponseCallback, RequestTimeoutErrorResponseCallback, SuccessResponseCallback};
     use crate::net::request_waiting_list::request_waiting_list::tests::setup_error::TestError;
-
+    use crate::clock::clock::SystemClock;
     use super::*;
 
     mod setup_error {
