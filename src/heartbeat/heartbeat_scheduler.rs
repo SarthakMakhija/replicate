@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 use std::time::Duration;
+use tokio::time::sleep;
 
 use crate::heartbeat::heartbeat_sender::HeartbeatSenderType;
 
@@ -25,13 +25,13 @@ impl HeartbeatScheduler {
         let interval_ms = Duration::from_millis(self.interval_ms);
         let keep_running = self.keep_running.clone();
 
-        thread::spawn(move || {
+        tokio::spawn(async move {
             loop {
                 if !keep_running.load(Ordering::SeqCst) {
                     return;
                 }
                 heartbeat_sender.send();
-                thread::sleep(interval_ms);
+                sleep(interval_ms).await;
             }
         });
     }
@@ -68,8 +68,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn start_heartbeat_scheduler() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn start_heartbeat_scheduler() {
         let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_sender = Arc::new(heartbeat_counter);
         let mut heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
@@ -85,8 +85,8 @@ mod tests {
         assert!(count >= 2);
     }
 
-    #[test]
-    fn stop_heartbeat_scheduler() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stop_heartbeat_scheduler() {
         let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_sender = Arc::new(heartbeat_counter);
         let mut heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
