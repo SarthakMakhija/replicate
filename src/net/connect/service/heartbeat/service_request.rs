@@ -1,5 +1,5 @@
-use crate::net::connect::service_server::heartbeat::service::grpc::HeartbeatRequest;
-use crate::net::connect::service_server::heartbeat::client::HeartbeatServiceClient;
+use crate::net::connect::service::heartbeat::service::grpc::HeartbeatRequest;
+use crate::net::connect::service::heartbeat::client::HeartbeatServiceClient;
 use crate::net::connect::service_server_callable::ServiceServerRequest;
 
 pub(crate) struct HeartbeatServiceServerRequest {}

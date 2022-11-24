@@ -4,8 +4,8 @@ use tokio::sync::mpsc::error::SendError;
 use tonic::transport::Server;
 
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_server::heartbeat::service::grpc::heartbeat_server::HeartbeatServer;
-use crate::net::connect::service_server::heartbeat::service::HeartbeatServiceServer;
+use crate::net::connect::service::heartbeat::service::grpc::heartbeat_server::HeartbeatServer;
+use crate::net::connect::service::heartbeat::service::HeartbeatServiceServer;
 
 pub(crate) struct ServiceServerRegistration {}
 

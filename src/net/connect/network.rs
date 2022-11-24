@@ -19,7 +19,7 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
-    use crate::net::connect::service_server::heartbeat::service_request::HeartbeatServiceServerRequest;
+    use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceServerRequest;
     use crate::net::connect::service_server_registration::{ServiceServerRegistration, ServiceServerShutdownHandle};
 
     use super::*;

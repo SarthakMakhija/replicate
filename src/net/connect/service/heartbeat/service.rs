@@ -1,7 +1,7 @@
 use tonic::{Request, Response, Status};
 
-use crate::net::connect::service_server::heartbeat::service::grpc::heartbeat_server::Heartbeat;
-use crate::net::connect::service_server::heartbeat::service::grpc::HeartbeatRequest;
+use crate::net::connect::service::heartbeat::service::grpc::heartbeat_server::Heartbeat;
+use crate::net::connect::service::heartbeat::service::grpc::HeartbeatRequest;
 
 pub mod grpc {
     tonic::include_proto!("replication.net.connect");

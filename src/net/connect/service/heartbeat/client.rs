@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use tonic::{Request, Response};
 
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_server::heartbeat::service::grpc::heartbeat_client::HeartbeatClient;
-use crate::net::connect::service_server::heartbeat::service::grpc::HeartbeatRequest;
+use crate::net::connect::service::heartbeat::service::grpc::heartbeat_client::HeartbeatClient;
+use crate::net::connect::service::heartbeat::service::grpc::HeartbeatRequest;
 use crate::net::connect::service_server_callable::{ServiceServerCallable, ServiceServerError};
 
 pub(crate) struct HeartbeatServiceClient {}
