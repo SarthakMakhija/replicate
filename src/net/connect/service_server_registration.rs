@@ -5,13 +5,13 @@ use tonic::transport::Server;
 
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service::heartbeat::service::grpc::heartbeat_server::HeartbeatServer;
-use crate::net::connect::service::heartbeat::service::HeartbeatServiceServer;
+use crate::net::connect::service::heartbeat::service::HeartbeatService;
 
 pub(crate) struct ServiceServerRegistration {}
 
 impl ServiceServerRegistration {
     pub(crate) async fn register_all_services_on(address: &HostAndPort, mut shutdown_signal_receiver: Receiver<()>) {
-        let heartbeat_service = HeartbeatServiceServer::default();
+        let heartbeat_service = HeartbeatService::default();
         let socket_address = address.as_socket_address().unwrap();
 
         let shutdown_block = async move {

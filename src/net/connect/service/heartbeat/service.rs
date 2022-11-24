@@ -8,10 +8,10 @@ pub mod grpc {
 }
 
 #[derive(Default)]
-pub(crate) struct HeartbeatServiceServer {}
+pub(crate) struct HeartbeatService {}
 
 #[tonic::async_trait]
-impl Heartbeat for HeartbeatServiceServer {
+impl Heartbeat for HeartbeatService {
     async fn acknowledge(&self, _: Request<HeartbeatRequest>) -> Result<Response<()>, Status> {
         return Ok(Response::new(()));
     }
