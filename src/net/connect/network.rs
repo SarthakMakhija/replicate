@@ -7,9 +7,9 @@ pub(crate) struct AsyncNetwork {}
 
 impl AsyncNetwork {
     pub(crate) async fn send<Payload: Send, R: Send>(service_server_request: ServiceRequest<Payload, R>, address: &HostAndPort) -> Result<Response<R>, ServiceServerError> {
-        let callable = &service_server_request.callable;
+        let client = &service_server_request.service_client;
         let payload = service_server_request.payload;
-        return callable.call(payload, &address).await;
+        return client.call(payload, &address).await;
     }
 }
 

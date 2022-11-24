@@ -8,7 +8,7 @@ impl HeartbeatServiceRequest {
     pub(crate) fn new(node_id: String) -> ServiceRequest<HeartbeatRequest, ()> {
         return ServiceRequest {
             payload: HeartbeatRequest { node_id },
-            callable: Box::new(HeartbeatServiceClient {}),
+            service_client: Box::new(HeartbeatServiceClient {}),
         };
     }
 }
