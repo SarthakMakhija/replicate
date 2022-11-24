@@ -17,8 +17,8 @@ impl HeartbeatSender for BuiltinHeartbeatSender {
     async fn send(&self) -> Result<(), ServiceResponseError> {
         let node_id = "mark";
         let service_server_request = HeartbeatServiceRequest::new(node_id.to_string());
-        let address = self.address.clone();
-        let result = AsyncNetwork::send(service_server_request, &address).await;
+        let address = &self.address;
+        let result = AsyncNetwork::send(service_server_request, address).await;
         if result.is_err() {
             eprintln!("Could not send heartbeat to {}", address.as_string());
         }
