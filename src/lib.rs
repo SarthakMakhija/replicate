@@ -1,5 +1,5 @@
 mod singular_update_queue;
-mod heartbeat;
 mod clock;
+pub mod heartbeat;
 pub mod net;
 

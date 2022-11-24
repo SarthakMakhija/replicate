@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tokio::time::sleep;
+
+use tokio::time;
 
 use crate::heartbeat::heartbeat_sender::HeartbeatSenderType;
 
@@ -22,16 +23,17 @@ impl HeartbeatScheduler {
 
     pub fn start(&self) {
         let heartbeat_sender = self.sender.clone();
-        let interval_ms = Duration::from_millis(self.interval_ms);
         let keep_running = self.keep_running.clone();
+        let interval_ms = Duration::from_millis(self.interval_ms);
+        let mut interval = time::interval(interval_ms);
 
         tokio::spawn(async move {
             loop {
                 if !keep_running.load(Ordering::SeqCst) {
                     return;
                 }
-                heartbeat_sender.send();
-                sleep(interval_ms).await;
+                let _ = heartbeat_sender.send().await;
+                interval.tick().await;
             }
         });
     }
@@ -55,15 +57,20 @@ mod tests {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicU16, Ordering};
 
+        use async_trait::async_trait;
+
         use crate::heartbeat::heartbeat_sender::HeartbeatSender;
+        use crate::net::connect::service_client::ServiceResponseError;
 
         pub struct HeartbeatCounter {
             pub counter: Arc<AtomicU16>,
         }
 
+        #[async_trait]
         impl HeartbeatSender for HeartbeatCounter {
-            fn send(&self) {
+            async fn send(&self) -> Result<(), ServiceResponseError> {
                 self.counter.clone().fetch_add(1, Ordering::SeqCst);
+                return Ok(());
             }
         }
     }
