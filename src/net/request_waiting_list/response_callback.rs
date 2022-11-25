@@ -12,7 +12,7 @@ pub trait ResponseCallback<Response>: Send + Sync {
     fn on_response(&self, response: Result<Response, ResponseErrorType>);
 }
 
-pub struct TimestampedCallback<Response> {
+pub(crate) struct TimestampedCallback<Response> {
     callback: ResponseCallbackType<Response>,
     creation_time: Instant,
 }
