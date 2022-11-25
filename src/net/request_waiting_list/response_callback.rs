@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::clock::clock::Clock;
+use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
 
 pub(crate) type ResponseErrorType = Box<dyn Error>;
 
@@ -27,6 +28,10 @@ impl<Response> TimestampedCallback<Response> {
 
     pub(crate) fn on_response(&self, response: Result<Response, ResponseErrorType>) {
         self.callback.on_response(response);
+    }
+
+    pub(crate) fn on_timeout_response(&self) {
+        self.callback.on_response(Err(Box::new(RequestTimeoutError {})));
     }
 
     pub(crate) fn has_expired(&self, clock: &Arc<dyn Clock>, expiry_after: &Duration) -> bool {

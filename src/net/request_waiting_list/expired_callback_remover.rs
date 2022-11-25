@@ -7,7 +7,6 @@ use std::time::Duration;
 use dashmap::DashMap;
 
 use crate::clock::clock::Clock;
-use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
 use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
 pub(crate) struct ExpiredCallbackRemover<Key, Response>
@@ -37,7 +36,7 @@ impl<Key, Response: 'static> ExpiredCallbackRemover<Key, Response>
         self.pending_requests.retain(|_, timestamped_callback| {
             let has_expired = timestamped_callback.has_expired(&self.clock, &self.expiry_after);
             if has_expired {
-                timestamped_callback.on_response(Err(Box::new(RequestTimeoutError {})));
+                timestamped_callback.on_timeout_response();
                 return false;
             }
             return true;
