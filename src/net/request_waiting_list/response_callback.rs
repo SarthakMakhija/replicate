@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use crate::clock::clock::Clock;
 use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
 
-pub(crate) type ResponseErrorType = Box<dyn Error>;
+pub(crate) type ResponseErrorType = Box<dyn Error + Send + Sync>;
 
 pub(crate) type ResponseCallbackType<Response> = Arc<dyn ResponseCallback<Response> + 'static>;
 
