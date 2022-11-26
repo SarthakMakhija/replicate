@@ -1,5 +1,3 @@
-extern crate core;
-
 mod singular_update_queue;
 mod clock;
 pub mod heartbeat;
