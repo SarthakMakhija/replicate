@@ -17,3 +17,6 @@
 4. HeartbeatScheduler
    1. It ignores the error from HeartbeatSender `let _ = heartbeat_sender.send().await;`. Decide on the approach.
 5. Renaming the module in Cargo.toml will impact the imports in integration tests
+6. Code walk through
+7. AsyncQuorumCallback
+   1. Improve all_success_responses and all_error_responses
