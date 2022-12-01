@@ -8,7 +8,7 @@ use crate::net::request_waiting_list::response_callback::{ResponseCallback, Resp
 
 pub(crate) type SuccessCondition<Response> = Box<dyn Fn(&Response) -> bool + Send + Sync>;
 
-struct AsyncQuorumCallback<Response: Send + Sync + Unpin + Debug> {
+pub(crate) struct AsyncQuorumCallback<Response: Send + Sync + Unpin + Debug> {
     quorum_completion_handle: QuorumCompletionHandle<Response>,
 }
 
@@ -19,11 +19,11 @@ impl<Response: Send + Sync + Unpin + Debug> ResponseCallback<Response> for Async
 }
 
 impl<Response: Send + Sync + Unpin + Debug> AsyncQuorumCallback<Response> {
-    fn new<>(expected_responses: usize) -> Self <> {
+    pub(crate) fn new<>(expected_responses: usize) -> Self <> {
         return Self::new_with_success_condition(expected_responses, Box::new(|_: &Response| true));
     }
 
-    fn new_with_success_condition<>(expected_total_responses: usize, success_condition: SuccessCondition<Response>) -> Self <> {
+    pub(crate) fn new_with_success_condition<>(expected_total_responses: usize, success_condition: SuccessCondition<Response>) -> Self <> {
         return AsyncQuorumCallback {
             quorum_completion_handle: QuorumCompletionHandle {
                 responses: RwLock::new(Vec::with_capacity(expected_total_responses)),
@@ -35,7 +35,7 @@ impl<Response: Send + Sync + Unpin + Debug> AsyncQuorumCallback<Response> {
         };
     }
 
-    fn handle(&mut self) -> &mut QuorumCompletionHandle<Response> {
+    pub(crate) fn handle(&mut self) -> &mut QuorumCompletionHandle<Response> {
         return self.quorum_completion_handle.borrow_mut();
     }
 }
