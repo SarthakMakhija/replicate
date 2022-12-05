@@ -33,7 +33,6 @@ impl HeartbeatScheduler {
                 }
                 let _ = heartbeat_sender.send().await;
                 interval.tick().await;
-                println!("running ...");
             }
         });
     }
