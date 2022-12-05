@@ -50,7 +50,7 @@ mod tests {
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
         use crate::net::connect::host_and_port::HostAndPort;
-        use crate::net::connect::service_client::{ServiceClient, ServiceRequest, ServiceResponseError};
+        use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
 
         pub(crate) struct TestRequest {
             pub(crate) id: u8,
@@ -66,14 +66,14 @@ mod tests {
         pub(crate) struct FailureTestClient {}
 
         #[async_trait]
-        impl ServiceClient<TestRequest, TestResponse> for SuccessTestClient {
+        impl ServiceClientProvider<TestRequest, TestResponse> for SuccessTestClient {
             async fn call(&self, request: TestRequest, _: &HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
                 return Ok(Response::new(TestResponse { correlation_id: request.id }));
             }
         }
 
         #[async_trait]
-        impl ServiceClient<TestRequest, TestResponse> for FailureTestClient {
+        impl ServiceClientProvider<TestRequest, TestResponse> for FailureTestClient {
             async fn call(&self, _: TestRequest, _: &HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
                 return Err(Box::new(TestError { message: "test error".to_string() }));
             }
