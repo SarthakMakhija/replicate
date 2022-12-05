@@ -8,15 +8,15 @@ use crate::heartbeat::heartbeat_sender::HeartbeatSenderType;
 
 pub struct HeartbeatScheduler {
     sender: HeartbeatSenderType,
-    interval_ms: u64,
+    interval: Duration,
     keep_running: Arc<AtomicBool>,
 }
 
 impl HeartbeatScheduler {
-    pub fn new(sender: HeartbeatSenderType, heartbeat_interval_ms: u64) -> HeartbeatScheduler {
+    pub fn new(sender: HeartbeatSenderType, heartbeat_interval: Duration) -> HeartbeatScheduler {
         return HeartbeatScheduler {
             sender,
-            interval_ms: heartbeat_interval_ms,
+            interval: heartbeat_interval,
             keep_running: Arc::new(AtomicBool::new(true)),
         };
     }
@@ -24,8 +24,7 @@ impl HeartbeatScheduler {
     pub fn start(&self) {
         let heartbeat_sender = self.sender.clone();
         let keep_running = self.keep_running.clone();
-        let interval_ms = Duration::from_millis(self.interval_ms);
-        let mut interval = time::interval(interval_ms);
+        let mut interval = time::interval(self.interval);
 
         tokio::spawn(async move {
             loop {
@@ -34,6 +33,7 @@ impl HeartbeatScheduler {
                 }
                 let _ = heartbeat_sender.send().await;
                 interval.tick().await;
+                println!("running ...");
             }
         });
     }
@@ -79,7 +79,7 @@ mod tests {
     async fn start_heartbeat_scheduler() {
         let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_sender = Arc::new(heartbeat_counter);
-        let mut heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), 2);
+        let mut heartbeat_scheduler = HeartbeatScheduler::new(heartbeat_sender.clone(), Duration::from_millis(2));
 
         heartbeat_scheduler.start();
         thread::sleep(Duration::from_millis(5));

@@ -1,6 +1,5 @@
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
-use std::future::Future;
 use std::sync::RwLock;
 use crate::consensus::quorum::quorum_completion_handle::QuorumCompletionHandle;
 
