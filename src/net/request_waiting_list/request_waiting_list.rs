@@ -6,19 +6,19 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 
-use crate::clock::clock::{Clock};
+use crate::clock::clock::Clock;
 use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
-use crate::net::request_waiting_list::response_callback::{ResponseCallbackType, ResponseErrorType, TimestampedCallback};
+use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
-pub struct RequestWaitingList<Key, Response>
+pub struct RequestWaitingList<Key>
     where Key: Eq + Hash + Send + Sync + Debug + 'static, {
-    pending_requests: Arc<DashMap<Key, TimestampedCallback<Response>>>,
+    pending_requests: Arc<DashMap<Key, TimestampedCallback>>,
     clock: Arc<dyn Clock>,
 }
 
-impl<Key, Response: 'static> RequestWaitingList<Key, Response>
+impl<Key> RequestWaitingList<Key>
     where Key: Eq + Hash + Send + Sync + Debug + 'static, {
-    pub fn new(clock: Arc<dyn Clock>, expire_requests_after: Duration, pause_expired_callbacks_remover_every: Duration) -> RequestWaitingList<Key, Response> {
+    pub fn new(clock: Arc<dyn Clock>, expire_requests_after: Duration, pause_expired_callbacks_remover_every: Duration) -> Self <> {
         return Self::new_with_capacity(0, clock, expire_requests_after, pause_expired_callbacks_remover_every);
     }
 
@@ -26,8 +26,7 @@ impl<Key, Response: 'static> RequestWaitingList<Key, Response>
         capacity: usize,
         clock: Arc<dyn Clock>,
         expire_requests_after: Duration,
-        pause_expired_callbacks_remover_every: Duration) -> RequestWaitingList<Key, Response> {
-
+        pause_expired_callbacks_remover_every: Duration) -> Self <> {
         let pending_requests = Arc::new(DashMap::with_capacity(capacity));
         let request_waiting_list = RequestWaitingList { pending_requests, clock: clock.clone() };
 
@@ -35,12 +34,12 @@ impl<Key, Response: 'static> RequestWaitingList<Key, Response>
         return request_waiting_list;
     }
 
-    pub fn add(&mut self, key: Key, callback: ResponseCallbackType<Response>) {
+    pub fn add(&mut self, key: Key, callback: ResponseCallbackType) {
         let timestamped_callback = TimestampedCallback::new(callback, self.clock.now());
         self.pending_requests.borrow_mut().insert(key, timestamped_callback);
     }
 
-    pub fn handle_response(&mut self, key: Key, response: Result<Response, ResponseErrorType>) {
+    pub fn handle_response(&mut self, key: Key, response: Result<AnyResponse, ResponseErrorType>) {
         let key_value_existence = self.pending_requests.remove(&key);
         if let Some(callback_by_key) = key_value_existence {
             let timestamped_callback = callback_by_key.1;
@@ -63,9 +62,11 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use std::thread;
+
+    use crate::clock::clock::SystemClock;
     use crate::net::request_waiting_list::request_waiting_list::tests::setup_callbacks::{ErrorResponseCallback, RequestTimeoutErrorResponseCallback, SuccessResponseCallback};
     use crate::net::request_waiting_list::request_waiting_list::tests::setup_error::TestError;
-    use crate::clock::clock::SystemClock;
+
     use super::*;
 
     mod setup_error {
@@ -89,10 +90,10 @@ mod tests {
     mod setup_callbacks {
         use std::collections::HashMap;
         use std::sync::RwLock;
+
         use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
         use crate::net::request_waiting_list::request_waiting_list::tests::setup_error::TestError;
-
-        use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseErrorType};
+        use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
         pub struct SuccessResponseCallback {
             pub response: RwLock<HashMap<String, String>>,
@@ -106,22 +107,23 @@ mod tests {
             pub error_response: RwLock<HashMap<String, String>>,
         }
 
-        impl ResponseCallback<String> for SuccessResponseCallback {
-            fn on_response(&self, response: Result<String, ResponseErrorType>) {
-                self.response.write().unwrap().insert(String::from("Response"), response.unwrap());
+        impl ResponseCallback for SuccessResponseCallback {
+            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+                let value = *response.unwrap().downcast().unwrap();
+                self.response.write().unwrap().insert(String::from("Response"), value);
             }
         }
 
-        impl ResponseCallback<String> for ErrorResponseCallback {
-            fn on_response(&self, response: Result<String, ResponseErrorType>) {
+        impl ResponseCallback for ErrorResponseCallback {
+            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let actual_error = response_error_type.downcast_ref::<TestError>().unwrap();
                 self.error_response.write().unwrap().insert(String::from("Response"), actual_error.message.to_string());
             }
         }
 
-        impl ResponseCallback<String> for RequestTimeoutErrorResponseCallback {
-            fn on_response(&self, response: Result<String, ResponseErrorType>) {
+        impl ResponseCallback for RequestTimeoutErrorResponseCallback {
+            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let _ = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
                 self.error_response.write().unwrap().insert(String::from("Response"), "timeout".to_string());
@@ -133,7 +135,7 @@ mod tests {
     fn success_response() {
         let key: i32 = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::<i32, String>::new(
+        let mut request_waiting_list = RequestWaitingList::<i32>::new(
             clock.clone(),
             Duration::from_secs(100),
             Duration::from_secs(10),
@@ -143,7 +145,7 @@ mod tests {
         let cloned_response_callback = success_response_callback.clone();
 
         request_waiting_list.add(key, success_response_callback);
-        request_waiting_list.handle_response(key, Ok("success response".to_string()));
+        request_waiting_list.handle_response(key, Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -153,7 +155,7 @@ mod tests {
     fn success_response_with_capacity_of_request_waiting_list() {
         let key: i32 = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::<i32, String>::new_with_capacity(
+        let mut request_waiting_list = RequestWaitingList::<i32>::new_with_capacity(
             1,
             clock.clone(),
             Duration::from_secs(100),
@@ -164,7 +166,7 @@ mod tests {
         let cloned_response_callback = success_response_callback.clone();
 
         request_waiting_list.add(key, success_response_callback);
-        request_waiting_list.handle_response(key, Ok("success response".to_string()));
+        request_waiting_list.handle_response(key, Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -174,7 +176,7 @@ mod tests {
     fn error_response() {
         let key: i32 = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::<i32, String>::new(
+        let mut request_waiting_list = RequestWaitingList::<i32>::new(
             clock.clone(),
             Duration::from_secs(100),
             Duration::from_secs(10),
@@ -194,7 +196,7 @@ mod tests {
     fn error_response_on_expired_key() {
         let key: i32 = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::<i32, String>::new(
+        let mut request_waiting_list = RequestWaitingList::<i32>::new(
             clock.clone(),
             Duration::from_millis(3),
             Duration::from_millis(2),

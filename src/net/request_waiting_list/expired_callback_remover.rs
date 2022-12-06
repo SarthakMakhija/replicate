@@ -9,16 +9,16 @@ use dashmap::DashMap;
 use crate::clock::clock::Clock;
 use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
-pub(crate) struct ExpiredCallbackRemover<Key, Response>
+pub(crate) struct ExpiredCallbackRemover<Key>
     where Key: Eq + Hash + Send + Sync + Debug + 'static, {
-    pending_requests: Arc<DashMap<Key, TimestampedCallback<Response>>>,
+    pending_requests: Arc<DashMap<Key, TimestampedCallback>>,
     expiry_after: Duration,
     clock: Arc<dyn Clock>,
 }
 
-impl<Key, Response: 'static> ExpiredCallbackRemover<Key, Response>
+impl<Key> ExpiredCallbackRemover<Key>
     where Key: Eq + Hash + Send + Sync + Debug + 'static, {
-    pub(crate) fn start(pending_requests: Arc<DashMap<Key, TimestampedCallback<Response>>>,
+    pub(crate) fn start(pending_requests: Arc<DashMap<Key, TimestampedCallback>>,
                         clock: Arc<dyn Clock>,
                         expiry_after: Duration,
                         pause_expired_callbacks_remover_every: Duration) {
@@ -65,7 +65,7 @@ mod tests {
 
         use crate::clock::clock::Clock;
         use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
-        use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseErrorType};
+        use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
         pub struct FutureClock {
             pub duration_to_add: Duration,
@@ -81,8 +81,8 @@ mod tests {
             }
         }
 
-        impl ResponseCallback<String> for RequestTimeoutErrorResponseCallback {
-            fn on_response(&self, response: Result<String, ResponseErrorType>) {
+        impl ResponseCallback for RequestTimeoutErrorResponseCallback {
+            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let _ = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
                 self.error_response.write().unwrap().insert(String::from("Response"), "timeout".to_string());

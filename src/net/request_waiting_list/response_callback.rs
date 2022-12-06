@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -7,26 +8,28 @@ use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError
 
 pub(crate) type ResponseErrorType = Box<dyn Error + Send + Sync>;
 
-pub(crate) type ResponseCallbackType<Response> = Arc<dyn ResponseCallback<Response> + 'static>;
+pub(crate) type ResponseCallbackType = Arc<dyn ResponseCallback + 'static>;
 
-pub trait ResponseCallback<Response>: Send + Sync {
-    fn on_response(&self, response: Result<Response, ResponseErrorType>);
+pub(crate) type AnyResponse = Box<dyn Any>;
+
+pub trait ResponseCallback: Send + Sync {
+    fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>);
 }
 
-pub(crate) struct TimestampedCallback<Response> {
-    callback: ResponseCallbackType<Response>,
+pub(crate) struct TimestampedCallback {
+    callback: ResponseCallbackType,
     creation_time: Instant,
 }
 
-impl<Response> TimestampedCallback<Response> {
-    pub(crate) fn new(callback: ResponseCallbackType<Response>, creation_time: Instant) -> TimestampedCallback<Response> {
+impl TimestampedCallback {
+    pub(crate) fn new(callback: ResponseCallbackType, creation_time: Instant) -> Self {
         return TimestampedCallback {
             callback,
             creation_time,
         };
     }
 
-    pub(crate) fn on_response(&self, response: Result<Response, ResponseErrorType>) {
+    pub(crate) fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
         self.callback.on_response(response);
     }
 
@@ -53,7 +56,7 @@ mod tests {
         use std::time::{Duration, Instant};
 
         use crate::clock::clock::Clock;
-        use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseErrorType};
+        use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
         pub struct FutureClock {
             pub duration_to_add: Duration,
@@ -77,8 +80,8 @@ mod tests {
             }
         }
 
-        impl ResponseCallback<String> for NothingCallback {
-            fn on_response(&self, _: Result<String, ResponseErrorType>) {}
+        impl ResponseCallback for NothingCallback {
+            fn on_response(&self, _: Result<AnyResponse, ResponseErrorType>) {}
         }
     }
 

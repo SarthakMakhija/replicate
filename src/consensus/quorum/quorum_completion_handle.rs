@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
@@ -5,9 +6,9 @@ use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use std::task::{Context, Poll, Waker};
 use crate::consensus::quorum::async_quorum_callback::SuccessCondition;
 use crate::consensus::quorum::quorum_completion_response::QuorumCompletionResponse;
-use crate::net::request_waiting_list::response_callback::ResponseErrorType;
+use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseErrorType};
 
-pub(crate) struct  QuorumCompletionHandle<Response: Send + Sync + Unpin + Debug> {
+pub(crate) struct  QuorumCompletionHandle<Response: Any + Send + Sync + Unpin + Debug> {
     pub(crate) responses: RwLock<Vec<Result<Response, ResponseErrorType>>>,
     pub(crate) expected_total_responses: usize,
     pub(crate) majority_quorum: usize,
@@ -15,9 +16,19 @@ pub(crate) struct  QuorumCompletionHandle<Response: Send + Sync + Unpin + Debug>
     pub(crate) waker: Option<Arc<Mutex<Waker>>>,
 }
 
-impl<Response: Send + Sync + Unpin + Debug> QuorumCompletionHandle<Response> {
-    pub(crate) fn on_response(&self, response: Result<Response, ResponseErrorType>) {
-        self.responses.write().unwrap().push(response);
+impl<Response: Any + Send + Sync + Unpin + Debug> QuorumCompletionHandle<Response> {
+    pub(crate) fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+        match response {
+            Ok(any_response) => {
+                let optional_response: Option<Box<Response>> = any_response.downcast::<Response>().ok();
+                let unwrapped = optional_response.unwrap();
+                let typed_response = *unwrapped;
+                self.responses.write().unwrap().push(Ok(typed_response));
+            }
+            Err(e) => {
+                self.responses.write().unwrap().push(Err(e));
+            }
+        }
 
         if let Some(waker) = &self.waker {
             let waker = waker.lock().unwrap();
@@ -26,7 +37,7 @@ impl<Response: Send + Sync + Unpin + Debug> QuorumCompletionHandle<Response> {
     }
 }
 
-impl<Response: Send + Sync + Unpin + Debug> Future for QuorumCompletionHandle<Response> {
+impl<Response: Any + Send + Sync + Unpin + Debug> Future for QuorumCompletionHandle<Response> {
     type Output = QuorumCompletionResponse<Response>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -57,7 +68,7 @@ impl<Response: Send + Sync + Unpin + Debug> Future for QuorumCompletionHandle<Re
     }
 }
 
-impl<Response: Send + Sync + Unpin + Debug> QuorumCompletionHandle<Response> {
+impl<Response: Any + Send + Sync + Unpin + Debug> QuorumCompletionHandle<Response> {
     fn all_success_responses(responses_guard: &mut RwLockWriteGuard<Vec<Result<Response, ResponseErrorType>>>) -> Vec<Response> {
         let mut all_responses = Vec::with_capacity(responses_guard.len());
         while let Some(response) = responses_guard.pop() {
