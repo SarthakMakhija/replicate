@@ -1,12 +1,10 @@
 use raft_macro::add_correlation_id;
 
 #[test]
-fn add_correlation_id_fields (){
+fn add_correlation_id_field() {
     let response = GetValueResponse {
-        request_id: 10,
-        correlation_id: 10
+        correlation_id: 10,
     };
-    assert_eq!(10, response.request_id);
     assert_eq!(10, response.correlation_id);
 }
 
