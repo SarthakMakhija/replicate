@@ -9,6 +9,7 @@ impl HeartbeatServiceRequest {
         return ServiceRequest::new(
             HeartbeatRequest { node_id },
             Box::new(HeartbeatServiceClient {}),
+            100,
         );
     }
 }
