@@ -9,5 +9,6 @@ service Heartbeat {
 }
 
 message HeartbeatRequest {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
   string nodeId = 2;
 }
