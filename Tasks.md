@@ -20,3 +20,5 @@
 6. Code walk through
 7. AsyncQuorumCallback
    1. Improve all_success_responses and all_error_responses
+      - done
+8. Handle typecast error in `QuorumCompletionHandle`
