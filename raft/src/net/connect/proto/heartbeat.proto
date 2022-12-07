@@ -9,5 +9,5 @@ service Heartbeat {
 }
 
 message HeartbeatRequest {
-  string nodeId = 1;
+  string nodeId = 2;
 }

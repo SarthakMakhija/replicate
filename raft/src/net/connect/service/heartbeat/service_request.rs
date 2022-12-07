@@ -7,8 +7,9 @@ pub struct HeartbeatServiceRequest {}
 
 impl HeartbeatServiceRequest {
     pub fn new(node_id: String) -> ServiceRequest<HeartbeatRequest, ()> {
+        let correlation_id = CorrelationIdGenerator::fixed();
         return ServiceRequest::new(
-            HeartbeatRequest { node_id },
+            HeartbeatRequest { node_id, correlation_id },
             Box::new(HeartbeatServiceClient {}),
             CorrelationIdGenerator::fixed(),
         );

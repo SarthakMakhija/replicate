@@ -1,6 +1,7 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
-        .compile(&["src/net/connect/proto/heartbeat.proto", "src/net/connect/proto/heartbeat.proto"], &["src/net/connect/proto/"])
+        .type_attribute("replication.net.connect.HeartbeatRequest", "#[raft_macro::add_correlation_id]")
+        .compile(&["src/net/connect/proto/heartbeat.proto"], &["src/net/connect/proto/"])
         .unwrap();
     Ok(())
 }

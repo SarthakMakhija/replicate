@@ -605,6 +605,7 @@ dependencies = [
  "async-trait",
  "dashmap",
  "prost",
+ "raft-macro",
  "rand",
  "tokio",
  "tonic",
