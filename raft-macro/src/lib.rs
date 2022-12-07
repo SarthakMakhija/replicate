@@ -12,7 +12,7 @@ pub fn add_correlation_id(args: TokenStream, input: TokenStream) -> TokenStream 
     if let syn::Fields::Named(ref mut fields) = item_struct.fields {
         fields.named.push(
             syn::Field::parse_named
-                .parse2(quote! { #[prost(int64, tag = "1")] pub correlation_id: i64 })
+                .parse2(quote! { #[prost(uint64, tag = "1")] pub correlation_id: u64 })
                 .unwrap(),
         );
     }
