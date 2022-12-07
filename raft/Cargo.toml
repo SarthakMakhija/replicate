@@ -1,0 +1,16 @@
+[package]
+name = "raft"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dashmap = "5.4.0"
+tonic = "0.8"
+prost = "0.11"
+tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
+async-trait = "0.1.58"
+
+[build-dependencies]
+tonic-build = "0.8"
