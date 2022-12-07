@@ -1,1 +1,1 @@
-mod quorum;
+pub mod quorum;

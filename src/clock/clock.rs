@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-pub(crate) struct SystemClock {}
+pub struct SystemClock {}
 
 pub trait Clock: Send + Sync {
     fn now(&self) -> Instant;

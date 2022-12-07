@@ -1,1 +1,1 @@
-pub(crate) mod clock;
+pub mod clock;
