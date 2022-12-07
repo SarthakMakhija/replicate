@@ -49,8 +49,9 @@ mod tests {
         use tonic::Response;
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
+        use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
         use crate::net::connect::host_and_port::HostAndPort;
-        use crate::net::connect::service_client::{CorrelationId, ServiceClientProvider, ServiceRequest, ServiceResponseError};
+        use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
 
         pub(crate) struct TestRequest {
             pub(crate) id: u8,
@@ -80,12 +81,12 @@ mod tests {
         }
 
         pub(crate) fn test_success_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse> {
-            let any_correlation_id: CorrelationId = 100;
+            let any_correlation_id: CorrelationId = CorrelationIdGenerator::fixed();
             return ServiceRequest::new(TestRequest { id }, Box::new(SuccessTestClient {}), any_correlation_id);
         }
 
         pub(crate) fn test_failure_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse> {
-            let any_correlation_id: CorrelationId = 110;
+            let any_correlation_id: CorrelationId = CorrelationIdGenerator::fixed();
             return ServiceRequest::new(TestRequest { id }, Box::new(FailureTestClient {}), any_correlation_id);
         }
     }

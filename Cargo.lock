@@ -605,6 +605,7 @@ dependencies = [
  "async-trait",
  "dashmap",
  "prost",
+ "rand",
  "tokio",
  "tonic",
  "tonic-build",

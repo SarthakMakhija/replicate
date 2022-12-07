@@ -2,10 +2,9 @@ use std::error::Error;
 
 use async_trait::async_trait;
 use tonic::Response;
+use crate::net::connect::correlation_id::CorrelationId;
 
 use crate::net::connect::host_and_port::HostAndPort;
-
-pub type CorrelationId = i64;
 
 pub struct ServiceRequest<Payload, Response>
     where Payload: Send, Response: Send {

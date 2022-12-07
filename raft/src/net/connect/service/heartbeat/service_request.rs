@@ -1,3 +1,4 @@
+use crate::net::connect::correlation_id::CorrelationIdGenerator;
 use crate::net::connect::service::heartbeat::client::HeartbeatServiceClient;
 use crate::net::connect::service::heartbeat::service::grpc::HeartbeatRequest;
 use crate::net::connect::service_client::ServiceRequest;
@@ -9,7 +10,7 @@ impl HeartbeatServiceRequest {
         return ServiceRequest::new(
             HeartbeatRequest { node_id },
             Box::new(HeartbeatServiceClient {}),
-            100,
+            CorrelationIdGenerator::fixed(),
         );
     }
 }
