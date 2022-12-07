@@ -80,11 +80,11 @@ mod tests {
         }
 
         pub(crate) fn test_success_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse> {
-            return ServiceRequest { payload: TestRequest { id }, service_client: Box::new(SuccessTestClient {}) };
+            return ServiceRequest::new(TestRequest { id }, Box::new(SuccessTestClient {}));
         }
 
         pub(crate) fn test_failure_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse> {
-            return ServiceRequest { payload: TestRequest { id }, service_client: Box::new(FailureTestClient {}) };
+            return ServiceRequest::new(TestRequest { id }, Box::new(FailureTestClient {}));
         }
     }
 

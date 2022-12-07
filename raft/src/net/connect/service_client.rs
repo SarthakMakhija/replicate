@@ -11,9 +11,18 @@ pub struct ServiceRequest<Payload, Response>
     pub(crate) service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
 }
 
+impl<Payload: Send, Response: Send> ServiceRequest<Payload, Response> {
+    pub fn new(payload: Payload, service_client: Box<dyn ServiceClientProvider<Payload, Response>>) -> Self <> {
+        return ServiceRequest {
+            payload,
+            service_client,
+        };
+    }
+}
+
 pub type ServiceResponseError = Box<dyn Error + Send + Sync + 'static>;
 
 #[async_trait]
-pub(crate) trait ServiceClientProvider<Payload: Send, R: Send>: Send + Sync {
+pub trait ServiceClientProvider<Payload: Send, R: Send>: Send + Sync {
     async fn call(&self, request: Payload, address: &HostAndPort) -> Result<Response<R>, ServiceResponseError>;
 }

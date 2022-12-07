@@ -6,9 +6,9 @@ pub struct HeartbeatServiceRequest {}
 
 impl HeartbeatServiceRequest {
     pub fn new(node_id: String) -> ServiceRequest<HeartbeatRequest, ()> {
-        return ServiceRequest {
-            payload: HeartbeatRequest { node_id },
-            service_client: Box::new(HeartbeatServiceClient {}),
-        };
+        return ServiceRequest::new(
+            HeartbeatRequest { node_id },
+            Box::new(HeartbeatServiceClient {}),
+        );
     }
 }
