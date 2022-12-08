@@ -1,4 +1,3 @@
-use std::ops::Range;
 use rand::distributions::uniform::SampleRange;
 use rand::prelude::*;
 
@@ -12,7 +11,7 @@ impl CorrelationIdGenerator {
     const FIXED_CORRELATION_ID: CorrelationId = 100;
 
     pub fn new() -> CorrelationIdGenerator {
-        let mut thread_local_generator = thread_rng();
+        let thread_local_generator = thread_rng();
         return CorrelationIdGenerator {
             thread_local_generator
         };
