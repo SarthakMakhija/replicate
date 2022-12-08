@@ -22,7 +22,7 @@ async fn send() {
 
     thread::sleep(Duration::from_secs(3));
     let client_handle = tokio::spawn(async move {
-        let response = send_client_request(&server_address_clone_other).await;
+        let response = send_client_request(server_address_clone_other).await;
         assert!(response.is_ok());
         all_services_shutdown_handle.shutdown();
     });
@@ -30,8 +30,8 @@ async fn send() {
     client_handle.await.unwrap();
 }
 
-async fn send_client_request(address: &HostAndPort) -> Result<(), ServiceResponseError> {
+async fn send_client_request(address: Arc<HostAndPort>) -> Result<(), ServiceResponseError> {
     let node_id = "mark";
     let service_server_request = HeartbeatServiceRequest::new(node_id.to_string());
-    return AsyncNetwork::send(service_server_request, address).await;
+    return AsyncNetwork::send(service_server_request, address.clone()).await;
 }

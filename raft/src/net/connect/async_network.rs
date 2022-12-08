@@ -1,13 +1,14 @@
+use std::sync::Arc;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 
 pub struct AsyncNetwork {}
 
 impl AsyncNetwork {
-    pub async fn send<Payload: Send, R>(service_server_request: ServiceRequest<Payload, R>, address: &HostAndPort) -> Result<R, ServiceResponseError> {
+    pub async fn send<Payload: Send, R>(service_server_request: ServiceRequest<Payload, R>, address: Arc<HostAndPort>) -> Result<R, ServiceResponseError> {
         let client = &service_server_request.service_client;
         let payload = service_server_request.payload;
-        let result = client.call(payload, &address).await;
+        let result = client.call(payload, address.clone()).await;
         return match result {
             Ok(response) => { Ok(response.into_inner()) }
             Err(e) => { Err(e) }
@@ -45,6 +46,7 @@ mod tests {
 
 
     mod setup {
+        use std::sync::Arc;
         use async_trait::async_trait;
         use tonic::Response;
 
@@ -68,14 +70,14 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<TestRequest, TestResponse> for SuccessTestClient {
-            async fn call(&self, request: TestRequest, _: &HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
+            async fn call(&self, request: TestRequest, _: Arc<HostAndPort>) -> Result<Response<TestResponse>, ServiceResponseError> {
                 return Ok(Response::new(TestResponse { correlation_id: request.id }));
             }
         }
 
         #[async_trait]
         impl ServiceClientProvider<TestRequest, TestResponse> for FailureTestClient {
-            async fn call(&self, _: TestRequest, _: &HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
+            async fn call(&self, _: TestRequest, _: Arc<HostAndPort>) -> Result<Response<TestResponse>, ServiceResponseError> {
                 return Err(Box::new(TestError { message: "test error".to_string() }));
             }
         }
@@ -95,7 +97,7 @@ mod tests {
     async fn send_successfully() {
         let server_address = Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051));
         let id = 100;
-        let result = AsyncNetwork::send(test_success_service_request(id), &server_address).await;
+        let result = AsyncNetwork::send(test_success_service_request(id), server_address.clone()).await;
 
         assert!(result.is_ok());
         assert_eq!(id, result.unwrap().correlation_id);
@@ -105,7 +107,7 @@ mod tests {
     async fn send_with_failure() {
         let server_address = Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051));
         let id = 100;
-        let result = AsyncNetwork::send(test_failure_service_request(id), &server_address).await;
+        let result = AsyncNetwork::send(test_failure_service_request(id), server_address.clone()).await;
 
         assert!(result.is_err());
         assert_eq!("test error", result.unwrap_err().downcast_ref::<TestError>().unwrap().message);
