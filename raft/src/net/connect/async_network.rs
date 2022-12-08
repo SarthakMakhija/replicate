@@ -4,7 +4,7 @@ use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 pub struct AsyncNetwork {}
 
 impl AsyncNetwork {
-    pub async fn send<Payload: Send, R: Send>(service_server_request: ServiceRequest<Payload, R>, address: &HostAndPort) -> Result<R, ServiceResponseError> {
+    pub async fn send<Payload: Send, R>(service_server_request: ServiceRequest<Payload, R>, address: &HostAndPort) -> Result<R, ServiceResponseError> {
         let client = &service_server_request.service_client;
         let payload = service_server_request.payload;
         let result = client.call(payload, &address).await;

@@ -7,13 +7,13 @@ use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
 
 pub struct ServiceRequest<Payload, Response>
-    where Payload: Send, Response: Send {
+    where Payload: Send {
     pub(crate) payload: Payload,
     pub(crate) service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
     pub(crate) correlation_id: CorrelationId,
 }
 
-impl<Payload: Send, Response: Send> ServiceRequest<Payload, Response> {
+impl<Payload: Send, Response> ServiceRequest<Payload, Response> {
     pub fn new(
         payload: Payload,
         service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
@@ -30,6 +30,6 @@ impl<Payload: Send, Response: Send> ServiceRequest<Payload, Response> {
 pub type ServiceResponseError = Box<dyn Error + Send + Sync + 'static>;
 
 #[async_trait]
-pub trait ServiceClientProvider<Payload: Send, R: Send>: Send + Sync {
+pub trait ServiceClientProvider<Payload: Send, R>: Send + Sync {
     async fn call(&self, request: Payload, address: &HostAndPort) -> Result<Response<R>, ServiceResponseError>;
 }
