@@ -11,7 +11,7 @@ use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseCallbackType};
 
-pub(crate) type TotalFailedResponses = usize;
+pub(crate) type TotalFailedSends = usize;
 
 pub(crate) struct Replica {
     name: String,
@@ -37,7 +37,7 @@ impl Replica {
 
     pub(crate) async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&mut self,
                                                                              service_request_constructor: S,
-                                                                             response_callback: ResponseCallbackType) -> TotalFailedResponses
+                                                                             response_callback: ResponseCallbackType) -> TotalFailedSends
         where S: Fn() -> ServiceRequest<Payload, ()> {
         let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
         for peer_address in &self.peer_addresses {
@@ -51,15 +51,15 @@ impl Replica {
             ));
         }
 
-        let mut total_failed_responses: TotalFailedResponses = 0;
+        let mut total_failed_sends: TotalFailedSends = 0;
         for task_handle in send_task_handles {
             let response: (Result<(), ServiceResponseError>, CorrelationId) = task_handle.await.unwrap();
             if response.0.is_err() {
                 let _ = &self.request_waiting_list.handle_response(response.1, Err(response.0.unwrap_err()));
-                total_failed_responses = total_failed_responses + 1;
+                total_failed_sends = total_failed_sends + 1;
             }
         }
-        return total_failed_responses;
+        return total_failed_sends;
     }
 
     fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &mut RequestWaitingList<CorrelationId>,
@@ -161,10 +161,10 @@ mod tests {
             )
         };
 
-        let total_failed_responses =
+        let total_failed_sends =
             replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
-        assert_eq!(0, total_failed_responses);
+        assert_eq!(0, total_failed_sends);
     }
 
     #[tokio::test]
@@ -190,9 +190,9 @@ mod tests {
             )
         };
 
-        let total_failed_responses =
+        let total_failed_sends =
             replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
-        assert_eq!(2, total_failed_responses);
+        assert_eq!(2, total_failed_sends);
     }
 }
