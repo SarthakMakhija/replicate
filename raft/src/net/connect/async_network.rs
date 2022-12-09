@@ -1,8 +1,5 @@
 use std::sync::Arc;
 
-use rand::distributions::Standard;
-use rand::prelude::Distribution;
-
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 
@@ -13,7 +10,7 @@ impl AsyncNetwork {
         service_server_request: ServiceRequest<Payload, R, CorrelationId>,
         address: Arc<HostAndPort>,
     ) -> Result<R, ServiceResponseError>
-        where Payload: Send, Standard: Distribution<CorrelationId>, CorrelationId: Copy {
+        where Payload: Send {
         let client = &service_server_request.service_client;
         let payload = service_server_request.payload;
         let result = client.call(payload, address.clone()).await;

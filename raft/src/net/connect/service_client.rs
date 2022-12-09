@@ -2,21 +2,19 @@ use std::error::Error;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use rand::distributions::Standard;
-use rand::prelude::Distribution;
 use tonic::Response;
 
 use crate::net::connect::host_and_port::HostAndPort;
 
 pub struct ServiceRequest<Payload, Response, CorrelationId>
-    where Payload: Send, Standard: Distribution<CorrelationId>, CorrelationId: Copy {
+    where Payload: Send {
     pub(crate) payload: Payload,
     pub(crate) service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
     pub(crate) correlation_id: CorrelationId,
 }
 
 impl<Payload: Send, Response, CorrelationId> ServiceRequest<Payload, Response, CorrelationId>
-    where Payload: Send, Standard: Distribution<CorrelationId>, CorrelationId: Copy {
+    where Payload: Send {
     pub fn new(
         payload: Payload,
         service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
