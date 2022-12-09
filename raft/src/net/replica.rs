@@ -1,25 +1,30 @@
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::sync::Arc;
 use std::time::Duration;
 
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
 use tokio::task::JoinHandle;
 
 use crate::clock::clock::Clock;
 use crate::net::connect::async_network::AsyncNetwork;
-use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
-use crate::net::request_waiting_list::response_callback::{ResponseCallback, ResponseCallbackType};
+use crate::net::request_waiting_list::response_callback::ResponseCallbackType;
 
 pub(crate) type TotalFailedSends = usize;
 
-pub(crate) struct Replica {
+pub(crate) struct Replica<CorrelationId>
+    where CorrelationId: Eq + Hash + Send + Copy + Sync + Debug + 'static, Standard: Distribution<CorrelationId> {
     name: String,
     peer_addresses: Vec<Arc<HostAndPort>>,
     request_waiting_list: RequestWaitingList<CorrelationId>,
 }
 
-impl Replica {
+impl<CorrelationId> Replica<CorrelationId>
+    where CorrelationId: Eq + Hash + Copy + Send + Sync + Debug + 'static, Standard: Distribution<CorrelationId> {
     fn new(name: String,
            peer_addresses: Vec<Arc<HostAndPort>>,
            clock: Arc<dyn Clock>) -> Self {
@@ -38,10 +43,10 @@ impl Replica {
     pub(crate) async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&mut self,
                                                                              service_request_constructor: S,
                                                                              response_callback: ResponseCallbackType) -> TotalFailedSends
-        where S: Fn() -> ServiceRequest<Payload, ()> {
+        where S: Fn() -> ServiceRequest<Payload, (), CorrelationId> {
         let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
         for peer_address in &self.peer_addresses {
-            let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
+            let service_request: ServiceRequest<Payload, (), CorrelationId> = service_request_constructor();
 
             send_task_handles.push(Self::send_one_way_to(
                 &mut self.request_waiting_list,
@@ -62,10 +67,12 @@ impl Replica {
         return total_failed_sends;
     }
 
-    fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &mut RequestWaitingList<CorrelationId>,
-                                                service_request: ServiceRequest<Payload, ()>,
-                                                address: Arc<HostAndPort>,
-                                                response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
+    fn send_one_way_to<Payload: Send + 'static, CorrelationIdType>(request_waiting_list: &mut RequestWaitingList<CorrelationIdType>,
+                                                                   service_request: ServiceRequest<Payload, (), CorrelationIdType>,
+                                                                   address: Arc<HostAndPort>,
+                                                                   response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationIdType)>
+        where CorrelationIdType: Eq + Hash + Copy + Send + Sync + Debug + 'static, Standard: Distribution<CorrelationIdType> {
+
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
 
@@ -83,7 +90,7 @@ mod tests {
 
     use crate::clock::clock::SystemClock;
     use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-    use crate::net::connect::correlation_id::CorrelationIdGenerator;
+    use crate::net::connect::correlation_id::{DefaultCorrelationIdType, CorrelationIdGenerator};
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::replica::Replica;
@@ -143,7 +150,7 @@ mod tests {
         let any_replica_port = 8988;
         let any_other_replica_port = 8988;
 
-        let mut replica = Replica::new(
+        let mut replica = Replica::<DefaultCorrelationIdType>::new(
             String::from("neptune"),
             vec![
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
@@ -172,7 +179,7 @@ mod tests {
         let any_replica_port = 8988;
         let any_other_replica_port = 8988;
 
-        let mut replica = Replica::new(
+        let mut replica = Replica::<DefaultCorrelationIdType>::new(
             String::from("neptune"),
             vec![
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
@@ -186,7 +193,7 @@ mod tests {
             ServiceRequest::new(
                 GetValueRequest {},
                 Box::new(GetValueRequestFailureClient {}),
-                CorrelationIdGenerator::fixed(),
+                CorrelationIdGenerator::fixed()
             )
         };
 

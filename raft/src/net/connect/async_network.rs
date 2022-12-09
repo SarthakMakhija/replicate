@@ -1,11 +1,19 @@
 use std::sync::Arc;
+
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
+
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 
 pub struct AsyncNetwork {}
 
 impl AsyncNetwork {
-    pub async fn send<Payload: Send, R>(service_server_request: ServiceRequest<Payload, R>, address: Arc<HostAndPort>) -> Result<R, ServiceResponseError> {
+    pub async fn send<Payload: Send, R, CorrelationId>(
+        service_server_request: ServiceRequest<Payload, R, CorrelationId>,
+        address: Arc<HostAndPort>,
+    ) -> Result<R, ServiceResponseError>
+        where Payload: Send, Standard: Distribution<CorrelationId>, CorrelationId: Copy {
         let client = &service_server_request.service_client;
         let payload = service_server_request.payload;
         let result = client.call(payload, address.clone()).await;
@@ -47,11 +55,12 @@ mod tests {
 
     mod setup {
         use std::sync::Arc;
+
         use async_trait::async_trait;
         use tonic::Response;
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
-        use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
+        use crate::net::connect::correlation_id::{DefaultCorrelationIdType, CorrelationIdGenerator};
         use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
 
@@ -82,13 +91,13 @@ mod tests {
             }
         }
 
-        pub(crate) fn test_success_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse> {
-            let any_correlation_id: CorrelationId = CorrelationIdGenerator::fixed();
+        pub(crate) fn test_success_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse, DefaultCorrelationIdType> {
+            let any_correlation_id: DefaultCorrelationIdType = CorrelationIdGenerator::fixed();
             return ServiceRequest::new(TestRequest { id }, Box::new(SuccessTestClient {}), any_correlation_id);
         }
 
-        pub(crate) fn test_failure_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse> {
-            let any_correlation_id: CorrelationId = CorrelationIdGenerator::fixed();
+        pub(crate) fn test_failure_service_request(id: u8) -> ServiceRequest<TestRequest, TestResponse, DefaultCorrelationIdType> {
+            let any_correlation_id: DefaultCorrelationIdType = CorrelationIdGenerator::fixed();
             return ServiceRequest::new(TestRequest { id }, Box::new(FailureTestClient {}), any_correlation_id);
         }
     }
