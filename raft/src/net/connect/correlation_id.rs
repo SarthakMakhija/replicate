@@ -1,5 +1,4 @@
 use rand::distributions::Standard;
-use rand::distributions::uniform::SampleRange;
 use rand::prelude::*;
 
 pub type DefaultCorrelationIdType = u64;
@@ -21,27 +20,24 @@ impl CorrelationIdGenerator {
         where Standard: Distribution<T> {
         return self.thread_local_generator.gen::<T>();
     }
-
-    pub fn generate_in_range<R: SampleRange<DefaultCorrelationIdType>>(&mut self, range: R) -> DefaultCorrelationIdType {
-        return self.thread_local_generator.gen_range(range);
-    }
 }
 
 #[cfg(test)]
+#[allow(unused_comparisons)]
 mod tests {
-    use crate::net::connect::correlation_id::CorrelationIdGenerator;
+    use crate::net::connect::correlation_id::{CorrelationIdGenerator, DefaultCorrelationIdType};
 
     #[test]
-    fn generate_correlation_id_in_exclusive_range() {
+    fn generate_correlation_id_of_default_correlation_type() {
         let mut generator = CorrelationIdGenerator::new();
-        let correlation_id = generator.generate_in_range(1..10);
-        assert!(correlation_id >= 1 && correlation_id < 10);
+        let correlation_id = generator.generate::<DefaultCorrelationIdType>();
+        assert!(correlation_id >= 0);
     }
 
     #[test]
-    fn generate_correlation_id_in_inclusive_range() {
+    fn generate_correlation_id_of_u8() {
         let mut generator = CorrelationIdGenerator::new();
-        let correlation_id = generator.generate_in_range(1..=10);
-        assert!(correlation_id >= 1 && correlation_id <= 10);
+        let correlation_id = generator.generate::<u8>();
+        assert!(correlation_id >= 0 && correlation_id <= 255);
     }
 }
