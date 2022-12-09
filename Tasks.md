@@ -22,3 +22,5 @@
    1. Improve all_success_responses and all_error_responses
       - done
 8. Handle typecast error in `QuorumCompletionHandle`
+9. Relook at generic types across objects
+10. Change the correlation id generator
