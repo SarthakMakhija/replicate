@@ -9,7 +9,6 @@ pub struct CorrelationIdGenerator {
 }
 
 impl CorrelationIdGenerator {
-    const FIXED_CORRELATION_ID: DefaultCorrelationIdType = 100;
 
     pub fn new() -> CorrelationIdGenerator {
         let thread_local_generator = thread_rng();
@@ -25,10 +24,6 @@ impl CorrelationIdGenerator {
 
     pub fn generate_in_range<R: SampleRange<DefaultCorrelationIdType>>(&mut self, range: R) -> DefaultCorrelationIdType {
         return self.thread_local_generator.gen_range(range);
-    }
-
-    pub(crate) fn fixed() -> DefaultCorrelationIdType {
-        return Self::FIXED_CORRELATION_ID;
     }
 }
 

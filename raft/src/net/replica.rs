@@ -41,9 +41,9 @@ impl<CorrelationId> Replica<CorrelationId>
     }
 
     pub(crate) async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&mut self,
-                                                                             service_request_constructor: S,
+                                                                             mut service_request_constructor: S,
                                                                              response_callback: ResponseCallbackType) -> TotalFailedSends
-        where S: Fn() -> ServiceRequest<Payload, (), CorrelationId> {
+        where S: FnMut() -> ServiceRequest<Payload, (), CorrelationId> {
         let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
         for peer_address in &self.peer_addresses {
             let service_request: ServiceRequest<Payload, (), CorrelationId> = service_request_constructor();
@@ -159,12 +159,13 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
+        let mut correlation_id_generator = CorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},
                 Box::new(GetValueRequestSuccessClient {}),
-                CorrelationIdGenerator::fixed(),
+                correlation_id_generator.generate::<DefaultCorrelationIdType>()
             )
         };
 
@@ -188,12 +189,13 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
+        let mut correlation_id_generator = CorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},
                 Box::new(GetValueRequestFailureClient {}),
-                CorrelationIdGenerator::fixed()
+                correlation_id_generator.generate::<DefaultCorrelationIdType>()
             )
         };
 
