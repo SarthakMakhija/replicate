@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use raft::net::connect::async_network::AsyncNetwork;
-use raft::net::connect::correlation_id::RandomCorrelationIdGenerator;
 
 use raft::net::connect::host_and_port::HostAndPort;
+use raft::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use raft::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
 use raft::net::connect::service_client::ServiceResponseError;
 use raft::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};

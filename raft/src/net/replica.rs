@@ -86,8 +86,9 @@ mod tests {
 
     use crate::clock::clock::SystemClock;
     use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-    use crate::net::connect::correlation_id::{CorrelationIdGenerator, RandomCorrelationIdGenerator};
+    use crate::net::connect::correlation_id::CorrelationIdGenerator;
     use crate::net::connect::host_and_port::HostAndPort;
+    use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::replica::Replica;
     use crate::net::replica::tests::setup::{GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse};

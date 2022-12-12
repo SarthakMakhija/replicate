@@ -28,7 +28,7 @@ mod tests {
 
     use crate::net::connect::async_network::tests::setup::{test_failure_service_request, test_success_service_request};
     use crate::net::connect::async_network::tests::setup_error::TestError;
-    use crate::net::connect::correlation_id::RandomCorrelationIdGenerator;
+    use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 
     use super::*;
 

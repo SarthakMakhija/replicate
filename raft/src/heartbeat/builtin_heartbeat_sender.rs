@@ -3,8 +3,8 @@ use async_trait::async_trait;
 
 use crate::heartbeat::heartbeat_sender::HeartbeatSender;
 use crate::net::connect::async_network::AsyncNetwork;
-use crate::net::connect::correlation_id::RandomCorrelationIdGenerator;
 use crate::net::connect::host_and_port::HostAndPort;
+use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
 use crate::net::connect::service_client::ServiceResponseError;
 
