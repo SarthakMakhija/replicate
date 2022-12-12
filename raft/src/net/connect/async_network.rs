@@ -28,7 +28,7 @@ mod tests {
 
     use crate::net::connect::async_network::tests::setup::{test_failure_service_request, test_success_service_request};
     use crate::net::connect::async_network::tests::setup_error::TestError;
-    use crate::net::connect::correlation_id::CorrelationIdGenerator;
+    use crate::net::connect::correlation_id::RandomCorrelationIdGenerator;
 
     use super::*;
 
@@ -58,7 +58,7 @@ mod tests {
         use tonic::Response;
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
-        use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
+        use crate::net::connect::correlation_id::{CorrelationId, RandomCorrelationIdGenerator};
         use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
 
@@ -89,12 +89,12 @@ mod tests {
             }
         }
 
-        pub(crate) fn test_success_service_request(id: u8, mut correlation_id_generator: CorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse> {
+        pub(crate) fn test_success_service_request(id: u8, mut correlation_id_generator: RandomCorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse> {
             let any_correlation_id: CorrelationId = correlation_id_generator.generate();
             return ServiceRequest::new(TestRequest { id }, Box::new(SuccessTestClient {}), any_correlation_id);
         }
 
-        pub(crate) fn test_failure_service_request(id: u8, mut correlation_id_generator: CorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse> {
+        pub(crate) fn test_failure_service_request(id: u8, mut correlation_id_generator: RandomCorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse> {
             let any_correlation_id: CorrelationId = correlation_id_generator.generate();
             return ServiceRequest::new(TestRequest { id }, Box::new(FailureTestClient {}), any_correlation_id);
         }
@@ -104,7 +104,7 @@ mod tests {
     async fn send_successfully() {
         let server_address = Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051));
         let id = 100;
-        let correlation_id_generator = CorrelationIdGenerator::new();
+        let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let result = AsyncNetwork::send(test_success_service_request(id, correlation_id_generator), server_address.clone()).await;
 
         assert!(result.is_ok());
@@ -115,7 +115,7 @@ mod tests {
     async fn send_with_failure() {
         let server_address = Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051));
         let id = 100;
-        let correlation_id_generator = CorrelationIdGenerator::new();
+        let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let result = AsyncNetwork::send(test_failure_service_request(id, correlation_id_generator), server_address.clone()).await;
 
         assert!(result.is_err());

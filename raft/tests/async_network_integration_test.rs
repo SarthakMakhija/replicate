@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use raft::net::connect::async_network::AsyncNetwork;
-use raft::net::connect::correlation_id::CorrelationIdGenerator;
+use raft::net::connect::correlation_id::RandomCorrelationIdGenerator;
 
 use raft::net::connect::host_and_port::HostAndPort;
 use raft::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
@@ -35,7 +35,7 @@ async fn send_client_request(address: Arc<HostAndPort>) -> Result<(), ServiceRes
     let node_id = "mark";
     let service_server_request = HeartbeatServiceRequest::new(
         node_id.to_string(),
-        CorrelationIdGenerator::new()
+        RandomCorrelationIdGenerator::new()
     );
     return AsyncNetwork::send(service_server_request, address.clone()).await;
 }

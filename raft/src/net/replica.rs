@@ -86,7 +86,7 @@ mod tests {
 
     use crate::clock::clock::SystemClock;
     use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-    use crate::net::connect::correlation_id::CorrelationIdGenerator;
+    use crate::net::connect::correlation_id::RandomCorrelationIdGenerator;
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::replica::Replica;
@@ -155,7 +155,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let mut correlation_id_generator = CorrelationIdGenerator::new();
+        let mut correlation_id_generator = RandomCorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
         let service_request_constructor = || {
             ServiceRequest::new(
@@ -185,7 +185,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let mut correlation_id_generator = CorrelationIdGenerator::new();
+        let mut correlation_id_generator = RandomCorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
         let service_request_constructor = || {
             ServiceRequest::new(
