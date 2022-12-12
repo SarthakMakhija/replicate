@@ -10,7 +10,7 @@ impl HeartbeatServiceRequest {
         node_id: String,
         mut correlation_id_generator: CorrelationIdGenerator,
     ) -> ServiceRequest<HeartbeatRequest, (), DefaultCorrelationIdType> {
-        let correlation_id = correlation_id_generator.generate::<DefaultCorrelationIdType>();
+        let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(
             HeartbeatRequest { node_id, correlation_id },
             Box::new(HeartbeatServiceClient {}),

@@ -165,7 +165,7 @@ mod tests {
             ServiceRequest::new(
                 GetValueRequest {},
                 Box::new(GetValueRequestSuccessClient {}),
-                correlation_id_generator.generate::<DefaultCorrelationIdType>()
+                correlation_id_generator.generate()
             )
         };
 
@@ -195,7 +195,7 @@ mod tests {
             ServiceRequest::new(
                 GetValueRequest {},
                 Box::new(GetValueRequestFailureClient {}),
-                correlation_id_generator.generate::<DefaultCorrelationIdType>()
+                correlation_id_generator.generate()
             )
         };
 
