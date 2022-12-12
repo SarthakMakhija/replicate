@@ -5,17 +5,17 @@ use std::time::Duration;
 use dashmap::DashMap;
 
 use crate::clock::clock::Clock;
-use crate::net::connect::correlation_id::DefaultCorrelationIdType;
+use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
 pub(crate) struct ExpiredCallbackRemover {
-    pending_requests: Arc<DashMap<DefaultCorrelationIdType, TimestampedCallback>>,
+    pending_requests: Arc<DashMap<CorrelationId, TimestampedCallback>>,
     expiry_after: Duration,
     clock: Arc<dyn Clock>,
 }
 
 impl ExpiredCallbackRemover {
-    pub(crate) fn start(pending_requests: Arc<DashMap<DefaultCorrelationIdType, TimestampedCallback>>,
+    pub(crate) fn start(pending_requests: Arc<DashMap<CorrelationId, TimestampedCallback>>,
                         clock: Arc<dyn Clock>,
                         expiry_after: Duration,
                         pause_expired_callbacks_remover_every: Duration) {
@@ -49,7 +49,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use dashmap::DashMap;
-    use crate::net::connect::correlation_id::DefaultCorrelationIdType;
+    use crate::net::connect::correlation_id::CorrelationId;
 
     use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
     use crate::net::request_waiting_list::expired_callback_remover::tests::setup::{FutureClock, RequestTimeoutErrorResponseCallback};
@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn error_response_on_expired_key() {
-        let key: DefaultCorrelationIdType = 1;
+        let key: CorrelationId = 1;
         let clock = Arc::new(FutureClock { duration_to_add: Duration::from_secs(5) });
         let pending_requests = Arc::new(DashMap::new());
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tonic::Response;
-use crate::net::connect::correlation_id::DefaultCorrelationIdType;
+use crate::net::connect::correlation_id::CorrelationId;
 
 use crate::net::connect::host_and_port::HostAndPort;
 
@@ -11,7 +11,7 @@ pub struct ServiceRequest<Payload, Response>
     where Payload: Send {
     pub(crate) payload: Payload,
     pub(crate) service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
-    pub(crate) correlation_id: DefaultCorrelationIdType,
+    pub(crate) correlation_id: CorrelationId,
 }
 
 impl<Payload: Send, Response> ServiceRequest<Payload, Response>
@@ -19,7 +19,7 @@ impl<Payload: Send, Response> ServiceRequest<Payload, Response>
     pub fn new(
         payload: Payload,
         service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
-        correlation_id: DefaultCorrelationIdType,
+        correlation_id: CorrelationId,
     ) -> Self <> {
         return ServiceRequest {
             payload,

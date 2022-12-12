@@ -5,12 +5,12 @@ use std::time::Duration;
 use dashmap::DashMap;
 
 use crate::clock::clock::Clock;
-use crate::net::connect::correlation_id::DefaultCorrelationIdType;
+use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
 pub struct RequestWaitingList {
-    pending_requests: Arc<DashMap<DefaultCorrelationIdType, TimestampedCallback>>,
+    pending_requests: Arc<DashMap<CorrelationId, TimestampedCallback>>,
     clock: Arc<dyn Clock>,
 }
 
@@ -32,12 +32,12 @@ impl RequestWaitingList {
         return request_waiting_list;
     }
 
-    pub fn add(&mut self, key: DefaultCorrelationIdType, callback: ResponseCallbackType) {
+    pub fn add(&mut self, key: CorrelationId, callback: ResponseCallbackType) {
         let timestamped_callback = TimestampedCallback::new(callback, self.clock.now());
         self.pending_requests.borrow_mut().insert(key, timestamped_callback);
     }
 
-    pub fn handle_response(&mut self, key: DefaultCorrelationIdType, response: Result<AnyResponse, ResponseErrorType>) {
+    pub fn handle_response(&mut self, key: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
         let key_value_existence = self.pending_requests.remove(&key);
         if let Some(callback_by_key) = key_value_existence {
             let timestamped_callback = callback_by_key.1;
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn success_response() {
-        let key: DefaultCorrelationIdType = 1;
+        let key: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new(
             clock.clone(),
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn success_response_with_capacity_of_request_waiting_list() {
-        let key: DefaultCorrelationIdType = 1;
+        let key: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new_with_capacity(
             1,
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn error_response() {
-        let key: DefaultCorrelationIdType = 1;
+        let key: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new(
             clock.clone(),
@@ -192,7 +192,7 @@ mod tests {
 
     #[test]
     fn error_response_on_expired_key() {
-        let key: DefaultCorrelationIdType = 1;
+        let key: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new(
             clock.clone(),

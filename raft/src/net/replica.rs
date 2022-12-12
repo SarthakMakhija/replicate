@@ -5,7 +5,7 @@ use tokio::task::JoinHandle;
 
 use crate::clock::clock::Clock;
 use crate::net::connect::async_network::AsyncNetwork;
-use crate::net::connect::correlation_id::DefaultCorrelationIdType;
+use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
@@ -41,7 +41,7 @@ impl Replica {
                                                                              response_callback: ResponseCallbackType) -> TotalFailedSends
         where S: FnMut() -> ServiceRequest<Payload, ()> {
 
-        let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, DefaultCorrelationIdType)>> = Vec::new();
+        let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
         for peer_address in &self.peer_addresses {
             let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
 
@@ -55,7 +55,7 @@ impl Replica {
 
         let mut total_failed_sends: TotalFailedSends = 0;
         for task_handle in send_task_handles {
-            let response: (Result<(), ServiceResponseError>, DefaultCorrelationIdType) = task_handle.await.unwrap();
+            let response: (Result<(), ServiceResponseError>, CorrelationId) = task_handle.await.unwrap();
             if response.0.is_err() {
                 let _ = &self.request_waiting_list.handle_response(response.1, Err(response.0.unwrap_err()));
                 total_failed_sends = total_failed_sends + 1;
@@ -67,7 +67,7 @@ impl Replica {
     fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &mut RequestWaitingList,
                                                 service_request: ServiceRequest<Payload, ()>,
                                                 address: Arc<HostAndPort>,
-                                                response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, DefaultCorrelationIdType)> {
+                                                response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
 
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);

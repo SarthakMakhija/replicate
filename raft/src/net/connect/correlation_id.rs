@@ -1,6 +1,6 @@
 use rand::prelude::*;
 
-pub type DefaultCorrelationIdType = u64;
+pub type CorrelationId = u64;
 
 pub struct CorrelationIdGenerator {
     thread_local_generator: ThreadRng,
@@ -15,8 +15,8 @@ impl CorrelationIdGenerator {
         };
     }
 
-    pub fn generate(&mut self) -> DefaultCorrelationIdType {
-        return self.thread_local_generator.gen::<DefaultCorrelationIdType>();
+    pub fn generate(&mut self) -> CorrelationId {
+        return self.thread_local_generator.gen::<CorrelationId>();
     }
 }
 
