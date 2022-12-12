@@ -8,7 +8,7 @@ use crate::consensus::quorum::async_quorum_callback::SuccessCondition;
 use crate::consensus::quorum::quorum_completion_response::QuorumCompletionResponse;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseErrorType};
 
-pub struct  QuorumCompletionHandle<Response: Any + Send + Sync + Unpin + Debug> {
+pub struct  QuorumCompletionHandle<Response: Any + Send + Sync + Debug> {
     pub(crate) responses: RwLock<Vec<Result<Response, ResponseErrorType>>>,
     pub(crate) expected_total_responses: usize,
     pub(crate) majority_quorum: usize,
@@ -20,7 +20,7 @@ pub(crate) struct WakerState {
     pub(crate) waker: Option<Waker>,
 }
 
-impl<Response: Any + Send + Sync + Unpin + Debug> QuorumCompletionHandle<Response> {
+impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
     pub(crate) fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
         match response {
             Ok(any_response) => {
@@ -40,7 +40,7 @@ impl<Response: Any + Send + Sync + Unpin + Debug> QuorumCompletionHandle<Respons
     }
 }
 
-impl<Response: Any + Send + Sync + Unpin + Debug> Future for &QuorumCompletionHandle<Response> {
+impl<Response: Any + Send + Sync + Debug> Future for &QuorumCompletionHandle<Response> {
     type Output = QuorumCompletionResponse<Response>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -70,7 +70,7 @@ impl<Response: Any + Send + Sync + Unpin + Debug> Future for &QuorumCompletionHa
     }
 }
 
-impl<Response: Any + Send + Sync + Unpin + Debug> QuorumCompletionHandle<Response> {
+impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
     fn all_success_responses(&self, responses_guard: &mut RwLockWriteGuard<Vec<Result<Response, ResponseErrorType>>>) -> Vec<Response> {
         let mut all_responses = Vec::with_capacity(responses_guard.len());
         while let Some(response) = responses_guard.pop() {
