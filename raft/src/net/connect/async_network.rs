@@ -6,8 +6,8 @@ use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 pub struct AsyncNetwork {}
 
 impl AsyncNetwork {
-    pub async fn send<Payload: Send, R, CorrelationId>(
-        service_server_request: ServiceRequest<Payload, R, CorrelationId>,
+    pub async fn send<Payload: Send, R>(
+        service_server_request: ServiceRequest<Payload, R>,
         address: Arc<HostAndPort>,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
@@ -89,12 +89,12 @@ mod tests {
             }
         }
 
-        pub(crate) fn test_success_service_request(id: u8, mut correlation_id_generator: CorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse, DefaultCorrelationIdType> {
+        pub(crate) fn test_success_service_request(id: u8, mut correlation_id_generator: CorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse> {
             let any_correlation_id: DefaultCorrelationIdType = correlation_id_generator.generate();
             return ServiceRequest::new(TestRequest { id }, Box::new(SuccessTestClient {}), any_correlation_id);
         }
 
-        pub(crate) fn test_failure_service_request(id: u8, mut correlation_id_generator: CorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse, DefaultCorrelationIdType> {
+        pub(crate) fn test_failure_service_request(id: u8, mut correlation_id_generator: CorrelationIdGenerator) -> ServiceRequest<TestRequest, TestResponse> {
             let any_correlation_id: DefaultCorrelationIdType = correlation_id_generator.generate();
             return ServiceRequest::new(TestRequest { id }, Box::new(FailureTestClient {}), any_correlation_id);
         }
