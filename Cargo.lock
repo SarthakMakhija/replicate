@@ -613,6 +613,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "raft-examples"
+version = "0.1.0"
+dependencies = [
+ "raft",
+]
+
+[[package]]
 name = "raft-macro"
 version = "0.1.0"
 dependencies = [
