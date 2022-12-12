@@ -10,7 +10,7 @@ use raft::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handle_single_response_type() {
     let clock = Arc::new(SystemClock::new());
-    let mut request_waiting_list = RequestWaitingList::<i32>::new(
+    let mut request_waiting_list = RequestWaitingList::new(
         clock.clone(),
         Duration::from_millis(3),
         Duration::from_millis(2),
@@ -44,7 +44,7 @@ async fn handle_single_response_type() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handle_multiple_response_types() {
     let clock = Arc::new(SystemClock::new());
-    let mut request_waiting_list = RequestWaitingList::<i32>::new(
+    let mut request_waiting_list = RequestWaitingList::new(
         clock.clone(),
         Duration::from_millis(3),
         Duration::from_millis(2),
@@ -101,7 +101,7 @@ async fn handle_multiple_response_types() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handle_multiple_response_types_with_error() {
     let clock = Arc::new(SystemClock::new());
-    let mut request_waiting_list = RequestWaitingList::<i32>::new(
+    let mut request_waiting_list = RequestWaitingList::new(
         clock.clone(),
         Duration::from_millis(3),
         Duration::from_millis(2),

@@ -16,13 +16,14 @@ pub(crate) type TotalFailedSends = usize;
 pub(crate) struct Replica {
     name: String,
     peer_addresses: Vec<Arc<HostAndPort>>,
-    request_waiting_list: RequestWaitingList<DefaultCorrelationIdType>,
+    request_waiting_list: RequestWaitingList,
 }
 
 impl Replica {
     fn new(name: String,
            peer_addresses: Vec<Arc<HostAndPort>>,
            clock: Arc<dyn Clock>) -> Self {
+
         let request_waiting_list = RequestWaitingList::new(
             clock,
             Duration::from_millis(3),
@@ -63,10 +64,10 @@ impl Replica {
         return total_failed_sends;
     }
 
-    fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &mut RequestWaitingList<DefaultCorrelationIdType>,
-                                                                   service_request: ServiceRequest<Payload, ()>,
-                                                                   address: Arc<HostAndPort>,
-                                                                   response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, DefaultCorrelationIdType)> {
+    fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &mut RequestWaitingList,
+                                                service_request: ServiceRequest<Payload, ()>,
+                                                address: Arc<HostAndPort>,
+                                                response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, DefaultCorrelationIdType)> {
 
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
