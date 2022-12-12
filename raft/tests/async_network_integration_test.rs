@@ -35,7 +35,7 @@ async fn send_client_request(address: Arc<HostAndPort>) -> Result<(), ServiceRes
     let node_id = "mark";
     let service_server_request = HeartbeatServiceRequest::new(
         node_id.to_string(),
-        RandomCorrelationIdGenerator::new()
+        &RandomCorrelationIdGenerator::new()
     );
     return AsyncNetwork::send(service_server_request, address.clone()).await;
 }

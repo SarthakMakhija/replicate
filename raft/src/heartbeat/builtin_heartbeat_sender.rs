@@ -18,7 +18,7 @@ impl HeartbeatSender for BuiltinHeartbeatSender {
         let node_id = "mark";
         let service_server_request = HeartbeatServiceRequest::new(
             node_id.to_string(),
-            RandomCorrelationIdGenerator::new()
+            &RandomCorrelationIdGenerator::new()
         );
         let address = self.address.clone();
         let result = AsyncNetwork::send(service_server_request, address.clone()).await;
