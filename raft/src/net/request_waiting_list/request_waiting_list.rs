@@ -32,13 +32,13 @@ impl RequestWaitingList {
         return request_waiting_list;
     }
 
-    pub fn add(&mut self, key: CorrelationId, callback: ResponseCallbackType) {
+    pub fn add(&mut self, correlation_id: CorrelationId, callback: ResponseCallbackType) {
         let timestamped_callback = TimestampedCallback::new(callback, self.clock.now());
-        self.pending_requests.borrow_mut().insert(key, timestamped_callback);
+        self.pending_requests.borrow_mut().insert(correlation_id, timestamped_callback);
     }
 
-    pub fn handle_response(&mut self, key: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
-        let key_value_existence = self.pending_requests.remove(&key);
+    pub fn handle_response(&mut self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
+        let key_value_existence = self.pending_requests.remove(&correlation_id);
         if let Some(callback_by_key) = key_value_existence {
             let timestamped_callback = callback_by_key.1;
             timestamped_callback.on_response(response);
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn success_response() {
-        let key: CorrelationId = 1;
+        let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new(
             clock.clone(),
@@ -142,8 +142,8 @@ mod tests {
         let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = success_response_callback.clone();
 
-        request_waiting_list.add(key, success_response_callback);
-        request_waiting_list.handle_response(key, Ok(Box::new("success response".to_string())));
+        request_waiting_list.add(correlation_id, success_response_callback);
+        request_waiting_list.handle_response(correlation_id, Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn success_response_with_capacity_of_request_waiting_list() {
-        let key: CorrelationId = 1;
+        let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new_with_capacity(
             1,
@@ -163,8 +163,8 @@ mod tests {
         let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = success_response_callback.clone();
 
-        request_waiting_list.add(key, success_response_callback);
-        request_waiting_list.handle_response(key, Ok(Box::new("success response".to_string())));
+        request_waiting_list.add(correlation_id, success_response_callback);
+        request_waiting_list.handle_response(correlation_id, Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn error_response() {
-        let key: CorrelationId = 1;
+        let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new(
             clock.clone(),
@@ -183,8 +183,8 @@ mod tests {
         let error_response_callback = Arc::new(ErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = error_response_callback.clone();
 
-        request_waiting_list.add(key, error_response_callback);
-        request_waiting_list.handle_response(key, Err(Box::new(TestError { message: "test error".to_string() })));
+        request_waiting_list.add(correlation_id, error_response_callback);
+        request_waiting_list.handle_response(correlation_id, Err(Box::new(TestError { message: "test error".to_string() })));
 
         let readable_response = cloned_response_callback.error_response.read().unwrap();
         assert_eq!("test error", readable_response.get("Response").unwrap());
@@ -192,7 +192,7 @@ mod tests {
 
     #[test]
     fn error_response_on_expired_key() {
-        let key: CorrelationId = 1;
+        let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
         let mut request_waiting_list = RequestWaitingList::new(
             clock.clone(),
@@ -203,7 +203,7 @@ mod tests {
         let error_response_callback = Arc::new(RequestTimeoutErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = error_response_callback.clone();
 
-        request_waiting_list.add(key, error_response_callback);
+        request_waiting_list.add(correlation_id, error_response_callback);
         thread::sleep(Duration::from_millis(10));
 
         let readable_response = cloned_response_callback.error_response.read().unwrap();

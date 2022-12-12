@@ -90,14 +90,14 @@ mod tests {
 
     #[test]
     fn error_response_on_expired_key() {
-        let key: CorrelationId = 1;
+        let correlation_id: CorrelationId = 1;
         let clock = Arc::new(FutureClock { duration_to_add: Duration::from_secs(5) });
         let pending_requests = Arc::new(DashMap::new());
 
         let error_response_callback = Arc::new(RequestTimeoutErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = error_response_callback.clone();
         pending_requests.clone().insert(
-            key,
+            correlation_id,
             TimestampedCallback::new(error_response_callback, Instant::now()),
         );
 
