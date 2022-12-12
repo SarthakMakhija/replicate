@@ -1,11 +1,12 @@
+use std::any::Any;
 use crate::net::request_waiting_list::response_callback::ResponseErrorType;
 
-pub enum QuorumCompletionResponse<Response: Send + Sync + Unpin> {
+pub enum QuorumCompletionResponse<Response: Any> {
     Success(Vec<Response>),
     Error(Vec<ResponseErrorType>),
 }
 
-impl<Response: Send + Sync + Unpin> QuorumCompletionResponse<Response> {
+impl<Response: Any> QuorumCompletionResponse<Response> {
     pub fn response_len(&self) -> usize {
         return match self {
             QuorumCompletionResponse::Success(r) => {
