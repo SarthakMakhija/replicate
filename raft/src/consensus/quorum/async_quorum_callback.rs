@@ -8,17 +8,17 @@ use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseC
 
 pub type SuccessCondition<Response> = Box<dyn Fn(&Response) -> bool + Send + Sync>;
 
-pub struct AsyncQuorumCallback<Response: Any + Send + Sync + Unpin + Debug> {
+pub struct AsyncQuorumCallback<Response: Any + Send + Sync + Debug> {
     quorum_completion_handle: QuorumCompletionHandle<Response>,
 }
 
-impl<Response: Any + Send + Sync + Unpin + Debug> ResponseCallback for AsyncQuorumCallback<Response> {
+impl<Response: Any + Send + Sync + Debug> ResponseCallback for AsyncQuorumCallback<Response> {
     fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
         self.quorum_completion_handle.on_response(response);
     }
 }
 
-impl<Response: Any + Send + Sync + Unpin + Debug> AsyncQuorumCallback<Response> {
+impl<Response: Any + Send + Sync + Debug> AsyncQuorumCallback<Response> {
     pub fn new<>(expected_responses: usize) -> Arc<AsyncQuorumCallback<Response>> {
         return Self::new_with_success_condition(expected_responses, Box::new(|_: &Response| true));
     }
