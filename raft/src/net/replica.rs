@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,6 +11,7 @@ use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::response_callback::ResponseCallbackType;
+use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
 pub type TotalFailedSends = usize;
 
@@ -17,13 +19,13 @@ pub struct Replica {
     name: String,
     peer_addresses: Vec<Arc<HostAndPort>>,
     request_waiting_list: RequestWaitingList,
+    singular_update_queue: SingularUpdateQueue,
 }
 
 impl Replica {
     pub fn new(name: String,
-           peer_addresses: Vec<Arc<HostAndPort>>,
-           clock: Arc<dyn Clock>) -> Self {
-
+               peer_addresses: Vec<Arc<HostAndPort>>,
+               clock: Arc<dyn Clock>) -> Self {
         let request_waiting_list = RequestWaitingList::new(
             clock,
             Duration::from_millis(3),
@@ -33,6 +35,7 @@ impl Replica {
             name,
             peer_addresses,
             request_waiting_list,
+            singular_update_queue: SingularUpdateQueue::new(),
         };
     }
 
@@ -40,7 +43,6 @@ impl Replica {
                                                                       service_request_constructor: S,
                                                                       response_callback: ResponseCallbackType) -> TotalFailedSends
         where S: Fn() -> ServiceRequest<Payload, ()> {
-
         let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
         for peer_address in &self.peer_addresses {
             let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
@@ -64,11 +66,18 @@ impl Replica {
         return total_failed_sends;
     }
 
+    pub fn add_to_queue<F>(&self, handler: F)
+        where
+            F: Future + Send + 'static,
+            F::Output: Send + 'static {
+        let singular_update_queue = &self.singular_update_queue;
+        singular_update_queue.submit(handler);
+    }
+
     fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &RequestWaitingList,
                                                 service_request: ServiceRequest<Payload, ()>,
                                                 address: Arc<HostAndPort>,
                                                 response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
-
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
 
@@ -81,8 +90,10 @@ impl Replica {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::net::{IpAddr, Ipv4Addr};
-    use std::sync::Arc;
+    use std::sync::{Arc, RwLock};
+    use tokio::sync::mpsc;
 
     use crate::clock::clock::SystemClock;
     use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
@@ -162,7 +173,7 @@ mod tests {
             ServiceRequest::new(
                 GetValueRequest {},
                 Box::new(GetValueRequestSuccessClient {}),
-                correlation_id_generator.generate()
+                correlation_id_generator.generate(),
             )
         };
 
@@ -170,6 +181,7 @@ mod tests {
             replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
         assert_eq!(0, total_failed_sends);
+        replica.singular_update_queue.shutdown();
     }
 
     #[tokio::test]
@@ -192,7 +204,7 @@ mod tests {
             ServiceRequest::new(
                 GetValueRequest {},
                 Box::new(GetValueRequestFailureClient {}),
-                correlation_id_generator.generate()
+                correlation_id_generator.generate(),
             )
         };
 
@@ -200,5 +212,32 @@ mod tests {
             replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
         assert_eq!(2, total_failed_sends);
+        replica.singular_update_queue.shutdown();
+    }
+
+    #[tokio::test]
+    async fn add_to_queue() {
+        let any_replica_port = 8988;
+        let storage = Arc::new(RwLock::new(HashMap::new()));
+        let readable_storage = storage.clone();
+        let replica = Replica::new(
+            String::from("neptune"),
+            vec![
+                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let (sender, mut receiver) = mpsc::channel(1);
+        replica.add_to_queue(async move {
+            storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
+            sender.send(()).await.unwrap();
+        });
+
+        let _ = receiver.recv().await.unwrap();
+        let read_storage = readable_storage.read().unwrap();
+
+        assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
+        replica.singular_update_queue.shutdown();
     }
 }
