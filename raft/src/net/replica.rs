@@ -36,9 +36,9 @@ impl Replica {
         };
     }
 
-    pub async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&mut self,
-                                                                             service_request_constructor: S,
-                                                                             response_callback: ResponseCallbackType) -> TotalFailedSends
+    pub async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&self,
+                                                                      service_request_constructor: S,
+                                                                      response_callback: ResponseCallbackType) -> TotalFailedSends
         where S: Fn() -> ServiceRequest<Payload, ()> {
 
         let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
@@ -46,7 +46,7 @@ impl Replica {
             let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
 
             send_task_handles.push(Self::send_one_way_to(
-                &mut self.request_waiting_list,
+                &self.request_waiting_list,
                 service_request,
                 peer_address.clone(),
                 response_callback.clone(),
@@ -64,7 +64,7 @@ impl Replica {
         return total_failed_sends;
     }
 
-    fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &mut RequestWaitingList,
+    fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &RequestWaitingList,
                                                 service_request: ServiceRequest<Payload, ()>,
                                                 address: Arc<HostAndPort>,
                                                 response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
@@ -147,7 +147,7 @@ mod tests {
         let any_replica_port = 8988;
         let any_other_replica_port = 8988;
 
-        let mut replica = Replica::new(
+        let replica = Replica::new(
             String::from("neptune"),
             vec![
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
@@ -177,7 +177,7 @@ mod tests {
         let any_replica_port = 8988;
         let any_other_replica_port = 8988;
 
-        let mut replica = Replica::new(
+        let replica = Replica::new(
             String::from("neptune"),
             vec![
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
