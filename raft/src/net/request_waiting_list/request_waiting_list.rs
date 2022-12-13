@@ -32,12 +32,12 @@ impl RequestWaitingList {
         return request_waiting_list;
     }
 
-    pub fn add(&mut self, correlation_id: CorrelationId, callback: ResponseCallbackType) {
+    pub fn add(&self, correlation_id: CorrelationId, callback: ResponseCallbackType) {
         let timestamped_callback = TimestampedCallback::new(callback, self.clock.now());
-        self.pending_requests.borrow_mut().insert(correlation_id, timestamped_callback);
+        self.pending_requests.insert(correlation_id, timestamped_callback);
     }
 
-    pub fn handle_response(&mut self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
+    pub fn handle_response(&self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
         let key_value_existence = self.pending_requests.remove(&correlation_id);
         if let Some(callback_by_key) = key_value_existence {
             let timestamped_callback = callback_by_key.1;
