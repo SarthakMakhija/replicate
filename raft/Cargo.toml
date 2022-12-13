@@ -11,8 +11,8 @@ dashmap = "5.4.0"
 tonic = "0.8"
 prost = "0.11"
 tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
-executors = "0.9.0"
 async-trait = "0.1.58"
+tokio-threadpool = "0.1.18"
 rand = "0.8.5"
 
 [build-dependencies]
