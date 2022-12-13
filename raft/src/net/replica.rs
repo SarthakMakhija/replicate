@@ -17,6 +17,7 @@ pub type TotalFailedSends = usize;
 
 pub struct Replica {
     name: String,
+    peer_connection_address: Arc<HostAndPort>,
     peer_addresses: Vec<Arc<HostAndPort>>,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: SingularUpdateQueue,
@@ -24,6 +25,7 @@ pub struct Replica {
 
 impl Replica {
     pub fn new(name: String,
+               peer_connection_address: Arc<HostAndPort>,
                peer_addresses: Vec<Arc<HostAndPort>>,
                clock: Arc<dyn Clock>) -> Self {
         let request_waiting_list = RequestWaitingList::new(
@@ -33,6 +35,7 @@ impl Replica {
         );
         return Replica {
             name,
+            peer_connection_address,
             peer_addresses,
             request_waiting_list,
             singular_update_queue: SingularUpdateQueue::new(),
@@ -74,10 +77,15 @@ impl Replica {
         singular_update_queue.submit(handler);
     }
 
+    pub fn get_peer_connection_address(&self) -> Arc<HostAndPort> {
+        return self.peer_connection_address.clone();
+    }
+
     fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &RequestWaitingList,
                                                 service_request: ServiceRequest<Payload, ()>,
                                                 address: Arc<HostAndPort>,
                                                 response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
+
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
 
@@ -93,6 +101,7 @@ mod tests {
     use std::collections::HashMap;
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
+
     use tokio::sync::mpsc;
 
     use crate::clock::clock::SystemClock;
@@ -156,10 +165,11 @@ mod tests {
     #[tokio::test]
     async fn send_one_way_to_replicas_successfully() {
         let any_replica_port = 8988;
-        let any_other_replica_port = 8988;
+        let any_other_replica_port = 8989;
 
         let replica = Replica::new(
             String::from("neptune"),
+            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
             vec![
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port)),
@@ -191,6 +201,7 @@ mod tests {
 
         let replica = Replica::new(
             String::from("neptune"),
+            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
             vec![
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port)),
@@ -222,6 +233,7 @@ mod tests {
         let readable_storage = storage.clone();
         let replica = Replica::new(
             String::from("neptune"),
+            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
             vec![
                 Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
             ],
