@@ -16,7 +16,7 @@ use crate::net::connect::service::heartbeat::service::HeartbeatService;
 pub struct ServiceRegistration {}
 
 impl ServiceRegistration {
-    pub async fn register_all_services_on(address: &HostAndPort, all_services_shutdown_signal_receiver: Receiver<()>) {
+    pub async fn register_default_services_on(address: &HostAndPort, all_services_shutdown_signal_receiver: Receiver<()>) {
         let heartbeat_service = HeartbeatService::default();
         let router = Server::builder().add_service(HeartbeatServer::new(heartbeat_service));
 

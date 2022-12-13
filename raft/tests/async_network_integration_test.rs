@@ -18,7 +18,7 @@ async fn send() {
 
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let server_handle = tokio::spawn(async move {
-        ServiceRegistration::register_all_services_on(&server_address_clone_one, all_services_shutdown_receiver).await;
+        ServiceRegistration::register_default_services_on(&server_address_clone_one, all_services_shutdown_receiver).await;
     });
 
     thread::sleep(Duration::from_secs(3));
