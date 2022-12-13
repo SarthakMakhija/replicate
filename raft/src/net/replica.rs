@@ -77,7 +77,7 @@ impl Replica {
         singular_update_queue.submit(handler);
     }
 
-    pub fn handle_response(&self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
+    pub fn register_response(&self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
         let _ = &self.request_waiting_list.handle_response(correlation_id, response);
     }
 
@@ -303,7 +303,7 @@ mod tests {
 
         assert_eq!(0, total_failed_sends);
 
-        let _ = replica.handle_response(
+        let _ = replica.register_response(
             correlation_id_generator.generate(),
             Ok(Box::new(GetValueResponse { value: "ok".to_string() }))
         );
