@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -133,7 +132,7 @@ mod tests {
     fn success_response() {
         let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::new(
+        let request_waiting_list = RequestWaitingList::new(
             clock.clone(),
             Duration::from_secs(100),
             Duration::from_secs(10),
@@ -153,7 +152,7 @@ mod tests {
     fn success_response_with_capacity_of_request_waiting_list() {
         let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::new_with_capacity(
+        let request_waiting_list = RequestWaitingList::new_with_capacity(
             1,
             clock.clone(),
             Duration::from_secs(100),
@@ -174,7 +173,7 @@ mod tests {
     fn error_response() {
         let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::new(
+        let request_waiting_list = RequestWaitingList::new(
             clock.clone(),
             Duration::from_secs(100),
             Duration::from_secs(10),
@@ -194,7 +193,7 @@ mod tests {
     fn error_response_on_expired_key() {
         let correlation_id: CorrelationId = 1;
         let clock = Arc::new(SystemClock::new());
-        let mut request_waiting_list = RequestWaitingList::new(
+        let request_waiting_list = RequestWaitingList::new(
             clock.clone(),
             Duration::from_millis(3),
             Duration::from_millis(2),
