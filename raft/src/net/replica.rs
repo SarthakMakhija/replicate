@@ -10,7 +10,7 @@ use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
-use crate::net::request_waiting_list::response_callback::ResponseCallbackType;
+use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType};
 use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
 pub type TotalFailedSends = usize;
@@ -77,6 +77,10 @@ impl Replica {
         singular_update_queue.submit(handler);
     }
 
+    pub fn handle_response(&self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
+        let _ = &self.request_waiting_list.handle_response(correlation_id, response);
+    }
+
     pub fn get_peer_connection_address(&self) -> Arc<HostAndPort> {
         return self.peer_connection_address.clone();
     }
@@ -85,7 +89,6 @@ impl Replica {
                                                 service_request: ServiceRequest<Payload, ()>,
                                                 address: Arc<HostAndPort>,
                                                 response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
-
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
 
@@ -111,7 +114,7 @@ mod tests {
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::replica::Replica;
-    use crate::net::replica::tests::setup::{GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse};
+    use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse};
 
     mod setup {
         use std::error::Error;
@@ -121,6 +124,7 @@ mod tests {
         use async_trait::async_trait;
         use tonic::Response;
 
+        use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
         use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::connect::service_client::{ServiceClientProvider, ServiceResponseError};
 
@@ -128,7 +132,9 @@ mod tests {
         pub struct GetValueRequest {}
 
         #[derive(Debug)]
-        pub struct GetValueResponse {}
+        pub struct GetValueResponse {
+            pub value: String,
+        }
 
         pub struct GetValueRequestSuccessClient {}
 
@@ -160,6 +166,22 @@ mod tests {
         }
 
         impl Error for TestError {}
+
+        pub struct FixedCorrelationIdGenerator {
+            value: CorrelationId,
+        }
+
+        impl FixedCorrelationIdGenerator {
+            pub fn new(fixed_value: CorrelationId) -> FixedCorrelationIdGenerator {
+                return FixedCorrelationIdGenerator { value: fixed_value };
+            }
+        }
+
+        impl CorrelationIdGenerator for FixedCorrelationIdGenerator {
+            fn generate(&self) -> CorrelationId {
+                return self.value;
+            }
+        }
     }
 
     #[tokio::test]
@@ -250,6 +272,45 @@ mod tests {
         let read_storage = readable_storage.read().unwrap();
 
         assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
+        replica.singular_update_queue.shutdown();
+    }
+
+    #[tokio::test]
+    async fn await_for_completion_of_callback() {
+        let any_other_replica_port = 8989;
+
+        let replica = Replica::new(
+            String::from("neptune"),
+            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
+            vec![
+                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port)),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let correlation_id_generator = FixedCorrelationIdGenerator::new(100);
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(1);
+        let service_request_constructor = || {
+            ServiceRequest::new(
+                GetValueRequest {},
+                Box::new(GetValueRequestSuccessClient {}),
+                correlation_id_generator.generate(),
+            )
+        };
+
+        let total_failed_sends =
+            replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+
+        assert_eq!(0, total_failed_sends);
+
+        let _ = replica.handle_response(
+            correlation_id_generator.generate(),
+            Ok(Box::new(GetValueResponse { value: "ok".to_string() }))
+        );
+
+        let quorum_completion_response = async_quorum_callback.handle().await;
+        assert_eq!("ok".to_string(), quorum_completion_response.success_responses().unwrap().get(0).unwrap().value);
+
         replica.singular_update_queue.shutdown();
     }
 }
