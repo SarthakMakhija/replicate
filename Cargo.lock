@@ -730,7 +730,12 @@ dependencies = [
 name = "raft-examples"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "prost",
  "raft",
+ "raft-macro",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]

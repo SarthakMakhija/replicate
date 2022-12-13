@@ -11,16 +11,16 @@ use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::response_callback::ResponseCallbackType;
 
-pub(crate) type TotalFailedSends = usize;
+pub type TotalFailedSends = usize;
 
-pub(crate) struct Replica {
+pub struct Replica {
     name: String,
     peer_addresses: Vec<Arc<HostAndPort>>,
     request_waiting_list: RequestWaitingList,
 }
 
 impl Replica {
-    fn new(name: String,
+    pub fn new(name: String,
            peer_addresses: Vec<Arc<HostAndPort>>,
            clock: Arc<dyn Clock>) -> Self {
 
@@ -36,7 +36,7 @@ impl Replica {
         };
     }
 
-    pub(crate) async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&mut self,
+    pub async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&mut self,
                                                                              service_request_constructor: S,
                                                                              response_callback: ResponseCallbackType) -> TotalFailedSends
         where S: Fn() -> ServiceRequest<Payload, ()> {
