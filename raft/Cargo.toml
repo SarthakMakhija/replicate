@@ -6,14 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+raft-macro = { path = "../raft-macro" }
 dashmap = "5.4.0"
 tonic = "0.8"
 prost = "0.11"
 tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
+executors = "0.9.0"
 async-trait = "0.1.58"
 rand = "0.8.5"
-raft-macro = { path = "../raft-macro" }
 
 [build-dependencies]
-tonic-build = "0.8"
 raft-macro = { path = "../raft-macro" }
+tonic-build = "0.8"
