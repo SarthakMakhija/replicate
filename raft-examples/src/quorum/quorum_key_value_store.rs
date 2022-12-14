@@ -5,7 +5,7 @@ use tonic::{Request, Response, Status};
 use raft::net::replica::Replica;
 
 use crate::quorum::client::client::Client;
-use crate::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse, VersionedGetValueByKeyRequest};
+use crate::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse, CorrelatingGetValueByKeyRequest};
 use crate::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValue;
 use crate::quorum::server::server::Server;
 
@@ -20,7 +20,7 @@ impl QuorumKeyValue for QuorumKeyValueStoreService {
         return self.client.get_by(request.into_inner()).await;
     }
 
-    async fn acknowledge(&self, request: Request<VersionedGetValueByKeyRequest>) -> Result<Response<()>, Status> {
+    async fn acknowledge(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
         return self.server.acknowledge(request.into_inner()).await;
     }
 

@@ -8,8 +8,8 @@ use raft::net::connect::random_correlation_id_generator::RandomCorrelationIdGene
 use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
-use crate::quorum::client_provider::VersionedGetValueByKeyRequestClient;
-use crate::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse, VersionedGetValueByKeyRequest};
+use crate::quorum::client_provider::CorrelatingGetValueByKeyRequestClient;
+use crate::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse, CorrelatingGetValueByKeyRequest};
 
 pub(crate) struct Client {
     replica: Arc<Replica>,
@@ -26,13 +26,13 @@ impl Client {
         let service_request_constructor = || {
             let correlation_id = correlation_id_generator.generate();
             ServiceRequest::new(
-                VersionedGetValueByKeyRequest {
+                CorrelatingGetValueByKeyRequest {
                     key: get_value_by_key_request.key.clone(),
                     originating_host: originating_host.clone(),
                     originating_port,
                     correlation_id,
                 },
-                Box::new(VersionedGetValueByKeyRequestClient {}),
+                Box::new(CorrelatingGetValueByKeyRequestClient {}),
                 correlation_id,
             )
         };

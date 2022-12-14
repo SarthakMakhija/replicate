@@ -10,7 +10,7 @@ use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
 use crate::quorum::client_provider::GetValueByKeyResponseClient;
-use crate::quorum::rpc::grpc::{GetValueByKeyResponse, VersionedGetValueByKeyRequest};
+use crate::quorum::rpc::grpc::{GetValueByKeyResponse, CorrelatingGetValueByKeyRequest};
 
 pub(crate) struct Server {
     replica: Arc<Replica>,
@@ -18,8 +18,8 @@ pub(crate) struct Server {
 }
 
 impl Server {
-    pub(crate) async fn acknowledge(&self, request: VersionedGetValueByKeyRequest) -> Result<Response<()>, Status> {
-        println!("Received a versioned get request for key {}", request.key.clone());
+    pub(crate) async fn acknowledge(&self, request: CorrelatingGetValueByKeyRequest) -> Result<Response<()>, Status> {
+        println!("Received a correlating get request for key {}", request.key.clone());
 
         let key = request.key;
         let correlation_id = request.correlation_id;

@@ -6,7 +6,7 @@ package examples.quorum;
 
 service QuorumKeyValue {
   rpc getBy (GetValueByKeyRequest) returns (GetValueByKeyResponse) {}
-  rpc acknowledge (VersionedGetValueByKeyRequest) returns (google.protobuf.Empty) {}
+  rpc acknowledge (CorrelatingGetValueByKeyRequest) returns (google.protobuf.Empty) {}
   rpc accept (GetValueByKeyResponse) returns (google.protobuf.Empty) {}
 }
 
@@ -14,7 +14,7 @@ message GetValueByKeyRequest {
   string key = 1;
 }
 
-message VersionedGetValueByKeyRequest {
+message CorrelatingGetValueByKeyRequest {
   //tag id 1 is reserved for correlation_id generated using procedural macro
   string key = 2;
   string originating_host = 3;
