@@ -24,7 +24,7 @@ async fn send() {
     let client_handle = tokio::spawn(async move {
         let response = send_client_request(server_address_clone_other).await;
         assert!(response.is_ok());
-        all_services_shutdown_handle.shutdown();
+        all_services_shutdown_handle.shutdown().await.unwrap();
     });
     server_handle.await.unwrap();
     client_handle.await.unwrap();
