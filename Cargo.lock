@@ -697,6 +697,7 @@ dependencies = [
  "prost",
  "raft",
  "raft-macro",
+ "tokio",
  "tonic",
  "tonic-build",
 ]

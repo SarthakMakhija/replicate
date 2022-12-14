@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package examples.quorum;
+
+service QuorumKeyValue {
+  rpc getBy (GetValueByKeyRequest) returns (GetValueByKeyResponse) {}
+  rpc acknowledge (VersionedGetValueByKeyRequest) returns (google.protobuf.Empty) {}
+  rpc accept (GetValueByKeyResponse) returns (google.protobuf.Empty) {}
+}
+
+message GetValueByKeyRequest {
+  string key = 1;
+}
+
+message VersionedGetValueByKeyRequest {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  string key = 2;
+  string originating_host = 3;
+  uint32 originating_port = 4;
+}
+
+message GetValueByKeyResponse {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  string key = 2;
+  string value = 3;
+}
