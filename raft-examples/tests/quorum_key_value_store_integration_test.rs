@@ -34,6 +34,7 @@ impl ServiceClientProvider<GetValueByKeyRequest, GetValueByKeyResponse> for GetV
 #[test]
 fn get_value_by_key() {
     let runtime = Builder::new_multi_thread()
+        .thread_name("get_value_by_key".to_string())
         .worker_threads(2)
         .enable_all()
         .build()
@@ -50,39 +51,11 @@ fn get_value_by_key() {
         Arc::new(SystemClock::new()),
     );
     let replica = Arc::new(replica);
+    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), replica.clone());
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), replica.clone());
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), replica.clone());
 
-    let (all_services_shutdown_handle_one, all_services_shutdown_receiver_one) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStoreService::new(replica.clone());
-    runtime.spawn(async move {
-        ServiceRegistration::register_services_on(
-            &self_host_and_port,
-            QuorumKeyValueServer::new(store),
-            all_services_shutdown_receiver_one,
-        ).await;
-    });
-
-    let (all_services_shutdown_handle_two, all_services_shutdown_receiver_two) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStoreService::new(replica.clone());
-    runtime.spawn(async move {
-        ServiceRegistration::register_services_on(
-            &peer_one,
-            QuorumKeyValueServer::new(store),
-            all_services_shutdown_receiver_two,
-        ).await;
-    });
-
-    let (all_services_shutdown_handle_three, all_services_shutdown_receiver_three) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStoreService::new(replica.clone());
-    let service = QuorumKeyValueServer::new(store);
-    runtime.spawn(async move {
-        ServiceRegistration::register_services_on(
-            &peer_other,
-            service,
-            all_services_shutdown_receiver_three,
-        ).await;
-    });
-
-    thread::sleep(Duration::from_secs(4));
+    let_services_start();
 
     let handle = send_get_request(self_host_and_port, &runtime);
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -98,6 +71,46 @@ fn get_value_by_key() {
     });
 }
 
+fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, replica: Arc<Replica>) -> AllServicesShutdownHandle {
+    let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
+    let store = QuorumKeyValueStoreService::new(replica);
+    runtime.spawn(async move {
+        ServiceRegistration::register_services_on(
+            &self_host_and_port,
+            QuorumKeyValueServer::new(store),
+            all_services_shutdown_receiver,
+        ).await;
+    });
+    all_services_shutdown_handle
+}
+
+fn spin_peer(runtime: &Runtime, peer_one: HostAndPort, replica: Arc<Replica>) -> AllServicesShutdownHandle {
+    let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
+    let store = QuorumKeyValueStoreService::new(replica);
+    runtime.spawn(async move {
+        ServiceRegistration::register_services_on(
+            &peer_one,
+            QuorumKeyValueServer::new(store),
+            all_services_shutdown_receiver,
+        ).await;
+    });
+    all_services_shutdown_handle
+}
+
+fn spin_other_peer(runtime: &Runtime, peer_other: HostAndPort, replica: Arc<Replica>) -> AllServicesShutdownHandle {
+    let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
+    let store = QuorumKeyValueStoreService::new(replica);
+    let service = QuorumKeyValueServer::new(store);
+    runtime.spawn(async move {
+        ServiceRegistration::register_services_on(
+            &peer_other,
+            service,
+            all_services_shutdown_receiver,
+        ).await;
+    });
+    all_services_shutdown_handle
+}
+
 fn send_get_request(self_host_and_port: HostAndPort, rt: &Runtime) -> JoinHandle<Result<GetValueByKeyResponse, ServiceResponseError>> {
     let any_correlation_id = 100;
     let service_request = ServiceRequest::new(
@@ -111,4 +124,8 @@ fn send_get_request(self_host_and_port: HostAndPort, rt: &Runtime) -> JoinHandle
         return AsyncNetwork::send(service_request, address).await;
     });
     return handle;
+}
+
+fn let_services_start() {
+    thread::sleep(Duration::from_secs(4));
 }
