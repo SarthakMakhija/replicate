@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use tonic::Response;
@@ -33,5 +32,5 @@ pub type ServiceResponseError = Box<dyn Error + Send + Sync + 'static>;
 
 #[async_trait]
 pub trait ServiceClientProvider<Payload: Send, R>: Send + Sync {
-    async fn call(&self, request: Payload, address: Arc<HostAndPort>) -> Result<Response<R>, ServiceResponseError>;
+    async fn call(&self, request: Payload, address: HostAndPort) -> Result<Response<R>, ServiceResponseError>;
 }

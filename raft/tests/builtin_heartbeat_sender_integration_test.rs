@@ -10,7 +10,7 @@ use raft::net::connect::service_registration::{AllServicesShutdownHandle, Servic
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn builtin_heartbeat_sender_with_success() {
-    let server_address = Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051));
+    let server_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
     let server_address_clone = server_address.clone();
 
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
@@ -31,7 +31,7 @@ async fn builtin_heartbeat_sender_with_success() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn builtin_heartbeat_sender_with_failure_without_services_running() {
-    let any_server_address = Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50091));
+    let any_server_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50091);
     let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(any_server_address.clone()));
     let result = heartbeat_sender.send().await;
 

@@ -12,7 +12,7 @@ use raft::net::connect::service_registration::{AllServicesShutdownHandle, Servic
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn send() {
-    let server_address = Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051));
+    let server_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
     let server_address_clone_one = server_address.clone();
     let server_address_clone_other = server_address.clone();
 
@@ -31,11 +31,11 @@ async fn send() {
     client_handle.await.unwrap();
 }
 
-async fn send_client_request(address: Arc<HostAndPort>) -> Result<(), ServiceResponseError> {
+async fn send_client_request(address: HostAndPort) -> Result<(), ServiceResponseError> {
     let node_id = "mark";
-    let service_server_request = HeartbeatServiceRequest::new(
+    let service_request = HeartbeatServiceRequest::new(
         node_id.to_string(),
         &RandomCorrelationIdGenerator::new()
     );
-    return AsyncNetwork::send(service_server_request, address.clone()).await;
+    return AsyncNetwork::send(service_request, address).await;
 }

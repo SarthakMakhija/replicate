@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::heartbeat::heartbeat_sender::HeartbeatSender;
@@ -9,7 +8,7 @@ use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRe
 use crate::net::connect::service_client::ServiceResponseError;
 
 pub struct BuiltinHeartbeatSender {
-    address: Arc<HostAndPort>,
+    address: HostAndPort,
 }
 
 #[async_trait]
@@ -30,7 +29,7 @@ impl HeartbeatSender for BuiltinHeartbeatSender {
 }
 
 impl BuiltinHeartbeatSender {
-    pub fn new(address: Arc<HostAndPort>) -> BuiltinHeartbeatSender {
+    pub fn new(address: HostAndPort) -> BuiltinHeartbeatSender {
         return BuiltinHeartbeatSender { address };
     }
 }

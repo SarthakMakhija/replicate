@@ -17,16 +17,16 @@ pub type TotalFailedSends = usize;
 
 pub struct Replica {
     name: String,
-    peer_connection_address: Arc<HostAndPort>,
-    peer_addresses: Vec<Arc<HostAndPort>>,
+    peer_connection_address: HostAndPort,
+    peer_addresses: Vec<HostAndPort>,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: SingularUpdateQueue,
 }
 
 impl Replica {
     pub fn new(name: String,
-               peer_connection_address: Arc<HostAndPort>,
-               peer_addresses: Vec<Arc<HostAndPort>>,
+               peer_connection_address: HostAndPort,
+               peer_addresses: Vec<HostAndPort>,
                clock: Arc<dyn Clock>) -> Self {
         let request_waiting_list = RequestWaitingList::new(
             clock,
@@ -81,13 +81,13 @@ impl Replica {
         let _ = &self.request_waiting_list.handle_response(correlation_id, response);
     }
 
-    pub fn get_peer_connection_address(&self) -> Arc<HostAndPort> {
+    pub fn get_peer_connection_address(&self) -> HostAndPort {
         return self.peer_connection_address.clone();
     }
 
     fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &RequestWaitingList,
                                                 service_request: ServiceRequest<Payload, ()>,
-                                                address: Arc<HostAndPort>,
+                                                address: HostAndPort,
                                                 response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
@@ -119,7 +119,6 @@ mod tests {
     mod setup {
         use std::error::Error;
         use std::fmt::{Display, Formatter};
-        use std::sync::Arc;
 
         use async_trait::async_trait;
         use tonic::Response;
@@ -147,14 +146,14 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<GetValueRequest, ()> for GetValueRequestSuccessClient {
-            async fn call(&self, _: GetValueRequest, _: Arc<HostAndPort>) -> Result<Response<()>, ServiceResponseError> {
+            async fn call(&self, _: GetValueRequest, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
                 return Ok(Response::new(()));
             }
         }
 
         #[async_trait]
         impl ServiceClientProvider<GetValueRequest, ()> for GetValueRequestFailureClient {
-            async fn call(&self, _: GetValueRequest, _: Arc<HostAndPort>) -> Result<Response<()>, ServiceResponseError> {
+            async fn call(&self, _: GetValueRequest, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
                 return Err(Box::new(TestError { message: "Test error".to_string() }));
             }
         }
@@ -191,10 +190,10 @@ mod tests {
 
         let replica = Replica::new(
             String::from("neptune"),
-            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
-                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
-                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port)),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
             ],
             Arc::new(SystemClock::new()),
         );
@@ -223,10 +222,10 @@ mod tests {
 
         let replica = Replica::new(
             String::from("neptune"),
-            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
-                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
-                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port)),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
             ],
             Arc::new(SystemClock::new()),
         );
@@ -255,9 +254,9 @@ mod tests {
         let readable_storage = storage.clone();
         let replica = Replica::new(
             String::from("neptune"),
-            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
-                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
             ],
             Arc::new(SystemClock::new()),
         );
@@ -281,9 +280,9 @@ mod tests {
 
         let replica = Replica::new(
             String::from("neptune"),
-            Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080)),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
-                Arc::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port)),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
             ],
             Arc::new(SystemClock::new()),
         );
