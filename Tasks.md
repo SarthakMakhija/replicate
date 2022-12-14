@@ -24,3 +24,12 @@
 8. Handle typecast error in `QuorumCompletionHandle`
 9. Relook at generic types across objects
 10. Change the correlation id generator
+11. Support Correlation id generator as a trait
+      - done
+12. Feedback on `Quorum` implementation
+    1. Support `put` in Quorum
+    2. Support `read repair` in Quorum
+    3. Refactor `quorum integration test`
+    4. Build configuration to handle `request waiting list expiry`
+    5. Decide on the data type of port in `HostAndPort` because `proto` files do not support `u16`
+    6. Decide on `threadpool` implementation in `SingularUpdateQueue` 
