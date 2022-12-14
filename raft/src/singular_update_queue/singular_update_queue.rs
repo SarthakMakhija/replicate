@@ -9,6 +9,7 @@ impl SingularUpdateQueue {
     pub(crate) fn new() -> SingularUpdateQueue {
         let thread_pool = Builder::new_multi_thread()
             .worker_threads(1)
+            .enable_all()
             .build()
             .unwrap();
 
@@ -21,7 +22,7 @@ impl SingularUpdateQueue {
             F::Output: Send + 'static { self.thread_pool.spawn(handler); }
 
     pub(crate) fn shutdown(self) {
-        let _ = &self.thread_pool.shutdown_background();
+        let _ = self.thread_pool.shutdown_background();
     }
 }
 
