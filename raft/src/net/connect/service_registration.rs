@@ -23,20 +23,19 @@ impl ServiceRegistration {
         Self::serve(router, address, all_services_shutdown_signal_receiver).await;
     }
 
-    pub async fn register_services_on<S>(address: &HostAndPort, services: Vec<S>, all_services_shutdown_signal_receiver: Receiver<()>)
+    pub async fn register_services_on<S>(address: &HostAndPort, service: S, all_services_shutdown_signal_receiver: Receiver<()>)
         where
             S: Service<tonic::codegen::http::Request<tonic::transport::Body>, Response=Response<BoxBody>, Error=Infallible>
             + Clone
             + tonic::server::NamedService
             + Send
             + 'static, S::Future: Send + 'static, {
+
         let mut server: Server = Server::builder();
-        for service in services {
-            server.add_service(service);
-        }
+        let router = server.add_service(service);
 
         let heartbeat_service = HeartbeatService::default();
-        let router = server.add_service(HeartbeatServer::new(heartbeat_service));
+        let router = router.add_service(HeartbeatServer::new(heartbeat_service));
 
         Self::serve(router, address, all_services_shutdown_signal_receiver).await;
     }
