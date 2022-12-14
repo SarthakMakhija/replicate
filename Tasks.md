@@ -31,6 +31,8 @@
     2. Support `read repair` in Quorum
     3. Refactor `quorum integration test`
        - done
-    4. Build configuration to handle `request waiting list expiry`
-    5. Decide on the data type of port in `HostAndPort` because `proto` files do not support `u16`
-    6. Decide on `threadpool` implementation in `SingularUpdateQueue` 
+    4. Instantiate multiple replicas corresponding to each node in the integration test 
+    5. Build configuration to handle `request waiting list expiry`
+    6. Decide on the data type of port in `HostAndPort` because `proto` files do not support `u16`
+    7. Decide on `threadpool` implementation in `SingularUpdateQueue`
+    8. Support vector of services in ServiceRegistration
