@@ -30,8 +30,8 @@ impl Replica {
                clock: Arc<dyn Clock>) -> Self {
         let request_waiting_list = RequestWaitingList::new(
             clock,
-            Duration::from_millis(3),
-            Duration::from_millis(3),
+            Duration::from_secs(3),
+            Duration::from_secs(2),
         );
         return Replica {
             name,
@@ -81,6 +81,10 @@ impl Replica {
         let _ = &self.request_waiting_list.handle_response(correlation_id, response);
     }
 
+    pub fn total_peer_count(&self) -> usize {
+        return self.peer_addresses.len();
+    }
+
     pub fn get_peer_connection_address(&self) -> HostAndPort {
         return self.peer_connection_address.clone();
     }
@@ -98,6 +102,7 @@ impl Replica {
         });
     }
 }
+
 
 #[cfg(test)]
 mod tests {
