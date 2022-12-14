@@ -8,18 +8,18 @@ use crate::net::connect::service::heartbeat::service_request::HeartbeatServiceRe
 use crate::net::connect::service_client::ServiceResponseError;
 
 pub struct BuiltinHeartbeatSender {
-    address: HostAndPort,
+    target_address: HostAndPort,
 }
 
 #[async_trait]
 impl HeartbeatSender for BuiltinHeartbeatSender {
-    async fn send(&self) -> Result<(), ServiceResponseError> {
+    async fn send(&self, source_address: HostAndPort) -> Result<(), ServiceResponseError> {
         let node_id = "mark";
         let service_server_request = HeartbeatServiceRequest::new(
             node_id.to_string(),
             &RandomCorrelationIdGenerator::new()
         );
-        let address = self.address.clone();
+        let address = self.target_address.clone();
         let result = AsyncNetwork::send(service_server_request, address.clone()).await;
         if result.is_err() {
             eprintln!("Could not send heartbeat to {}", address.as_string());
@@ -29,7 +29,7 @@ impl HeartbeatSender for BuiltinHeartbeatSender {
 }
 
 impl BuiltinHeartbeatSender {
-    pub fn new(address: HostAndPort) -> BuiltinHeartbeatSender {
-        return BuiltinHeartbeatSender { address };
+    pub fn new(target_address: HostAndPort) -> BuiltinHeartbeatSender {
+        return BuiltinHeartbeatSender { target_address };
     }
 }

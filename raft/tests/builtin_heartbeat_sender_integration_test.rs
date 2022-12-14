@@ -10,8 +10,8 @@ use raft::net::connect::service_registration::{AllServicesShutdownHandle, Servic
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn builtin_heartbeat_sender_with_success() {
-    let server_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-    let server_address_clone = server_address.clone();
+    let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+    let server_address_clone = target_address.clone();
 
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let server_handle = tokio::spawn(async move {
@@ -20,8 +20,9 @@ async fn builtin_heartbeat_sender_with_success() {
 
     thread::sleep(Duration::from_secs(3));
 
-    let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(server_address.clone()));
-    let result = heartbeat_sender.send().await;
+    let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(target_address.clone()));
+    let source_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+    let result = heartbeat_sender.send(source_address).await;
 
     assert!(result.is_ok());
 
@@ -31,9 +32,10 @@ async fn builtin_heartbeat_sender_with_success() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn builtin_heartbeat_sender_with_failure_without_services_running() {
-    let any_server_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50091);
-    let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(any_server_address.clone()));
-    let result = heartbeat_sender.send().await;
+    let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50091);
+    let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(target_address.clone()));
+    let source_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+    let result = heartbeat_sender.send(source_address).await;
 
     assert!(result.is_err());
 }
