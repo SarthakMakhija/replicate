@@ -12,9 +12,8 @@ pub(crate) struct GetValueByKeyResponseClient {}
 
 #[async_trait]
 impl ServiceClientProvider<CorrelatingGetValueByKeyRequest, ()> for CorrelatingGetValueByKeyRequestClient {
-    async fn call(&self, request: CorrelatingGetValueByKeyRequest, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn call(&self, request: Request<CorrelatingGetValueByKeyRequest>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
-        let request = Request::new(request);
         let response = client.acknowledge(request).await?;
         return Ok(response);
     }
@@ -22,9 +21,8 @@ impl ServiceClientProvider<CorrelatingGetValueByKeyRequest, ()> for CorrelatingG
 
 #[async_trait]
 impl ServiceClientProvider<GetValueByKeyResponse, ()> for GetValueByKeyResponseClient {
-    async fn call(&self, request: GetValueByKeyResponse, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn call(&self, request: Request<GetValueByKeyResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
-        let request = Request::new(request);
         let response = client.accept(request).await?;
         return Ok(response);
     }

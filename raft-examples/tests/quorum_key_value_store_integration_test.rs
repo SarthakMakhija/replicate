@@ -23,9 +23,8 @@ struct GetValueByKeyRequestClient {}
 
 #[async_trait]
 impl ServiceClientProvider<GetValueByKeyRequest, GetValueByKeyResponse> for GetValueByKeyRequestClient {
-    async fn call(&self, request: GetValueByKeyRequest, address: HostAndPort) -> Result<Response<GetValueByKeyResponse>, ServiceResponseError> {
+    async fn call(&self, request: Request<GetValueByKeyRequest>, address: HostAndPort) -> Result<Response<GetValueByKeyResponse>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
-        let request = Request::new(request);
         let response = client.get_by(request).await?;
         return Ok(response);
     }

@@ -1,3 +1,4 @@
+use tonic::Request;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 
@@ -5,13 +6,14 @@ pub struct AsyncNetwork {}
 
 impl AsyncNetwork {
     pub async fn send<Payload: Send, R>(
-        service_server_request: ServiceRequest<Payload, R>,
-        address: HostAndPort,
+        service_request: ServiceRequest<Payload, R>,
+        target_address: HostAndPort,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
-        let client = &service_server_request.service_client;
-        let payload = service_server_request.payload;
-        let result = client.call(payload, address).await;
+        let client = &service_request.service_client;
+        let payload = service_request.payload;
+        let request = Request::new(payload);
+        let result = client.call(request, target_address).await;
         return match result {
             Ok(response) => { Ok(response.into_inner()) }
             Err(e) => { Err(e) }
@@ -50,7 +52,7 @@ mod tests {
 
     mod setup {
         use async_trait::async_trait;
-        use tonic::Response;
+        use tonic::{Request, Response};
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
@@ -72,14 +74,14 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<TestRequest, TestResponse> for SuccessTestClient {
-            async fn call(&self, request: TestRequest, _: HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
-                return Ok(Response::new(TestResponse { correlation_id: request.id }));
+            async fn call(&self, request: Request<TestRequest>, _: HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
+                return Ok(Response::new(TestResponse { correlation_id: request.into_inner().id }));
             }
         }
 
         #[async_trait]
         impl ServiceClientProvider<TestRequest, TestResponse> for FailureTestClient {
-            async fn call(&self, _: TestRequest, _: HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
+            async fn call(&self, _: Request<TestRequest>, _: HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
                 return Err(Box::new(TestError { message: "test error".to_string() }));
             }
         }

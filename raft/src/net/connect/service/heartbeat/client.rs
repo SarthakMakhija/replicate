@@ -10,9 +10,8 @@ pub(crate) struct HeartbeatServiceClient {}
 
 #[async_trait]
 impl ServiceClientProvider<HeartbeatRequest, ()> for HeartbeatServiceClient {
-    async fn call(&self, request: HeartbeatRequest, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn call(&self, request: Request<HeartbeatRequest>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
         let mut client = HeartbeatClient::connect(address.as_string_with_http()).await?;
-        let request = Request::new(request);
         let response = client.acknowledge(request).await?;
         return Ok(response);
     }

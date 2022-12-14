@@ -126,7 +126,7 @@ mod tests {
         use std::fmt::{Display, Formatter};
 
         use async_trait::async_trait;
-        use tonic::Response;
+        use tonic::{Request, Response};
 
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
         use crate::net::connect::host_and_port::HostAndPort;
@@ -151,14 +151,14 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<GetValueRequest, ()> for GetValueRequestSuccessClient {
-            async fn call(&self, _: GetValueRequest, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+            async fn call(&self, _: Request<GetValueRequest>, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
                 return Ok(Response::new(()));
             }
         }
 
         #[async_trait]
         impl ServiceClientProvider<GetValueRequest, ()> for GetValueRequestFailureClient {
-            async fn call(&self, _: GetValueRequest, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+            async fn call(&self, _: Request<GetValueRequest>, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
                 return Err(Box::new(TestError { message: "Test error".to_string() }));
             }
         }
