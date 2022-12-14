@@ -14,7 +14,7 @@ use raft::net::connect::host_and_port::HostAndPort;
 use raft::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
 use raft::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 use raft::net::replica::Replica;
-use raft_examples::quorum::quorum_key_value_store::QuorumKeyValueStore;
+use raft_examples::quorum::quorum_key_value_store::QuorumKeyValueStoreService;
 use raft_examples::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse};
 use raft_examples::quorum::rpc::grpc::quorum_key_value_client::QuorumKeyValueClient;
 use raft_examples::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValueServer;
@@ -52,7 +52,7 @@ fn get_value_by_key() {
     let replica = Arc::new(replica);
 
     let (all_services_shutdown_handle_one, all_services_shutdown_receiver_one) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStore::new(replica.clone());
+    let store = QuorumKeyValueStoreService::new(replica.clone());
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
@@ -62,7 +62,7 @@ fn get_value_by_key() {
     });
 
     let (all_services_shutdown_handle_two, all_services_shutdown_receiver_two) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStore::new(replica.clone());
+    let store = QuorumKeyValueStoreService::new(replica.clone());
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &peer_one,
@@ -72,7 +72,7 @@ fn get_value_by_key() {
     });
 
     let (all_services_shutdown_handle_three, all_services_shutdown_receiver_three) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStore::new(replica.clone());
+    let store = QuorumKeyValueStoreService::new(replica.clone());
     let service = QuorumKeyValueServer::new(store);
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(

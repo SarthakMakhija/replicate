@@ -9,13 +9,13 @@ use crate::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse, Vers
 use crate::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValue;
 use crate::quorum::server::server::Server;
 
-pub struct QuorumKeyValueStore {
+pub struct QuorumKeyValueStoreService {
     client: Client,
     server: Server,
 }
 
 #[tonic::async_trait]
-impl QuorumKeyValue for QuorumKeyValueStore {
+impl QuorumKeyValue for QuorumKeyValueStoreService {
     async fn get_by(&self, request: Request<GetValueByKeyRequest>) -> Result<Response<GetValueByKeyResponse>, Status> {
         return self.client.get_by(request.into_inner()).await;
     }
@@ -29,9 +29,9 @@ impl QuorumKeyValue for QuorumKeyValueStore {
     }
 }
 
-impl QuorumKeyValueStore {
-    pub fn new(replica: Arc<Replica>) -> QuorumKeyValueStore {
-        return QuorumKeyValueStore {
+impl QuorumKeyValueStoreService {
+    pub fn new(replica: Arc<Replica>) -> QuorumKeyValueStoreService {
+        return QuorumKeyValueStoreService {
             client: Client::new(replica.clone()),
             server: Server::new(replica.clone()),
         };
