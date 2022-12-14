@@ -1,5 +1,4 @@
 use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use raft::net::connect::async_network::AsyncNetwork;
