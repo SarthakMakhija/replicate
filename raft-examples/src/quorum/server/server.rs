@@ -1,4 +1,3 @@
-use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -24,8 +23,16 @@ impl Server {
 
         let key = request.key;
         let correlation_id = request.correlation_id;
-        let storage = self.storage.clone();
 
+        let originating_host_port = HostAndPort::try_new(
+            request.originating_host.clone(),
+            u16::try_from(request.originating_port).unwrap()
+        );
+        if originating_host_port.is_err() {
+            return Err(Status::failed_precondition(format!("Invalid originating host and port {}", request.originating_host.clone())));
+        }
+
+        let storage = self.storage.clone();
         let handler = async move {
             let value: Option<Ref<String, String>> = storage.get(&key);
             let response = match value {
@@ -41,7 +48,7 @@ impl Server {
             );
             AsyncNetwork::send(
                 service_request,
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090), //TODO: Change the ip address and port
+                originating_host_port.unwrap()
             ).await.unwrap();
         };
         let _ = &self.replica.add_to_queue(handler);
