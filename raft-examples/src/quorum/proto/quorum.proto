@@ -6,8 +6,8 @@ package examples.quorum;
 
 service QuorumKeyValue {
   rpc getBy (GetValueByKeyRequest) returns (GetValueByKeyResponse) {}
-  rpc acknowledge (CorrelatingGetValueByKeyRequest) returns (google.protobuf.Empty) {}
-  rpc accept (GetValueByKeyResponse) returns (google.protobuf.Empty) {}
+  rpc acknowledge_get (CorrelatingGetValueByKeyRequest) returns (google.protobuf.Empty) {}
+  rpc finish_get (GetValueByKeyResponse) returns (google.protobuf.Empty) {}
 }
 
 message GetValueByKeyRequest {

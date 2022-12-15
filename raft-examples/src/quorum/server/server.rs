@@ -19,7 +19,7 @@ pub(crate) struct Server {
 }
 
 impl Server {
-    pub(crate) async fn acknowledge(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
+    pub(crate) async fn acknowledge_get(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
         let optional_host = get_referral_host_from(&request);
         let optional_port = get_referral_port_from(&request);
         if optional_host.is_none() || optional_port.is_none() {
@@ -60,7 +60,7 @@ impl Server {
         return Ok(Response::new(()));
     }
 
-    pub(crate) async fn accept(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
+    pub(crate) async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
         let request = request.into_inner();
         println!("Received a response for key {}", request.key.clone());
 

@@ -20,12 +20,12 @@ impl QuorumKeyValue for QuorumKeyValueStoreService {
         return self.client.get_by(request.into_inner()).await;
     }
 
-    async fn acknowledge(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
-        return self.server.acknowledge(request).await;
+    async fn acknowledge_get(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
+        return self.server.acknowledge_get(request).await;
     }
 
-    async fn accept(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
-        return self.server.accept(request).await;
+    async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
+        return self.server.finish_get(request).await;
     }
 }
 
