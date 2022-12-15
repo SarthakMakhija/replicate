@@ -17,7 +17,7 @@ pub type TotalFailedSends = usize;
 
 pub struct Replica {
     name: String,
-    peer_connection_address: HostAndPort,
+    self_address: HostAndPort,
     peer_addresses: Vec<HostAndPort>,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: SingularUpdateQueue,
@@ -25,7 +25,7 @@ pub struct Replica {
 
 impl Replica {
     pub fn new(name: String,
-               peer_connection_address: HostAndPort,
+               self_address: HostAndPort,
                peer_addresses: Vec<HostAndPort>,
                clock: Arc<dyn Clock>) -> Self {
         let request_waiting_list = RequestWaitingList::new(
@@ -35,7 +35,7 @@ impl Replica {
         );
         return Replica {
             name,
-            peer_connection_address,
+            self_address,
             peer_addresses,
             request_waiting_list,
             singular_update_queue: SingularUpdateQueue::new(),
@@ -85,8 +85,8 @@ impl Replica {
         return self.peer_addresses.len();
     }
 
-    pub fn get_peer_connection_address(&self) -> HostAndPort {
-        return self.peer_connection_address.clone();
+    pub fn get_self_address(&self) -> HostAndPort {
+        return self.self_address.clone();
     }
 
     fn send_one_way_to<Payload: Send + 'static>(&self,
@@ -97,7 +97,7 @@ impl Replica {
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
 
-        let source_address = self.peer_connection_address.clone();
+        let source_address = self.self_address.clone();
         return tokio::spawn(async move {
             let result = AsyncNetwork::send_with_source_footprint(service_request, source_address, target_address).await;
             return (result, correlation_id);
