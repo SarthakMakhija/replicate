@@ -21,8 +21,7 @@ async fn builtin_heartbeat_sender_with_success() {
     thread::sleep(Duration::from_secs(3));
 
     let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(target_address.clone()));
-    let source_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-    let result = heartbeat_sender.send(source_address).await;
+    let result = heartbeat_sender.send().await;
 
     assert!(result.is_ok());
 
@@ -34,8 +33,7 @@ async fn builtin_heartbeat_sender_with_success() {
 async fn builtin_heartbeat_sender_with_failure_without_services_running() {
     let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50091);
     let heartbeat_sender = Arc::new(BuiltinHeartbeatSender::new(target_address.clone()));
-    let source_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-    let result = heartbeat_sender.send(source_address).await;
+    let result = heartbeat_sender.send().await;
 
     assert!(result.is_err());
 }
