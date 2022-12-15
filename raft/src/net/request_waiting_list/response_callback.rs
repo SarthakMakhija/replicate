@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crate::clock::clock::Clock;
+use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
 
 pub(crate) type ResponseErrorType = Box<dyn Error + Send + Sync>;
@@ -33,8 +34,10 @@ impl TimestampedCallback {
         self.callback.on_response(response);
     }
 
-    pub(crate) fn on_timeout_response(&self) {
-        self.callback.on_response(Err(Box::new(RequestTimeoutError {})));
+    pub(crate) fn on_timeout_response(&self, correlation_id: &CorrelationId) {
+        self.callback.on_response(Err(Box::new(RequestTimeoutError {
+            correlation_id: *correlation_id
+        })));
     }
 
     pub(crate) fn has_expired(&self, clock: &Arc<dyn Clock>, expiry_after: &Duration) -> bool {

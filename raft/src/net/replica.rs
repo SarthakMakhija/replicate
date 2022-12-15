@@ -114,7 +114,7 @@ impl Replica {
 mod tests {
     use std::collections::HashMap;
     use std::net::{IpAddr, Ipv4Addr};
-    use std::sync::{Arc, Mutex, RwLock};
+    use std::sync::{Arc, RwLock};
 
     use tokio::sync::mpsc;
 
@@ -130,7 +130,6 @@ mod tests {
     mod setup {
         use std::error::Error;
         use std::fmt::{Display, Formatter};
-        use std::sync::Mutex;
 
         use async_trait::async_trait;
         use tonic::{Request, Response};

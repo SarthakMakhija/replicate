@@ -30,10 +30,10 @@ impl ExpiredCallbackRemover {
     }
 
     fn remove(&self) {
-        self.pending_requests.retain(|_, timestamped_callback| {
+        self.pending_requests.retain(|correlation_id, timestamped_callback| {
             let has_expired = timestamped_callback.has_expired(&self.clock, &self.expiry_after);
             if has_expired {
-                timestamped_callback.on_timeout_response();
+                timestamped_callback.on_timeout_response(correlation_id);
                 return false;
             }
             return true;
@@ -43,8 +43,7 @@ impl ExpiredCallbackRemover {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::sync::{Arc, RwLock};
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, SystemTime};
 
@@ -56,12 +55,12 @@ mod tests {
     use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
     mod setup {
-        use std::collections::HashMap;
         use std::ops::Add;
-        use std::sync::RwLock;
+        use std::sync::Mutex;
         use std::time::{Duration, SystemTime};
 
         use crate::clock::clock::Clock;
+        use crate::net::connect::correlation_id::CorrelationId;
         use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
         use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
@@ -70,7 +69,7 @@ mod tests {
         }
 
         pub struct RequestTimeoutErrorResponseCallback {
-            pub error_response: RwLock<HashMap<String, String>>,
+            pub failed_correlation_id: Mutex<CorrelationId>,
         }
 
         impl Clock for FutureClock {
@@ -82,8 +81,9 @@ mod tests {
         impl ResponseCallback for RequestTimeoutErrorResponseCallback {
             fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
-                let _ = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
-                self.error_response.write().unwrap().insert(String::from("Response"), "timeout".to_string());
+                let request_timeout = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
+                let mut guard = self.failed_correlation_id.lock().unwrap();
+                *guard = request_timeout.correlation_id;
             }
         }
     }
@@ -94,7 +94,9 @@ mod tests {
         let clock = Arc::new(FutureClock { duration_to_add: Duration::from_secs(5) });
         let pending_requests = Arc::new(DashMap::new());
 
-        let error_response_callback = Arc::new(RequestTimeoutErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
+        let error_response_callback = Arc::new(RequestTimeoutErrorResponseCallback {
+            failed_correlation_id: Mutex::new(0)
+        });
         let cloned_response_callback = error_response_callback.clone();
         pending_requests.clone().insert(
             correlation_id,
@@ -109,7 +111,8 @@ mod tests {
         );
         thread::sleep(Duration::from_millis(5));
 
-        let readable_response = cloned_response_callback.error_response.read().unwrap();
-        assert_eq!("timeout", readable_response.get("Response").unwrap());
+        let readable_response = cloned_response_callback.failed_correlation_id.lock().unwrap();
+        let failed_correlation_id = *readable_response;
+        assert_eq!(correlation_id, failed_correlation_id);
     }
 }
