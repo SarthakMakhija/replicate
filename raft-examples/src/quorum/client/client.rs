@@ -9,27 +9,22 @@ use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
 use crate::quorum::client_provider::CorrelatingGetValueByKeyRequestClient;
-use crate::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse, CorrelatingGetValueByKeyRequest};
+use crate::quorum::rpc::grpc::{CorrelatingGetValueByKeyRequest, GetValueByKeyRequest, GetValueByKeyResponse};
 
 pub(crate) struct Client {
     replica: Arc<Replica>,
 }
 
 impl Client {
-    pub(crate) async fn get_by(&self, get_value_by_key_request: GetValueByKeyRequest) -> Result<Response<GetValueByKeyResponse>, Status> {
-        println!("received a get request by the client for key {}", get_value_by_key_request.key.clone());
-        let peer_connection_address = self.replica.get_peer_connection_address();
-        let originating_host = peer_connection_address.host_as_string();
-        let originating_port = peer_connection_address.port().into();
+    pub(crate) async fn get_by(&self, request: GetValueByKeyRequest) -> Result<Response<GetValueByKeyResponse>, Status> {
+        println!("received a get request by the client for key {}", request.key.clone());
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
             let correlation_id = correlation_id_generator.generate();
             ServiceRequest::new(
                 CorrelatingGetValueByKeyRequest {
-                    key: get_value_by_key_request.key.clone(),
-                    originating_host: originating_host.clone(),
-                    originating_port,
+                    key: request.key.clone(),
                     correlation_id,
                 },
                 Box::new(CorrelatingGetValueByKeyRequestClient {}),
@@ -45,11 +40,13 @@ impl Client {
 
         let completion_response = async_quorum_callback.handle().await;
         let response = completion_response.success_responses().unwrap().as_slice().get(0).unwrap();
-        return Ok(Response::new(GetValueByKeyResponse {
-            key: response.key.clone(),
-            value: response.value.clone(),
-            correlation_id: response.correlation_id,
-        }));
+        return Ok(Response::new(
+            GetValueByKeyResponse {
+                key: response.key.clone(),
+                value: response.value.clone(),
+                correlation_id: response.correlation_id,
+            })
+        );
     }
 }
 

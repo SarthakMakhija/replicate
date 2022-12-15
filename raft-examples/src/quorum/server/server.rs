@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
-use tonic::{Response, Status};
+use tonic::{Request, Response, Status};
 
 use raft::net::connect::async_network::AsyncNetwork;
+use raft::net::connect::headers::{get_referral_host_from, get_referral_port_from};
 use raft::net::connect::host_and_port::HostAndPort;
 use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
@@ -18,19 +19,23 @@ pub(crate) struct Server {
 }
 
 impl Server {
-    pub(crate) async fn acknowledge(&self, request: CorrelatingGetValueByKeyRequest) -> Result<Response<()>, Status> {
+    pub(crate) async fn acknowledge(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
+        let optional_host = get_referral_host_from(&request);
+        let optional_port = get_referral_port_from(&request);
+        if optional_host.is_none() || optional_port.is_none() {
+            return Err(Status::failed_precondition(format!("Missing originating host/port in acknowledge")));
+        }
+
+        let request = request.into_inner();
         println!("Received a correlating get request for key {}", request.key.clone());
 
         let key = request.key;
         let correlation_id = request.correlation_id;
 
         let originating_host_port = HostAndPort::try_new(
-            request.originating_host.clone(),
-            u16::try_from(request.originating_port).unwrap()
+            optional_host.unwrap(),
+            u16::try_from(optional_port.unwrap()).unwrap()
         );
-        if originating_host_port.is_err() {
-            return Err(Status::failed_precondition(format!("Invalid originating host and port {}", request.originating_host.clone())));
-        }
 
         let storage = self.storage.clone();
         let handler = async move {
@@ -55,7 +60,8 @@ impl Server {
         return Ok(Response::new(()));
     }
 
-    pub(crate) async fn accept(&self, request: GetValueByKeyResponse) -> Result<Response<()>, Status> {
+    pub(crate) async fn accept(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
+        let request = request.into_inner();
         println!("Received a response for key {}", request.key.clone());
 
         let _ = &self.replica.register_response(request.correlation_id, Ok(Box::new(request)));

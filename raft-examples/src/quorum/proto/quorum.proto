@@ -17,8 +17,6 @@ message GetValueByKeyRequest {
 message CorrelatingGetValueByKeyRequest {
   //tag id 1 is reserved for correlation_id generated using procedural macro
   string key = 2;
-  string originating_host = 3;
-  uint32 originating_port = 4;
 }
 
 message GetValueByKeyResponse {
