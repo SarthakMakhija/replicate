@@ -48,8 +48,11 @@ impl Replica {
         where S: Fn() -> ServiceRequest<Payload, ()> {
         let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
         for peer_address in &self.peer_addresses {
-            let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
+            if peer_address.eq(&self.self_address) {
+                continue;
+            }
 
+            let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
             send_task_handles.push(self.send_one_way_to(
                 &self.request_waiting_list,
                 service_request,
@@ -82,7 +85,8 @@ impl Replica {
     }
 
     pub fn total_peer_count(&self) -> usize {
-        return self.peer_addresses.len();
+        let self_address = self.self_address;
+        return self.peer_addresses.iter().filter(|peer_address| peer_address.ne(&&self_address)).count();
     }
 
     pub fn get_self_address(&self) -> HostAndPort {
@@ -110,7 +114,7 @@ impl Replica {
 mod tests {
     use std::collections::HashMap;
     use std::net::{IpAddr, Ipv4Addr};
-    use std::sync::{Arc, RwLock};
+    use std::sync::{Arc, Mutex, RwLock};
 
     use tokio::sync::mpsc;
 
@@ -126,6 +130,7 @@ mod tests {
     mod setup {
         use std::error::Error;
         use std::fmt::{Display, Formatter};
+        use std::sync::Mutex;
 
         use async_trait::async_trait;
         use tonic::{Request, Response};
@@ -206,7 +211,7 @@ mod tests {
         );
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
+        let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},
@@ -238,7 +243,7 @@ mod tests {
         );
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
+        let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},
@@ -311,12 +316,46 @@ mod tests {
 
         let _ = replica.register_response(
             correlation_id_generator.generate(),
-            Ok(Box::new(GetValueResponse { value: "ok".to_string() }))
+            Ok(Box::new(GetValueResponse { value: "ok".to_string() })),
         );
 
         let quorum_completion_response = async_quorum_callback.handle().await;
         assert_eq!("ok".to_string(), quorum_completion_response.success_responses().unwrap().get(0).unwrap().value);
 
         replica.singular_update_queue.shutdown();
+    }
+
+    #[test]
+    fn total_peer_count_excluding_self() {
+        let replica = Replica::new(
+            String::from("neptune"),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let total_peer_count = replica.total_peer_count();
+        assert_eq!(2, total_peer_count);
+    }
+
+    #[test]
+    fn total_peer_count() {
+        let replica = Replica::new(
+            String::from("neptune"),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let total_peer_count = replica.total_peer_count();
+        assert_eq!(3, total_peer_count);
     }
 }
