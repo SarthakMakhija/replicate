@@ -46,7 +46,7 @@ impl Server {
                 Box::new(GetValueByKeyResponseClient {}),
                 correlation_id,
             );
-            AsyncNetwork::send(
+            AsyncNetwork::send_without_source_footprint(
                 service_request,
                 originating_host_port.unwrap()
             ).await.unwrap();

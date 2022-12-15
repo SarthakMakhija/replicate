@@ -120,7 +120,7 @@ fn send_get_request(self_host_and_port: HostAndPort, rt: &Runtime) -> JoinHandle
 
     let address = self_host_and_port.clone();
     let handle = rt.spawn(async move {
-        return AsyncNetwork::send(service_request, address).await;
+        return AsyncNetwork::send_without_source_footprint(service_request, address).await;
     });
     return handle;
 }
