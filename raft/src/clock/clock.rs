@@ -1,14 +1,18 @@
-use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct SystemClock {}
 
 pub trait Clock: Send + Sync {
-    fn now(&self) -> Instant;
+    fn now(&self) -> SystemTime;
+
+    fn now_seconds(&self) -> u64 {
+        return self.now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    }
 }
 
 impl Clock for SystemClock {
-    fn now(&self) -> Instant {
-        return Instant::now();
+    fn now(&self) -> SystemTime {
+        return SystemTime::now();
     }
 }
 

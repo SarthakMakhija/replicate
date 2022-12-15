@@ -46,7 +46,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use std::thread;
-    use std::time::{Duration, Instant};
+    use std::time::{Duration, SystemTime};
 
     use dashmap::DashMap;
     use crate::net::connect::correlation_id::CorrelationId;
@@ -59,7 +59,7 @@ mod tests {
         use std::collections::HashMap;
         use std::ops::Add;
         use std::sync::RwLock;
-        use std::time::{Duration, Instant};
+        use std::time::{Duration, SystemTime};
 
         use crate::clock::clock::Clock;
         use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
@@ -74,8 +74,8 @@ mod tests {
         }
 
         impl Clock for FutureClock {
-            fn now(&self) -> Instant {
-                return Instant::now().add(self.duration_to_add);
+            fn now(&self) -> SystemTime {
+                return SystemTime::now().add(self.duration_to_add);
             }
         }
 
@@ -98,7 +98,7 @@ mod tests {
         let cloned_response_callback = error_response_callback.clone();
         pending_requests.clone().insert(
             correlation_id,
-            TimestampedCallback::new(error_response_callback, Instant::now()),
+            TimestampedCallback::new(error_response_callback, SystemTime::now()),
         );
 
         ExpiredCallbackRemover::start(
