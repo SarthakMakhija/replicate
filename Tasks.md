@@ -28,6 +28,7 @@
       - done
 12. Feedback on `Quorum` implementation
     1. Support `put` in Quorum
+       - done
     2. Support `read repair` in Quorum
     3. Refactor `quorum integration test`
        - done
