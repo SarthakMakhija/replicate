@@ -50,7 +50,7 @@ impl Replica {
         for peer_address in &self.peer_addresses {
             let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
 
-            send_task_handles.push(Self::send_one_way_to(
+            send_task_handles.push(self.send_one_way_to(
                 &self.request_waiting_list,
                 service_request,
                 peer_address.clone(),
@@ -89,15 +89,17 @@ impl Replica {
         return self.peer_connection_address.clone();
     }
 
-    fn send_one_way_to<Payload: Send + 'static>(request_waiting_list: &RequestWaitingList,
+    fn send_one_way_to<Payload: Send + 'static>(&self,
+                                                request_waiting_list: &RequestWaitingList,
                                                 service_request: ServiceRequest<Payload, ()>,
-                                                address: HostAndPort,
+                                                target_address: HostAndPort,
                                                 response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
 
+        let source_address = self.peer_connection_address.clone();
         return tokio::spawn(async move {
-            let result = AsyncNetwork::send(service_request, address).await;
+            let result = AsyncNetwork::send_with_source_footprint(service_request, source_address, target_address).await;
             return (result, correlation_id);
         });
     }

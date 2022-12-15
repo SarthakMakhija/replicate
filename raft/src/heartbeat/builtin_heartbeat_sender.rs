@@ -19,10 +19,10 @@ impl HeartbeatSender for BuiltinHeartbeatSender {
             node_id.to_string(),
             &RandomCorrelationIdGenerator::new()
         );
-        let address = self.target_address.clone();
-        let result = AsyncNetwork::send(service_server_request, address.clone()).await;
+        let target_address = self.target_address.clone();
+        let result = AsyncNetwork::send_with_source_footprint(service_server_request, source_address, target_address.clone()).await;
         if result.is_err() {
-            eprintln!("Could not send heartbeat to {}", address.as_string());
+            eprintln!("Could not send heartbeat to {}", target_address.as_string());
         }
         return result;
     }

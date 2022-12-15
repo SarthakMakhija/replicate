@@ -30,11 +30,11 @@ async fn send() {
     client_handle.await.unwrap();
 }
 
-async fn send_client_request(address: HostAndPort) -> Result<(), ServiceResponseError> {
+async fn send_client_request(target_address: HostAndPort) -> Result<(), ServiceResponseError> {
     let node_id = "mark";
     let service_request = HeartbeatServiceRequest::new(
         node_id.to_string(),
         &RandomCorrelationIdGenerator::new()
     );
-    return AsyncNetwork::send(service_request, address).await;
+    return AsyncNetwork::send_without_source_footprint(service_request, target_address).await;
 }
