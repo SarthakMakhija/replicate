@@ -14,11 +14,12 @@ pub fn get_referral_host_from<Payload>(request: &Request<Payload>) -> Option<Str
     return None;
 }
 
-pub fn get_referral_port_from<Payload>(request: &Request<Payload>) -> Option<u32> {
+pub fn get_referral_port_from<Payload>(request: &Request<Payload>) -> Option<u16> {
     let headers = request.metadata();
     let optional_port = headers.get(REFERRAL_PORT);
     if let Some(port) = optional_port {
-        return Some(FromStr::from_str(port.to_str().unwrap()).unwrap());
+        let result = FromStr::from_str(port.to_str().unwrap());
+        return Some(result.unwrap());
     }
     return None;
 }

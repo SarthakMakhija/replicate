@@ -83,7 +83,7 @@ impl Server {
         let correlation_id = request.correlation_id;
         let originating_host_port = HostAndPort::try_new(
             optional_host.unwrap(),
-            u16::try_from(optional_port.unwrap()).unwrap(),
+            optional_port.unwrap()
         );
 
         let storage = self.storage.clone();

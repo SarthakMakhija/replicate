@@ -91,7 +91,7 @@ mod tests {
         #[derive(Debug)]
         pub(crate) struct ResponseWithSourceFootprint {
             pub(crate) host: Option<String>,
-            pub(crate) port: Option<u32>,
+            pub(crate) port: Option<u16>,
         }
 
         #[derive(Debug)]
