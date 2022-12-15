@@ -36,5 +36,6 @@
     4. Instantiate multiple replicas corresponding to each node in the integration test 
     5. Build configuration to handle `request waiting list expiry`
     6. Decide on the data type of port in `HostAndPort` because `proto` files do not support `u16`
-    7. Decide on `threadpool` implementation in `SingularUpdateQueue`
-    8. Support vector of services in ServiceRegistration
+       - done 
+    8. Decide on `threadpool` implementation in `SingularUpdateQueue`
+    9. Support vector of services in ServiceRegistration
