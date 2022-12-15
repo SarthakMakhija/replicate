@@ -5,9 +5,15 @@ import "google/protobuf/empty.proto";
 package examples.quorum;
 
 service QuorumKeyValue {
+  //get methods
   rpc getBy (GetValueByKeyRequest) returns (GetValueByKeyResponse) {}
   rpc acknowledge_get (CorrelatingGetValueByKeyRequest) returns (google.protobuf.Empty) {}
   rpc finish_get (GetValueByKeyResponse) returns (google.protobuf.Empty) {}
+
+  //put methods
+  rpc put (PutKeyValueRequest) returns (PutKeyValueResponse) {}
+  rpc acknowledge_put (VersionedPutKeyValueRequest) returns (google.protobuf.Empty) {}
+  rpc finish_put(PutKeyValueResponse) returns (google.protobuf.Empty) {}
 }
 
 message GetValueByKeyRequest {
@@ -23,4 +29,21 @@ message GetValueByKeyResponse {
   //tag id 1 is reserved for correlation_id generated using procedural macro
   string key = 2;
   string value = 3;
+}
+
+message PutKeyValueRequest {
+  string key = 1;
+  string value = 2;
+}
+
+message VersionedPutKeyValueRequest {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  string key = 2;
+  string value = 3;
+  uint64 timestamp = 4;
+}
+
+message PutKeyValueResponse {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  bool was_put = 2;
 }

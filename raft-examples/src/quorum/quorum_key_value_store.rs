@@ -5,7 +5,13 @@ use tonic::{Request, Response, Status};
 use raft::net::replica::Replica;
 
 use crate::quorum::client::client::Client;
-use crate::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse, CorrelatingGetValueByKeyRequest};
+use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
+use crate::quorum::rpc::grpc::PutKeyValueRequest;
+use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
+use crate::quorum::rpc::grpc::GetValueByKeyResponse;
+use crate::quorum::rpc::grpc::GetValueByKeyRequest;
+use crate::quorum::rpc::grpc::PutKeyValueResponse;
+
 use crate::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValue;
 use crate::quorum::server::server::Server;
 
@@ -26,6 +32,18 @@ impl QuorumKeyValue for QuorumKeyValueStoreService {
 
     async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
         return self.server.finish_get(request).await;
+    }
+
+    async fn put(&self, request: Request<PutKeyValueRequest>) -> Result<Response<PutKeyValueResponse>, Status> {
+        return self.client.put(request.into_inner()).await;
+    }
+
+    async fn acknowledge_put(&self, request: Request<VersionedPutKeyValueRequest>) -> Result<Response<()>, Status> {
+        return self.server.acknowledge_put(request).await;
+    }
+
+    async fn finish_put(&self, request: Request<PutKeyValueResponse>) -> Result<Response<()>, Status> {
+        return self.server.finish_put(request).await;
     }
 }
 

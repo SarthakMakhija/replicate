@@ -15,11 +15,16 @@ use raft::net::connect::service_client::{ServiceClientProvider, ServiceRequest, 
 use raft::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 use raft::net::replica::Replica;
 use raft_examples::quorum::quorum_key_value_store::QuorumKeyValueStoreService;
-use raft_examples::quorum::rpc::grpc::{GetValueByKeyRequest, GetValueByKeyResponse};
+use raft_examples::quorum::rpc::grpc::GetValueByKeyRequest;
+use raft_examples::quorum::rpc::grpc::GetValueByKeyResponse;
+use raft_examples::quorum::rpc::grpc::PutKeyValueRequest;
+use raft_examples::quorum::rpc::grpc::PutKeyValueResponse;
 use raft_examples::quorum::rpc::grpc::quorum_key_value_client::QuorumKeyValueClient;
 use raft_examples::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValueServer;
 
 struct GetValueByKeyRequestClient {}
+
+struct PutKeyValueRequestClient {}
 
 #[async_trait]
 impl ServiceClientProvider<GetValueByKeyRequest, GetValueByKeyResponse> for GetValueByKeyRequestClient {
@@ -30,8 +35,65 @@ impl ServiceClientProvider<GetValueByKeyRequest, GetValueByKeyResponse> for GetV
     }
 }
 
+#[async_trait]
+impl ServiceClientProvider<PutKeyValueRequest, PutKeyValueResponse> for PutKeyValueRequestClient {
+    async fn call(&self, request: Request<PutKeyValueRequest>, address: HostAndPort) -> Result<Response<PutKeyValueResponse>, ServiceResponseError> {
+        let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
+        let response = client.put(request).await?;
+        return Ok(response);
+    }
+}
+
 #[test]
-fn get_value_by_key() {
+fn put_key_value() {
+    let runtime = Builder::new_multi_thread()
+        .thread_name("put_key_value".to_string())
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6540);
+    let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6541);
+    let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6542);
+
+    let replica = Replica::new(
+        String::from("mark"),
+        self_host_and_port.clone(),
+        vec![peer_one.clone(), peer_other.clone()],
+        Arc::new(SystemClock::new()),
+    );
+    let replica = Arc::new(replica);
+    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), replica.clone());
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), replica.clone());
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), replica.clone());
+
+    let_services_start();
+
+    let key = "HDD".to_string();
+    let value = "Hard disk".to_string();
+    let handle = send_put_request(self_host_and_port, &runtime, key, value);
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+    blocking_runtime.block_on(async move {
+        handle.await.unwrap().unwrap();
+    });
+
+    let handle = send_get_request(self_host_and_port, &runtime, "HDD".to_string());
+    blocking_runtime.block_on(async move {
+        let response: GetValueByKeyResponse = handle.await.unwrap().unwrap();
+
+        all_services_shutdown_handle_one.shutdown().await.unwrap();
+        all_services_shutdown_handle_two.shutdown().await.unwrap();
+        all_services_shutdown_handle_three.shutdown().await.unwrap();
+
+        assert_eq!("HDD".to_string(), response.key.clone());
+        assert_eq!("Hard disk".to_string(), response.value.clone());
+    });
+}
+
+#[test]
+fn get_value_by_a_non_existent_key() {
     let runtime = Builder::new_multi_thread()
         .thread_name("get_value_by_key".to_string())
         .worker_threads(2)
@@ -56,7 +118,8 @@ fn get_value_by_key() {
 
     let_services_start();
 
-    let handle = send_get_request(self_host_and_port, &runtime);
+    let key = "non-existing-key".to_string();
+    let handle = send_get_request(self_host_and_port, &runtime, key);
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
     blocking_runtime.block_on(async move {
@@ -66,7 +129,8 @@ fn get_value_by_key() {
         all_services_shutdown_handle_two.shutdown().await.unwrap();
         all_services_shutdown_handle_three.shutdown().await.unwrap();
 
-        assert_eq!("ok".to_string(), response.key.clone());
+        assert_eq!("non-existing-key".to_string(), response.key.clone());
+        assert_eq!("".to_string(), response.value.clone());
     });
 }
 
@@ -110,11 +174,26 @@ fn spin_other_peer(runtime: &Runtime, peer_other: HostAndPort, replica: Arc<Repl
     all_services_shutdown_handle
 }
 
-fn send_get_request(self_host_and_port: HostAndPort, rt: &Runtime) -> JoinHandle<Result<GetValueByKeyResponse, ServiceResponseError>> {
+fn send_get_request(self_host_and_port: HostAndPort, rt: &Runtime, key: String) -> JoinHandle<Result<GetValueByKeyResponse, ServiceResponseError>> {
     let any_correlation_id = 100;
     let service_request = ServiceRequest::new(
-        GetValueByKeyRequest { key: "ok".to_string() },
+        GetValueByKeyRequest { key },
         Box::new(GetValueByKeyRequestClient {}),
+        any_correlation_id,
+    );
+
+    let address = self_host_and_port.clone();
+    let handle = rt.spawn(async move {
+        return AsyncNetwork::send_without_source_footprint(service_request, address).await;
+    });
+    return handle;
+}
+
+fn send_put_request(self_host_and_port: HostAndPort, rt: &Runtime, key: String, value: String) -> JoinHandle<Result<PutKeyValueResponse, ServiceResponseError>> {
+    let any_correlation_id = 100;
+    let service_request = ServiceRequest::new(
+        PutKeyValueRequest { key, value },
+        Box::new(PutKeyValueRequestClient {}),
         any_correlation_id,
     );
 

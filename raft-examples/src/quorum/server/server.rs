@@ -11,7 +11,12 @@ use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
 use crate::quorum::client_provider::GetValueByKeyResponseClient;
-use crate::quorum::rpc::grpc::{GetValueByKeyResponse, CorrelatingGetValueByKeyRequest};
+use crate::quorum::client_provider::PutKeyValueResponseClient;
+
+use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
+use crate::quorum::rpc::grpc::GetValueByKeyResponse;
+use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
+use crate::quorum::rpc::grpc::PutKeyValueResponse;
 
 pub(crate) struct Server {
     replica: Arc<Replica>,
@@ -23,7 +28,7 @@ impl Server {
         let optional_host = get_referral_host_from(&request);
         let optional_port = get_referral_port_from(&request);
         if optional_host.is_none() || optional_port.is_none() {
-            return Err(Status::failed_precondition(format!("Missing originating host/port in acknowledge")));
+            return Err(Status::failed_precondition(format!("Missing originating host/port in acknowledge_get")));
         }
 
         let request = request.into_inner();
@@ -34,7 +39,7 @@ impl Server {
 
         let originating_host_port = HostAndPort::try_new(
             optional_host.unwrap(),
-            u16::try_from(optional_port.unwrap()).unwrap()
+            u16::try_from(optional_port.unwrap()).unwrap(),
         );
 
         let storage = self.storage.clone();
@@ -51,10 +56,7 @@ impl Server {
                 Box::new(GetValueByKeyResponseClient {}),
                 correlation_id,
             );
-            AsyncNetwork::send_without_source_footprint(
-                service_request,
-                originating_host_port.unwrap()
-            ).await.unwrap();
+            AsyncNetwork::send_without_source_footprint(service_request, originating_host_port.unwrap()).await.unwrap();
         };
         let _ = &self.replica.add_to_queue(handler);
         return Ok(Response::new(()));
@@ -63,6 +65,47 @@ impl Server {
     pub(crate) async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
         let request = request.into_inner();
         println!("Received a response for key {}", request.key.clone());
+
+        let _ = &self.replica.register_response(request.correlation_id, Ok(Box::new(request)));
+        return Ok(Response::new(()));
+    }
+
+    pub(crate) async fn acknowledge_put(&self, request: Request<VersionedPutKeyValueRequest>) -> Result<Response<()>, Status> {
+        let optional_host = get_referral_host_from(&request);
+        let optional_port = get_referral_port_from(&request);
+        if optional_host.is_none() || optional_port.is_none() {
+            return Err(Status::failed_precondition(format!("Missing originating host/port in acknowledge_set")));
+        }
+
+        let request = request.into_inner();
+        println!("Received a versioned set request for key {}", request.key.clone());
+
+        let correlation_id = request.correlation_id;
+        let originating_host_port = HostAndPort::try_new(
+            optional_host.unwrap(),
+            u16::try_from(optional_port.unwrap()).unwrap(),
+        );
+
+        let storage = self.storage.clone();
+        let handler = async move {
+            storage.insert(request.key.clone(), request.value.clone());
+            let service_request = ServiceRequest::new(
+                PutKeyValueResponse{was_put: true, correlation_id},
+                Box::new(PutKeyValueResponseClient {}),
+                correlation_id,
+            );
+            AsyncNetwork::send_without_source_footprint(
+                service_request,
+                originating_host_port.unwrap(),
+            ).await.unwrap();
+        };
+        let _ = &self.replica.add_to_queue(handler);
+        return Ok(Response::new(()));
+    }
+
+    pub(crate) async fn finish_put(&self, request: Request<PutKeyValueResponse>) -> Result<Response<()>, Status> {
+        let request = request.into_inner();
+        println!("Received a put response {}", request.was_put);
 
         let _ = &self.replica.register_response(request.correlation_id, Ok(Box::new(request)));
         return Ok(Response::new(()));
