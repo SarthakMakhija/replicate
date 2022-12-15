@@ -107,7 +107,7 @@ mod tests {
             Duration::from_secs(2),
             Duration::from_millis(0)
         );
-        thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_millis(5));
 
         let readable_response = cloned_response_callback.error_response.read().unwrap();
         assert_eq!("timeout", readable_response.get("Response").unwrap());
