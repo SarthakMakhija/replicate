@@ -22,15 +22,15 @@ async fn handle_single_response_type() {
     let get_async_quorum_callback_clone1 = get_async_quorum_callback.clone();
     let get_async_quorum_callback_clone2 = get_async_quorum_callback.clone();
 
-    request_waiting_list.add(10, get_async_quorum_callback_clone1);
-    request_waiting_list.add(20, get_async_quorum_callback_clone2);
+    let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+    let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+    request_waiting_list.add(10, response_from_1.clone(), get_async_quorum_callback_clone1);
+    request_waiting_list.add(20, response_from_other.clone(), get_async_quorum_callback_clone2);
 
     let get_handle = tokio::spawn( async move {
         return get_async_quorum_callback.handle().await;
     });
-
-    let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-    let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
     request_waiting_list.handle_response(10, response_from_1, Ok(Box::new(GetValueResponse { value: "one".to_string() })));
     request_waiting_list.handle_response(20, response_from_other, Ok(Box::new(GetValueResponse { value: "two".to_string() })));
@@ -59,8 +59,11 @@ async fn handle_multiple_response_types() {
     let get_async_quorum_callback_clone1 = get_async_quorum_callback.clone();
     let get_async_quorum_callback_clone2 = get_async_quorum_callback.clone();
 
-    request_waiting_list.add(10, get_async_quorum_callback_clone1);
-    request_waiting_list.add(20, get_async_quorum_callback_clone2);
+    let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+    let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+    request_waiting_list.add(10, response_from_1.clone(), get_async_quorum_callback_clone1);
+    request_waiting_list.add(20, response_from_other.clone(), get_async_quorum_callback_clone2);
 
     let get_handle = tokio::spawn( async move {
         return get_async_quorum_callback.handle().await;
@@ -71,15 +74,12 @@ async fn handle_multiple_response_types() {
     let set_async_quorum_callback_clone1 = set_async_quorum_callback.clone();
     let set_async_quorum_callback_clone2 = set_async_quorum_callback.clone();
 
-    request_waiting_list.add(30, set_async_quorum_callback_clone1);
-    request_waiting_list.add(40, set_async_quorum_callback_clone2);
+    request_waiting_list.add(30, response_from_1.clone(), set_async_quorum_callback_clone1);
+    request_waiting_list.add(40, response_from_other.clone(), set_async_quorum_callback_clone2);
 
     let set_handle = tokio::spawn( async move {
         return set_async_quorum_callback.handle().await;
     });
-
-    let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-    let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
     request_waiting_list.handle_response(10, response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
     request_waiting_list.handle_response(20, response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
@@ -119,8 +119,11 @@ async fn handle_multiple_response_types_with_error() {
     let get_async_quorum_callback_clone1 = get_async_quorum_callback.clone();
     let get_async_quorum_callback_clone2 = get_async_quorum_callback.clone();
 
-    request_waiting_list.add(10, get_async_quorum_callback_clone1);
-    request_waiting_list.add(20, get_async_quorum_callback_clone2);
+    let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+    let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+    request_waiting_list.add(10, response_from_1.clone(), get_async_quorum_callback_clone1);
+    request_waiting_list.add(20, response_from_other.clone(), get_async_quorum_callback_clone2);
 
     let get_handle = tokio::spawn( async move {
         return get_async_quorum_callback.handle().await;
@@ -131,15 +134,12 @@ async fn handle_multiple_response_types_with_error() {
     let set_async_quorum_callback_clone1 = set_async_quorum_callback.clone();
     let set_async_quorum_callback_clone2 = set_async_quorum_callback.clone();
 
-    request_waiting_list.add(30, set_async_quorum_callback_clone1);
-    request_waiting_list.add(40, set_async_quorum_callback_clone2);
+    request_waiting_list.add(30, response_from_1.clone(), set_async_quorum_callback_clone1);
+    request_waiting_list.add(40, response_from_other.clone(), set_async_quorum_callback_clone2);
 
     let set_handle = tokio::spawn( async move {
         return set_async_quorum_callback.handle().await;
     });
-
-    let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-    let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
     request_waiting_list.handle_response(10, response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
     request_waiting_list.handle_response(20, response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));

@@ -20,13 +20,15 @@ pub trait ResponseCallback: Send + Sync {
 
 pub(crate) struct TimestampedCallback {
     callback: ResponseCallbackType,
+    target_address: HostAndPort,
     creation_time: SystemTime,
 }
 
 impl TimestampedCallback {
-    pub(crate) fn new(callback: ResponseCallbackType, creation_time: SystemTime) -> Self {
+    pub(crate) fn new(callback: ResponseCallbackType, target_address: HostAndPort, creation_time: SystemTime) -> Self {
         return TimestampedCallback {
             callback,
+            target_address,
             creation_time,
         };
     }
@@ -48,10 +50,12 @@ impl TimestampedCallback {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
     use std::time::{Duration, SystemTime};
 
     use crate::clock::clock::{Clock, SystemClock};
+    use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::request_waiting_list::response_callback::tests::setup::{FutureClock, NothingCallback};
     use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
@@ -82,7 +86,8 @@ mod tests {
 
     #[test]
     fn has_expired() {
-        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), SystemTime::now());
+        let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), target_address,SystemTime::now());
         let clock: Arc<dyn Clock> = Arc::new(FutureClock { duration_to_add: Duration::from_secs(5) });
 
         let has_expired = timestamped_callback.has_expired(&clock, &Duration::from_secs(2));
@@ -91,7 +96,8 @@ mod tests {
 
     #[test]
     fn has_not_expired() {
-        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), SystemTime::now());
+        let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), target_address,SystemTime::now());
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
 
         let has_expired = timestamped_callback.has_expired(&clock, &Duration::from_secs(100));

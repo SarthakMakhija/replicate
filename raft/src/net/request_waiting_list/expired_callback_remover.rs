@@ -43,12 +43,14 @@ impl ExpiredCallbackRemover {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, SystemTime};
 
     use dashmap::DashMap;
     use crate::net::connect::correlation_id::CorrelationId;
+    use crate::net::connect::host_and_port::HostAndPort;
 
     use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
     use crate::net::request_waiting_list::expired_callback_remover::tests::setup::{FutureClock, RequestTimeoutErrorResponseCallback};
@@ -99,9 +101,11 @@ mod tests {
             failed_correlation_id: Mutex::new(0)
         });
         let cloned_response_callback = error_response_callback.clone();
+        let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+
         pending_requests.clone().insert(
             correlation_id,
-            TimestampedCallback::new(error_response_callback, SystemTime::now()),
+            TimestampedCallback::new(error_response_callback, target_address,SystemTime::now()),
         );
 
         ExpiredCallbackRemover::start(

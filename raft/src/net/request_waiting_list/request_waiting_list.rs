@@ -31,8 +31,8 @@ impl RequestWaitingList {
         return request_waiting_list;
     }
 
-    pub fn add(&self, correlation_id: CorrelationId, callback: ResponseCallbackType) {
-        let timestamped_callback = TimestampedCallback::new(callback, self.clock.now());
+    pub fn add(&self, correlation_id: CorrelationId, target_address: HostAndPort, callback: ResponseCallbackType) {
+        let timestamped_callback = TimestampedCallback::new(callback, target_address, self.clock.now());
         self.pending_requests.insert(correlation_id, timestamped_callback);
     }
 
@@ -144,8 +144,8 @@ mod tests {
         let cloned_response_callback = success_response_callback.clone();
         let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
-        request_waiting_list.add(correlation_id, success_response_callback);
-        request_waiting_list.handle_response(correlation_id, from,Ok(Box::new("success response".to_string())));
+        request_waiting_list.add(correlation_id, from.clone(), success_response_callback);
+        request_waiting_list.handle_response(correlation_id, from, Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -166,8 +166,8 @@ mod tests {
         let cloned_response_callback = success_response_callback.clone();
         let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
-        request_waiting_list.add(correlation_id, success_response_callback);
-        request_waiting_list.handle_response(correlation_id, from,Ok(Box::new("success response".to_string())));
+        request_waiting_list.add(correlation_id, from.clone(), success_response_callback);
+        request_waiting_list.handle_response(correlation_id, from, Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -187,8 +187,8 @@ mod tests {
         let cloned_response_callback = error_response_callback.clone();
         let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
-        request_waiting_list.add(correlation_id, error_response_callback);
-        request_waiting_list.handle_response(correlation_id, from,Err(Box::new(TestError { message: "test error".to_string() })));
+        request_waiting_list.add(correlation_id, from.clone(), error_response_callback);
+        request_waiting_list.handle_response(correlation_id, from, Err(Box::new(TestError { message: "test error".to_string() })));
 
         let readable_response = cloned_response_callback.error_response.read().unwrap();
         assert_eq!("test error", readable_response.get("Response").unwrap());
@@ -206,8 +206,9 @@ mod tests {
 
         let error_response_callback = Arc::new(RequestTimeoutErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = error_response_callback.clone();
+        let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
-        request_waiting_list.add(correlation_id, error_response_callback);
+        request_waiting_list.add(correlation_id, target_address, error_response_callback);
         thread::sleep(Duration::from_millis(10));
 
         let readable_response = cloned_response_callback.error_response.read().unwrap();

@@ -63,9 +63,9 @@ impl Replica {
 
         let mut total_failed_sends: TotalFailedSends = 0;
         for task_handle in send_task_handles {
-            let (result, correlation_id, address) = task_handle.await.unwrap();
+            let (result, correlation_id, target_address) = task_handle.await.unwrap();
             if result.is_err() {
-                let _ = &self.request_waiting_list.handle_response(correlation_id, address, Err(result.unwrap_err()));
+                let _ = &self.request_waiting_list.handle_response(correlation_id, target_address, Err(result.unwrap_err()));
                 total_failed_sends = total_failed_sends + 1;
             }
         }
@@ -98,8 +98,9 @@ impl Replica {
                                                 service_request: ServiceRequest<Payload, ()>,
                                                 target_address: HostAndPort,
                                                 response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId, HostAndPort)> {
+
         let correlation_id = service_request.correlation_id;
-        request_waiting_list.add(correlation_id, response_callback);
+        request_waiting_list.add(correlation_id, target_address.clone(), response_callback);
 
         let source_address = self.self_address.clone();
         return tokio::spawn(async move {
