@@ -43,6 +43,8 @@ impl Server {
         );
 
         let storage = self.storage.clone();
+        let self_address = self.replica.clone().get_self_address();
+
         let handler = async move {
             let value: Option<Ref<String, String>> = storage.get(&key);
             let response = match value {
@@ -56,17 +58,28 @@ impl Server {
                 Box::new(GetValueByKeyResponseClient {}),
                 correlation_id,
             );
-            AsyncNetwork::send_without_source_footprint(service_request, originating_host_port.unwrap()).await.unwrap();
+            AsyncNetwork::send_with_source_footprint(service_request, self_address, originating_host_port.unwrap()).await.unwrap();
         };
         let _ = &self.replica.add_to_queue(handler);
         return Ok(Response::new(()));
     }
 
     pub(crate) async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
+        let optional_host = get_referral_host_from(&request);
+        let optional_port = get_referral_port_from(&request);
+        if optional_host.is_none() || optional_port.is_none() {
+            return Err(Status::failed_precondition(format!("Missing originating host/port in finish_get")));
+        }
+
+        let originating_host_port = HostAndPort::try_new(
+            optional_host.unwrap(),
+            u16::try_from(optional_port.unwrap()).unwrap(),
+        );
+
         let request = request.into_inner();
         println!("Received a response for key {}", request.key.clone());
 
-        let _ = &self.replica.register_response(request.correlation_id, Ok(Box::new(request)));
+        let _ = &self.replica.register_response(request.correlation_id, originating_host_port.unwrap(), Ok(Box::new(request)));
         return Ok(Response::new(()));
     }
 
@@ -87,6 +100,7 @@ impl Server {
         );
 
         let storage = self.storage.clone();
+        let self_address = self.replica.clone().get_self_address();
         let handler = async move {
             storage.insert(request.key.clone(), request.value.clone());
             let service_request = ServiceRequest::new(
@@ -94,8 +108,9 @@ impl Server {
                 Box::new(PutKeyValueResponseClient {}),
                 correlation_id,
             );
-            AsyncNetwork::send_without_source_footprint(
+            AsyncNetwork::send_with_source_footprint(
                 service_request,
+                self_address,
                 originating_host_port.unwrap(),
             ).await.unwrap();
         };
@@ -104,10 +119,21 @@ impl Server {
     }
 
     pub(crate) async fn finish_put(&self, request: Request<PutKeyValueResponse>) -> Result<Response<()>, Status> {
+        let optional_host = get_referral_host_from(&request);
+        let optional_port = get_referral_port_from(&request);
+        if optional_host.is_none() || optional_port.is_none() {
+            return Err(Status::failed_precondition(format!("Missing originating host/port in finish_put")));
+        }
+
+        let originating_host_port = HostAndPort::try_new(
+            optional_host.unwrap(),
+            u16::try_from(optional_port.unwrap()).unwrap(),
+        );
+
         let request = request.into_inner();
         println!("Received a put response {}", request.was_put);
 
-        let _ = &self.replica.register_response(request.correlation_id, Ok(Box::new(request)));
+        let _ = &self.replica.register_response(request.correlation_id, originating_host_port.unwrap(), Ok(Box::new(request)));
         return Ok(Response::new(()));
     }
 }

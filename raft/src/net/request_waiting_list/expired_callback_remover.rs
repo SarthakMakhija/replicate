@@ -61,6 +61,7 @@ mod tests {
 
         use crate::clock::clock::Clock;
         use crate::net::connect::correlation_id::CorrelationId;
+        use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
         use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
@@ -79,7 +80,7 @@ mod tests {
         }
 
         impl ResponseCallback for RequestTimeoutErrorResponseCallback {
-            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let request_timeout = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
                 let mut guard = self.failed_correlation_id.lock().unwrap();

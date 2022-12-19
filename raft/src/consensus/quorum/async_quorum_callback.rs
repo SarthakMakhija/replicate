@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::consensus::quorum::quorum_completion_handle::{QuorumCompletionHandle, WakerState};
+use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
 pub type SuccessCondition<Response> = Box<dyn Fn(&Response) -> bool + Send + Sync>;
@@ -13,7 +14,7 @@ pub struct AsyncQuorumCallback<Response: Any + Send + Sync + Debug> {
 }
 
 impl<Response: Any + Send + Sync + Debug> ResponseCallback for AsyncQuorumCallback<Response> {
-    fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+    fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
         self.quorum_completion_handle.on_response(response);
     }
 }
@@ -43,11 +44,13 @@ impl<Response: Any + Send + Sync + Debug> AsyncQuorumCallback<Response> {
 #[cfg(test)]
 mod tests {
     use std::borrow::BorrowMut;
+    use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
     use std::time::Duration;
 
     use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
     use crate::consensus::quorum::async_quorum_callback::tests::setup::{GetValueResponse, TestError};
+    use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::request_waiting_list::response_callback::ResponseCallback;
 
     mod setup {
@@ -76,8 +79,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn successful_responses() {
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3);
-        async_quorum_callback.on_response(Ok(Box::new(GetValueResponse { value: "one".to_string() })));
-        async_quorum_callback.on_response(Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+        let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+        async_quorum_callback.on_response(Some(response_from_1), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
+        async_quorum_callback.on_response(Some(response_from_other), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
         let handle = async_quorum_callback.handle();
 
         let completion_response = handle.await;
@@ -96,11 +102,14 @@ mod tests {
         let async_quorum_callback_two = async_quorum_callback_one.clone();
         let async_quorum_callback_three = async_quorum_callback_two.clone();
 
-        async_quorum_callback_one.read().unwrap().on_response(Ok(Box::new(GetValueResponse { value: "one".to_string() })));
+        let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+        async_quorum_callback_one.read().unwrap().on_response(Some(response_from_1), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
 
         let second_response_handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
-            async_quorum_callback_two.read().unwrap().on_response(Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+            async_quorum_callback_two.read().unwrap().on_response(Some(response_from_other), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
         });
         second_response_handle.await.unwrap();
 
@@ -120,9 +129,14 @@ mod tests {
     async fn failed_responses() {
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3);
 
-        async_quorum_callback.on_response(Err(Box::new(TestError { message: "test error one".to_string() })));
-        async_quorum_callback.on_response(Err(Box::new(TestError { message: "test error two".to_string() })));
-        async_quorum_callback.on_response(Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+        let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let response_from_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+        let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+
+        async_quorum_callback.on_response(Some(response_from_1), Err(Box::new(TestError { message: "test error one".to_string() })));
+        async_quorum_callback.on_response(Some(response_from_2), Err(Box::new(TestError { message: "test error two".to_string() })));
+        async_quorum_callback.on_response(Some(response_from_3), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
 
         let handle = async_quorum_callback.handle();
 

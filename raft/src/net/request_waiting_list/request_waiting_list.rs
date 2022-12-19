@@ -5,6 +5,7 @@ use dashmap::DashMap;
 
 use crate::clock::clock::Clock;
 use crate::net::connect::correlation_id::CorrelationId;
+use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
@@ -23,7 +24,6 @@ impl RequestWaitingList {
         clock: Arc<dyn Clock>,
         expire_requests_after: Duration,
         pause_expired_callbacks_remover_every: Duration) -> Self <> {
-
         let pending_requests = Arc::new(DashMap::with_capacity(capacity));
         let request_waiting_list = RequestWaitingList { pending_requests, clock: clock.clone() };
 
@@ -36,11 +36,11 @@ impl RequestWaitingList {
         self.pending_requests.insert(correlation_id, timestamped_callback);
     }
 
-    pub fn handle_response(&self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
+    pub fn handle_response(&self, correlation_id: CorrelationId, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
         let key_value_existence = self.pending_requests.remove(&correlation_id);
         if let Some(callback_by_key) = key_value_existence {
             let timestamped_callback = callback_by_key.1;
-            timestamped_callback.on_response(response);
+            timestamped_callback.on_response(from, response);
         }
     }
 
@@ -57,6 +57,7 @@ impl RequestWaitingList {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
     use std::thread;
 
@@ -88,6 +89,7 @@ mod tests {
         use std::collections::HashMap;
         use std::sync::RwLock;
 
+        use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
         use crate::net::request_waiting_list::request_waiting_list::tests::setup_error::TestError;
         use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
@@ -105,14 +107,14 @@ mod tests {
         }
 
         impl ResponseCallback for SuccessResponseCallback {
-            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
                 let value = *response.unwrap().downcast().unwrap();
                 self.response.write().unwrap().insert(String::from("Response"), value);
             }
         }
 
         impl ResponseCallback for ErrorResponseCallback {
-            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let actual_error = response_error_type.downcast_ref::<TestError>().unwrap();
                 self.error_response.write().unwrap().insert(String::from("Response"), actual_error.message.to_string());
@@ -120,7 +122,7 @@ mod tests {
         }
 
         impl ResponseCallback for RequestTimeoutErrorResponseCallback {
-            fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let _ = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
                 self.error_response.write().unwrap().insert(String::from("Response"), "timeout".to_string());
@@ -140,9 +142,10 @@ mod tests {
 
         let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = success_response_callback.clone();
+        let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
         request_waiting_list.add(correlation_id, success_response_callback);
-        request_waiting_list.handle_response(correlation_id, Ok(Box::new("success response".to_string())));
+        request_waiting_list.handle_response(correlation_id, from,Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -161,9 +164,10 @@ mod tests {
 
         let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = success_response_callback.clone();
+        let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
         request_waiting_list.add(correlation_id, success_response_callback);
-        request_waiting_list.handle_response(correlation_id, Ok(Box::new("success response".to_string())));
+        request_waiting_list.handle_response(correlation_id, from,Ok(Box::new("success response".to_string())));
 
         let readable_response = cloned_response_callback.response.read().unwrap();
         assert_eq!("success response", readable_response.get("Response").unwrap());
@@ -181,9 +185,10 @@ mod tests {
 
         let error_response_callback = Arc::new(ErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
         let cloned_response_callback = error_response_callback.clone();
+        let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
         request_waiting_list.add(correlation_id, error_response_callback);
-        request_waiting_list.handle_response(correlation_id, Err(Box::new(TestError { message: "test error".to_string() })));
+        request_waiting_list.handle_response(correlation_id, from,Err(Box::new(TestError { message: "test error".to_string() })));
 
         let readable_response = cloned_response_callback.error_response.read().unwrap();
         assert_eq!("test error", readable_response.get("Response").unwrap());

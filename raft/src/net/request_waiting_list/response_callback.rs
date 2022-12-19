@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::clock::clock::Clock;
 use crate::net::connect::correlation_id::CorrelationId;
+use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
 
 pub(crate) type ResponseErrorType = Box<dyn Error + Send + Sync>;
@@ -14,7 +15,7 @@ pub(crate) type ResponseCallbackType = Arc<dyn ResponseCallback + 'static>;
 pub(crate) type AnyResponse = Box<dyn Any>;
 
 pub trait ResponseCallback: Send + Sync {
-    fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>);
+    fn on_response(&self, from: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>);
 }
 
 pub(crate) struct TimestampedCallback {
@@ -30,12 +31,12 @@ impl TimestampedCallback {
         };
     }
 
-    pub(crate) fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
-        self.callback.on_response(response);
+    pub(crate) fn on_response(&self, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
+        self.callback.on_response(Some(from), response);
     }
 
     pub(crate) fn on_timeout_response(&self, correlation_id: &CorrelationId) {
-        self.callback.on_response(Err(Box::new(RequestTimeoutError {
+        self.callback.on_response(None, Err(Box::new(RequestTimeoutError {
             correlation_id: *correlation_id
         })));
     }
@@ -59,6 +60,7 @@ mod tests {
         use std::time::{Duration, SystemTime};
 
         use crate::clock::clock::Clock;
+        use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
         pub struct FutureClock {
@@ -74,7 +76,7 @@ mod tests {
         }
 
         impl ResponseCallback for NothingCallback {
-            fn on_response(&self, _: Result<AnyResponse, ResponseErrorType>) {}
+            fn on_response(&self, _: Option<HostAndPort>, _: Result<AnyResponse, ResponseErrorType>) {}
         }
     }
 

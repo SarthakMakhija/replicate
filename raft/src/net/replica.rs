@@ -46,7 +46,7 @@ impl Replica {
                                                                       service_request_constructor: S,
                                                                       response_callback: ResponseCallbackType) -> TotalFailedSends
         where S: Fn() -> ServiceRequest<Payload, ()> {
-        let mut send_task_handles: Vec<JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)>> = Vec::new();
+        let mut send_task_handles = Vec::new();
         for peer_address in &self.peer_addresses {
             if peer_address.eq(&self.self_address) {
                 continue;
@@ -63,9 +63,9 @@ impl Replica {
 
         let mut total_failed_sends: TotalFailedSends = 0;
         for task_handle in send_task_handles {
-            let response: (Result<(), ServiceResponseError>, CorrelationId) = task_handle.await.unwrap();
-            if response.0.is_err() {
-                let _ = &self.request_waiting_list.handle_response(response.1, Err(response.0.unwrap_err()));
+            let (result, correlation_id, address) = task_handle.await.unwrap();
+            if result.is_err() {
+                let _ = &self.request_waiting_list.handle_response(correlation_id, address, Err(result.unwrap_err()));
                 total_failed_sends = total_failed_sends + 1;
             }
         }
@@ -80,8 +80,8 @@ impl Replica {
         singular_update_queue.submit(handler);
     }
 
-    pub fn register_response(&self, correlation_id: CorrelationId, response: Result<AnyResponse, ResponseErrorType>) {
-        let _ = &self.request_waiting_list.handle_response(correlation_id, response);
+    pub fn register_response(&self, correlation_id: CorrelationId, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
+        let _ = &self.request_waiting_list.handle_response(correlation_id, from, response);
     }
 
     pub fn total_peer_count(&self) -> usize {
@@ -97,14 +97,14 @@ impl Replica {
                                                 request_waiting_list: &RequestWaitingList,
                                                 service_request: ServiceRequest<Payload, ()>,
                                                 target_address: HostAndPort,
-                                                response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId)> {
+                                                response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId, HostAndPort)> {
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, response_callback);
 
         let source_address = self.self_address.clone();
         return tokio::spawn(async move {
-            let result = AsyncNetwork::send_with_source_footprint(service_request, source_address, target_address).await;
-            return (result, correlation_id);
+            let result = AsyncNetwork::send_with_source_footprint(service_request, source_address, target_address.clone()).await;
+            return (result, correlation_id, target_address);
         });
     }
 }
@@ -313,8 +313,10 @@ mod tests {
 
         assert_eq!(0, total_failed_sends);
 
+        let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port);
         let _ = replica.register_response(
             correlation_id_generator.generate(),
+            from,
             Ok(Box::new(GetValueResponse { value: "ok".to_string() })),
         );
 
