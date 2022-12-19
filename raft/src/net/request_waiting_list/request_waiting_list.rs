@@ -107,14 +107,14 @@ mod tests {
         }
 
         impl ResponseCallback for SuccessResponseCallback {
-            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
                 let value = *response.unwrap().downcast().unwrap();
                 self.response.write().unwrap().insert(String::from("Response"), value);
             }
         }
 
         impl ResponseCallback for ErrorResponseCallback {
-            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let actual_error = response_error_type.downcast_ref::<TestError>().unwrap();
                 self.error_response.write().unwrap().insert(String::from("Response"), actual_error.message.to_string());
@@ -122,7 +122,7 @@ mod tests {
         }
 
         impl ResponseCallback for RequestTimeoutErrorResponseCallback {
-            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let _ = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
                 self.error_response.write().unwrap().insert(String::from("Response"), "timeout".to_string());

@@ -15,7 +15,7 @@ pub(crate) type ResponseCallbackType = Arc<dyn ResponseCallback + 'static>;
 pub(crate) type AnyResponse = Box<dyn Any>;
 
 pub trait ResponseCallback: Send + Sync {
-    fn on_response(&self, from: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>);
+    fn on_response(&self, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>);
 }
 
 pub(crate) struct TimestampedCallback {
@@ -34,11 +34,11 @@ impl TimestampedCallback {
     }
 
     pub(crate) fn on_response(&self, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
-        self.callback.on_response(Some(from), response);
+        self.callback.on_response(from, response);
     }
 
     pub(crate) fn on_timeout_response(&self, correlation_id: &CorrelationId) {
-        self.callback.on_response(None, Err(Box::new(RequestTimeoutError {
+        self.callback.on_response(self.target_address, Err(Box::new(RequestTimeoutError {
             correlation_id: *correlation_id
         })));
     }
@@ -80,7 +80,7 @@ mod tests {
         }
 
         impl ResponseCallback for NothingCallback {
-            fn on_response(&self, _: Option<HostAndPort>, _: Result<AnyResponse, ResponseErrorType>) {}
+            fn on_response(&self, _: HostAndPort, _: Result<AnyResponse, ResponseErrorType>) {}
         }
     }
 

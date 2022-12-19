@@ -82,7 +82,7 @@ mod tests {
         }
 
         impl ResponseCallback for RequestTimeoutErrorResponseCallback {
-            fn on_response(&self, _: Option<HostAndPort>, response: Result<AnyResponse, ResponseErrorType>) {
+            fn on_response(&self, _: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
                 let response_error_type = response.unwrap_err();
                 let request_timeout = response_error_type.downcast_ref::<RequestTimeoutError>().unwrap();
                 let mut guard = self.failed_correlation_id.lock().unwrap();
