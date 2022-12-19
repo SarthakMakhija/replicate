@@ -14,8 +14,8 @@ pub struct AsyncQuorumCallback<Response: Any + Send + Sync + Debug> {
 }
 
 impl<Response: Any + Send + Sync + Debug> ResponseCallback for AsyncQuorumCallback<Response> {
-    fn on_response(&self, _: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
-        self.quorum_completion_handle.on_response(response);
+    fn on_response(&self, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
+        self.quorum_completion_handle.on_response(from, response);
     }
 }
 

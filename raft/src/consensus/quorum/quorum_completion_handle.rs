@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use std::task::{Context, Poll, Waker};
 use crate::consensus::quorum::async_quorum_callback::SuccessCondition;
 use crate::consensus::quorum::quorum_completion_response::QuorumCompletionResponse;
+use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseErrorType};
 
 pub struct  QuorumCompletionHandle<Response: Any + Send + Sync + Debug> {
@@ -21,7 +22,7 @@ pub(crate) struct WakerState {
 }
 
 impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
-    pub(crate) fn on_response(&self, response: Result<AnyResponse, ResponseErrorType>) {
+    pub(crate) fn on_response(&self, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
         match response {
             Ok(any_response) => {
                 let optional_response: Option<Box<Response>> = any_response.downcast::<Response>().ok();
