@@ -46,7 +46,7 @@ impl Client {
             .await;
 
         let completion_response = async_quorum_callback.handle().await;
-        let response = completion_response.success_responses().unwrap().as_slice().get(0).unwrap();
+        let response = completion_response.success_responses().unwrap().values().next().unwrap();
         return Ok(Response::new(
             GetValueByKeyResponse {
                 key: response.key.clone(),
@@ -80,8 +80,13 @@ impl Client {
             .await;
 
         let completion_response = async_quorum_callback.handle().await;
-        let response = completion_response.success_responses().unwrap().as_slice().get(0).unwrap();
-        return Ok(Response::new(PutKeyValueResponse { was_put: response.was_put, correlation_id: response.correlation_id }));
+        let response = completion_response.success_responses().unwrap().values().next().unwrap();
+        return Ok(Response::new(
+            PutKeyValueResponse {
+                was_put: response.was_put,
+                correlation_id: response.correlation_id
+            })
+        );
     }
 }
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr};
@@ -32,17 +33,18 @@ async fn handle_single_response_type() {
         return get_async_quorum_callback.handle().await;
     });
 
-    request_waiting_list.handle_response(10, response_from_1, Ok(Box::new(GetValueResponse { value: "one".to_string() })));
-    request_waiting_list.handle_response(20, response_from_other, Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+    request_waiting_list.handle_response(10, response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
+    request_waiting_list.handle_response(20, response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
 
     let get_response = get_handle.await.unwrap();
     let all_gets = get_response.success_responses().unwrap();
 
+    let mut expected = HashMap::new();
+    expected.insert(response_from_1, GetValueResponse { value: "one".to_string() });
+    expected.insert(response_from_other, GetValueResponse { value: "two".to_string() });
+
     assert_eq!(2, get_response.response_len());
-    assert_eq!(&vec![GetValueResponse { value: "two".to_string() },
-                     GetValueResponse { value: "one".to_string() }],
-               all_gets
-    );
+    assert_eq!(&expected, all_gets);
 }
 
 
@@ -84,26 +86,28 @@ async fn handle_multiple_response_types() {
     request_waiting_list.handle_response(10, response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
     request_waiting_list.handle_response(20, response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
 
-    request_waiting_list.handle_response(30, response_from_1, Ok(Box::new(SetValueResponse { key: "key1".to_string(), value: "value1".to_string() })));
-    request_waiting_list.handle_response(40, response_from_other, Ok(Box::new(SetValueResponse { key: "key2".to_string(), value: "value2".to_string() })));
+    request_waiting_list.handle_response(30, response_from_1.clone(), Ok(Box::new(SetValueResponse { key: "key1".to_string(), value: "value1".to_string() })));
+    request_waiting_list.handle_response(40, response_from_other.clone(), Ok(Box::new(SetValueResponse { key: "key2".to_string(), value: "value2".to_string() })));
 
     let get_response = get_handle.await.unwrap();
     let all_gets = get_response.success_responses().unwrap();
 
+    let mut expected = HashMap::new();
+    expected.insert(response_from_1.clone(), GetValueResponse { value: "one".to_string() });
+    expected.insert(response_from_other.clone(), GetValueResponse { value: "two".to_string() });
+
     assert_eq!(2, get_response.response_len());
-    assert_eq!(&vec![GetValueResponse { value: "two".to_string() },
-                     GetValueResponse { value: "one".to_string() }],
-               all_gets
-    );
+    assert_eq!(&expected, all_gets);
 
     let set_response = set_handle.await.unwrap();
     let all_sets = set_response.success_responses().unwrap();
 
+    let mut expected = HashMap::new();
+    expected.insert(response_from_1, SetValueResponse { key: "key1".to_string(), value: "value1".to_string() });
+    expected.insert(response_from_other, SetValueResponse { key: "key2".to_string(), value: "value2".to_string() });
+
     assert_eq!(2, set_response.response_len());
-    assert_eq!(&vec![SetValueResponse { key: "key2".to_string(), value: "value2".to_string() },
-                     SetValueResponse { key: "key1".to_string(), value: "value1".to_string() }],
-               all_sets
-    );
+    assert_eq!(&expected, all_sets);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -129,7 +133,6 @@ async fn handle_multiple_response_types_with_error() {
         return get_async_quorum_callback.handle().await;
     });
 
-
     let set_async_quorum_callback = AsyncQuorumCallback::<SetValueResponse>::new(2);
     let set_async_quorum_callback_clone1 = set_async_quorum_callback.clone();
     let set_async_quorum_callback_clone2 = set_async_quorum_callback.clone();
@@ -144,23 +147,24 @@ async fn handle_multiple_response_types_with_error() {
     request_waiting_list.handle_response(10, response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
     request_waiting_list.handle_response(20, response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
 
-    request_waiting_list.handle_response(30, response_from_1, Ok(Box::new(SetValueResponse { key: "key1".to_string(), value: "value1".to_string() })));
-    request_waiting_list.handle_response(40, response_from_other, Err(Box::new(TestError{message: "Test error".to_string()})));
+    request_waiting_list.handle_response(30, response_from_1.clone(), Ok(Box::new(SetValueResponse { key: "key1".to_string(), value: "value1".to_string() })));
+    request_waiting_list.handle_response(40, response_from_other.clone(), Err(Box::new(TestError{message: "Test error".to_string()})));
 
     let get_response = get_handle.await.unwrap();
     let all_gets = get_response.success_responses().unwrap();
 
+    let mut expected = HashMap::new();
+    expected.insert(response_from_1, GetValueResponse { value: "one".to_string() });
+    expected.insert(response_from_other, GetValueResponse { value: "two".to_string() });
+
     assert_eq!(2, get_response.response_len());
-    assert_eq!(&vec![GetValueResponse { value: "two".to_string() },
-                     GetValueResponse { value: "one".to_string() }],
-               all_gets
-    );
+    assert_eq!(&expected, all_gets);
 
     let set_response = set_handle.await.unwrap();
     assert_eq!(1, set_response.response_len());
 
     let error_responses = set_response.error_responses().unwrap();
-    let test_error = error_responses.as_slice().get(0).unwrap().downcast_ref::<TestError>().unwrap();
+    let test_error = error_responses.get(&response_from_other).unwrap().downcast_ref::<TestError>().unwrap();
     assert_eq!("Test error", test_error.message);
 }
 

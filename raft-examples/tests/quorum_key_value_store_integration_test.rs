@@ -57,16 +57,9 @@ fn put_key_value() {
     let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6541);
     let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6542);
 
-    let replica = Replica::new(
-        String::from("mark"),
-        self_host_and_port.clone(),
-        vec![peer_one.clone(), peer_other.clone()],
-        Arc::new(SystemClock::new()),
-    );
-    let replica = Arc::new(replica);
-    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), replica.clone());
-    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), replica.clone());
-    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), replica.clone());
+    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
 
     let_services_start();
 
@@ -93,50 +86,50 @@ fn put_key_value() {
 }
 
 #[test]
-fn get_value_by_a_non_existent_key() {
+fn get_value_for_non_existing_key() {
     let runtime = Builder::new_multi_thread()
-        .thread_name("get_value_by_key".to_string())
+        .thread_name("get_key_value".to_string())
         .worker_threads(2)
         .enable_all()
         .build()
         .unwrap();
 
-    let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090);
-    let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9091);
-    let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9092);
+    let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6550);
+    let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6551);
+    let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6552);
 
-    let replica = Replica::new(
-        String::from("neptune"),
-        self_host_and_port.clone(),
-        vec![peer_one.clone(), peer_other.clone()],
-        Arc::new(SystemClock::new()),
-    );
-    let replica = Arc::new(replica);
-    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), replica.clone());
-    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), replica.clone());
-    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), replica.clone());
+    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
 
     let_services_start();
 
-    let key = "non-existing-key".to_string();
-    let handle = send_get_request(self_host_and_port, &runtime, key);
-    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let key = "non-existing".to_string();
+    let get_handle = send_get_request(self_host_and_port, &runtime, key);
 
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
-        let response: GetValueByKeyResponse = handle.await.unwrap().unwrap();
+        let response: GetValueByKeyResponse = get_handle.await.unwrap().unwrap();
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();
         all_services_shutdown_handle_three.shutdown().await.unwrap();
 
-        assert_eq!("non-existing-key".to_string(), response.key.clone());
+        assert_eq!("non-existing".to_string(), response.key.clone());
         assert_eq!("".to_string(), response.value.clone());
     });
 }
 
-fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, replica: Arc<Replica>) -> AllServicesShutdownHandle {
+fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStoreService::new(replica);
+    let replica = Replica::new(
+        String::from("mark"),
+        self_host_and_port.clone(),
+        peers,
+        Arc::new(SystemClock::new()),
+    );
+
+    let store = QuorumKeyValueStoreService::new(Arc::new(replica));
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
@@ -147,12 +140,19 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, replica: Arc<Re
     all_services_shutdown_handle
 }
 
-fn spin_peer(runtime: &Runtime, peer_one: HostAndPort, replica: Arc<Replica>) -> AllServicesShutdownHandle {
+fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStoreService::new(replica);
+    let replica = Replica::new(
+        String::from("mark"),
+        self_host_and_port.clone(),
+        peers,
+        Arc::new(SystemClock::new()),
+    );
+
+    let store = QuorumKeyValueStoreService::new(Arc::new(replica));
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
-            &peer_one,
+            &self_host_and_port,
             QuorumKeyValueServer::new(store),
             all_services_shutdown_receiver,
         ).await;
@@ -160,14 +160,20 @@ fn spin_peer(runtime: &Runtime, peer_one: HostAndPort, replica: Arc<Replica>) ->
     all_services_shutdown_handle
 }
 
-fn spin_other_peer(runtime: &Runtime, peer_other: HostAndPort, replica: Arc<Replica>) -> AllServicesShutdownHandle {
+fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
-    let store = QuorumKeyValueStoreService::new(replica);
-    let service = QuorumKeyValueServer::new(store);
+    let replica = Replica::new(
+        String::from("mark"),
+        self_host_and_port.clone(),
+        peers,
+        Arc::new(SystemClock::new()),
+    );
+
+    let store = QuorumKeyValueStoreService::new(Arc::new(replica));
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
-            &peer_other,
-            service,
+            &self_host_and_port,
+            QuorumKeyValueServer::new(store),
             all_services_shutdown_receiver,
         ).await;
     });

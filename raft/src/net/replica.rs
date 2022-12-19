@@ -317,12 +317,12 @@ mod tests {
         let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port);
         let _ = replica.register_response(
             correlation_id_generator.generate(),
-            from,
-            Ok(Box::new(GetValueResponse { value: "ok".to_string() })),
+            from.clone(),
+            Ok(Box::new(GetValueResponse { value: "some value".to_string() })),
         );
 
         let quorum_completion_response = async_quorum_callback.handle().await;
-        assert_eq!("ok".to_string(), quorum_completion_response.success_responses().unwrap().get(0).unwrap().value);
+        assert_eq!("some value".to_string(), quorum_completion_response.success_responses().unwrap().get(&from).unwrap().value);
 
         replica.singular_update_queue.shutdown();
     }

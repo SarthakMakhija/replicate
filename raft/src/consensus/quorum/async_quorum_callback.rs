@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -27,7 +28,8 @@ impl<Response: Any + Send + Sync + Debug> AsyncQuorumCallback<Response> {
     pub fn new_with_success_condition<>(expected_total_responses: usize, success_condition: SuccessCondition<Response>) -> Arc<AsyncQuorumCallback<Response>> {
         return Arc::new(AsyncQuorumCallback {
             quorum_completion_handle: QuorumCompletionHandle {
-                responses: RwLock::new(Vec::with_capacity(expected_total_responses)),
+                success_responses: RwLock::new(HashMap::new()),
+                error_responses: RwLock::new(HashMap::new()),
                 expected_total_responses,
                 majority_quorum: expected_total_responses / 2 + 1,
                 success_condition,
@@ -44,6 +46,7 @@ impl<Response: Any + Send + Sync + Debug> AsyncQuorumCallback<Response> {
 #[cfg(test)]
 mod tests {
     use std::borrow::BorrowMut;
+    use std::collections::HashMap;
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
     use std::time::Duration;
@@ -82,17 +85,18 @@ mod tests {
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
-        async_quorum_callback.on_response(response_from_1, Ok(Box::new(GetValueResponse { value: "one".to_string() })));
-        async_quorum_callback.on_response(response_from_other, Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+        async_quorum_callback.on_response(response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
+        async_quorum_callback.on_response(response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
         let handle = async_quorum_callback.handle();
 
         let completion_response = handle.await;
 
+        let mut expected = HashMap::new();
+        expected.insert(response_from_1, GetValueResponse { value: "one".to_string() });
+        expected.insert(response_from_other, GetValueResponse { value: "two".to_string() });
+
         assert_eq!(2, completion_response.response_len());
-        assert_eq!(&vec![GetValueResponse { value: "two".to_string() },
-                         GetValueResponse { value: "one".to_string() }],
-                   completion_response.success_responses().unwrap()
-        );
+        assert_eq!(&expected, completion_response.success_responses().unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -105,11 +109,11 @@ mod tests {
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
-        async_quorum_callback_one.read().unwrap().on_response(response_from_1, Ok(Box::new(GetValueResponse { value: "one".to_string() })));
+        async_quorum_callback_one.read().unwrap().on_response(response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
 
         let second_response_handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
-            async_quorum_callback_two.read().unwrap().on_response(response_from_other, Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+            async_quorum_callback_two.read().unwrap().on_response(response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
         });
         second_response_handle.await.unwrap();
 
@@ -118,11 +122,12 @@ mod tests {
 
         let completion_response = handle.await;
 
+        let mut expected = HashMap::new();
+        expected.insert(response_from_1, GetValueResponse { value: "one".to_string() });
+        expected.insert(response_from_other, GetValueResponse { value: "two".to_string() });
+
         assert_eq!(2, completion_response.response_len());
-        assert_eq!(&vec![GetValueResponse { value: "two".to_string() },
-                         GetValueResponse { value: "one".to_string() }],
-                   completion_response.success_responses().unwrap()
-        );
+        assert_eq!(&expected, completion_response.success_responses().unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -133,10 +138,9 @@ mod tests {
         let response_from_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
         let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
-
-        async_quorum_callback.on_response(response_from_1, Err(Box::new(TestError { message: "test error one".to_string() })));
-        async_quorum_callback.on_response(response_from_2, Err(Box::new(TestError { message: "test error two".to_string() })));
-        async_quorum_callback.on_response(response_from_3, Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+        async_quorum_callback.on_response(response_from_1.clone(), Err(Box::new(TestError { message: "test error one".to_string() })));
+        async_quorum_callback.on_response(response_from_2.clone(), Err(Box::new(TestError { message: "test error two".to_string() })));
+        async_quorum_callback.on_response(response_from_3.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
 
         let handle = async_quorum_callback.handle();
 
@@ -144,10 +148,10 @@ mod tests {
 
         assert_eq!(2, completion_response.response_len());
         let error_responses = completion_response.error_responses().unwrap();
-        let test_error_one = error_responses.as_slice().get(0).unwrap().downcast_ref::<TestError>().unwrap();
-        assert_eq!("test error two", test_error_one.message);
+        let test_error_one = error_responses.get(&response_from_1).unwrap().downcast_ref::<TestError>().unwrap();
+        assert_eq!("test error one", test_error_one.message);
 
-        let test_error_two = error_responses.as_slice().get(1).unwrap().downcast_ref::<TestError>().unwrap();
-        assert_eq!("test error one", test_error_two.message);
+        let test_error_two = error_responses.get(&response_from_2).unwrap().downcast_ref::<TestError>().unwrap();
+        assert_eq!("test error two", test_error_two.message);
     }
 }
