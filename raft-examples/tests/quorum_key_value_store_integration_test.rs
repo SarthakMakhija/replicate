@@ -72,16 +72,16 @@ fn put_key_value() {
 
     let key = "HDD".to_string();
     let value = "Hard disk".to_string();
-    let handle = send_put_request(self_host_and_port, &runtime, key, value);
+    let put_handle = send_put_request(self_host_and_port, &runtime, key, value);
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
     blocking_runtime.block_on(async move {
-        handle.await.unwrap().unwrap();
+        put_handle.await.unwrap().unwrap();
     });
 
-    let handle = send_get_request(self_host_and_port, &runtime, "HDD".to_string());
+    let get_handle = send_get_request(self_host_and_port, &runtime, "HDD".to_string());
     blocking_runtime.block_on(async move {
-        let response: GetValueByKeyResponse = handle.await.unwrap().unwrap();
+        let response: GetValueByKeyResponse = get_handle.await.unwrap().unwrap();
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();
