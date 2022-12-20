@@ -4,12 +4,9 @@ use tonic::{Request, Response, Status};
 
 use raft::clock::clock::{Clock, SystemClock};
 use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-use raft::net::connect::correlation_id::CorrelationIdGenerator;
-use raft::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
-use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
-use crate::quorum::client_provider::{CorrelatingGetValueByKeyRequestClient, VersionedPutKeyValueRequestClient};
+use crate::quorum::factory::ServiceRequestFactory;
 use crate::quorum::read_repair::ReadRepair;
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyRequest;
@@ -33,17 +30,8 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
     async fn get_by(&self, request: Request<GetValueByKeyRequest>) -> Result<Response<GetValueByKeyResponse>, Status> {
         let request = request.into_inner();
         println!("received a get request by the client for key {}", request.key.clone());
-        let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
-            let correlation_id = correlation_id_generator.generate();
-            ServiceRequest::new(
-                CorrelatingGetValueByKeyRequest {
-                    key: request.key.clone(),
-                    correlation_id,
-                },
-                Box::new(CorrelatingGetValueByKeyRequestClient {}),
-                correlation_id,
-            )
+            ServiceRequestFactory::correlating_get_value_by_key_request(request.key.clone())
         };
 
         let expected_responses = self.replica.total_peer_count();
@@ -63,18 +51,11 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
     async fn put(&self, request: Request<PutKeyValueRequest>) -> Result<Response<PutKeyValueResponse>, Status> {
         let request = request.into_inner();
         println!("received a put request by the client for key {}", request.key.clone());
-        let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
-            let correlation_id = correlation_id_generator.generate();
-            ServiceRequest::new(
-                VersionedPutKeyValueRequest {
-                    key: request.key.clone(),
-                    value: request.value.clone(),
-                    timestamp: self.clock.now_seconds(),
-                    correlation_id,
-                },
-                Box::new(VersionedPutKeyValueRequestClient {}),
-                correlation_id,
+            ServiceRequestFactory::versioned_put_key_value_request(
+                self.clock.now_seconds(),
+                request.key.clone(),
+                request.value.clone()
             )
         };
 

@@ -2,16 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-use raft::net::connect::correlation_id::CorrelationIdGenerator;
 use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
-use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
-use crate::quorum::client_provider::VersionedPutKeyValueRequestClient;
+use crate::quorum::factory::ServiceRequestFactory;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;
-use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
 
 pub(crate) struct ReadRepair<'a> {
     replica: Arc<Replica>,
@@ -55,18 +51,11 @@ impl<'a> ReadRepair<'a> {
         }
 
         println!("hosts_with_stale_values those needing read_repair {:?}", hosts_with_stale_values);
-        let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
-            let correlation_id = correlation_id_generator.generate();
-            ServiceRequest::new(
-                VersionedPutKeyValueRequest {
-                    key: latest_value.key.clone(),
-                    value: latest_value.value.clone(),
-                    timestamp: latest_value.timestamp,
-                    correlation_id,
-                },
-                Box::new(VersionedPutKeyValueRequestClient {}),
-                correlation_id,
+            ServiceRequestFactory::versioned_put_key_value_request(
+                latest_value.timestamp,
+                latest_value.key.clone(),
+                latest_value.value.clone(),
             )
         };
         let expected_responses = hosts_with_stale_values.len();
