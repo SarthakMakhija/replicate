@@ -36,38 +36,45 @@ impl Error for HostAndPortConstructionError {
     }
 }
 
-pub fn try_referral_host_port_from<Payload>(request: &Request<Payload>) -> Result<HostAndPort, HostAndPortConstructionError> {
-    let optional_host = get_referral_host_from(&request);
-    let optional_port = get_referral_port_from(&request);
-    if optional_host.is_none() || optional_port.is_none() {
-        return Err(HostAndPortConstructionError::MissingHortOrPort);
-    }
+pub trait HostAndPortExtractor {
+    fn try_referral_host_port(&self) -> Result<HostAndPort, HostAndPortConstructionError> {
+        let optional_host = self.get_referral_host();
+        let optional_port = self.get_referral_port();
+        if optional_host.is_none() || optional_port.is_none() {
+            return Err(HostAndPortConstructionError::MissingHortOrPort);
+        }
 
-    let host = optional_host.unwrap();
-    return match HostAndPort::try_new(&host, u16::try_from(optional_port.unwrap()).unwrap()) {
-        Ok(host_and_port) => Ok(host_and_port),
-        Err(err) => Err(HostAndPortConstructionError::InvalidHost(err, host))
-    };
+        let host = optional_host.unwrap();
+        return match HostAndPort::try_new(&host, u16::try_from(optional_port.unwrap()).unwrap()) {
+            Ok(host_and_port) => Ok(host_and_port),
+            Err(err) => Err(HostAndPortConstructionError::InvalidHost(err, host))
+        };
+    }
+    fn get_referral_host(&self) -> Option<String>;
+    fn get_referral_port(&self) -> Option<u16>;
 }
 
-pub fn get_referral_host_from<Payload>(request: &Request<Payload>) -> Option<String> {
-    let headers = request.metadata();
-    let optional_host = headers.get(REFERRAL_HOST);
-    if let Some(host) = optional_host {
-        return Some(String::from(host.to_str().unwrap()));
+impl<Payload> HostAndPortExtractor for Request<Payload> {
+    fn get_referral_host(&self) -> Option<String> {
+        let headers = self.metadata();
+        let optional_host = headers.get(REFERRAL_HOST);
+        if let Some(host) = optional_host {
+            return Some(String::from(host.to_str().unwrap()));
+        }
+        return None;
     }
-    return None;
+
+    fn get_referral_port(&self) -> Option<u16> {
+        let headers = self.metadata();
+        let optional_port = headers.get(REFERRAL_PORT);
+        if let Some(port) = optional_port {
+            let result = FromStr::from_str(port.to_str().unwrap());
+            return Some(result.unwrap());
+        }
+        return None;
+    }
 }
 
-pub fn get_referral_port_from<Payload>(request: &Request<Payload>) -> Option<u16> {
-    let headers = request.metadata();
-    let optional_port = headers.get(REFERRAL_PORT);
-    if let Some(port) = optional_port {
-        let result = FromStr::from_str(port.to_str().unwrap());
-        return Some(result.unwrap());
-    }
-    return None;
-}
 
 #[cfg(test)]
 mod tests {
@@ -75,7 +82,7 @@ mod tests {
     use tonic::metadata::MetadataValue;
     use tonic::Request;
 
-    use crate::net::connect::headers::{get_referral_host_from, get_referral_port_from, HostAndPortConstructionError, REFERRAL_HOST, REFERRAL_PORT, try_referral_host_port_from};
+    use crate::net::connect::host_port_extractor::{HostAndPortConstructionError, HostAndPortExtractor, REFERRAL_HOST, REFERRAL_PORT};
     use crate::net::connect::host_and_port::HostAndPort;
 
     #[test]
@@ -85,7 +92,7 @@ mod tests {
         headers.insert(REFERRAL_HOST, "192.168.0.1".parse().unwrap());
         headers.insert(REFERRAL_PORT, "9888".parse().unwrap());
 
-        let host_and_port = try_referral_host_port_from(&request).unwrap();
+        let host_and_port = request.try_referral_host_port().unwrap();
         let expected = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1)), 9888);
 
         assert_eq!(expected, host_and_port)
@@ -97,7 +104,7 @@ mod tests {
         let headers = request.metadata_mut();
         headers.insert(REFERRAL_PORT, "9888".parse().unwrap());
 
-        let host_and_port = try_referral_host_port_from(&request);
+        let host_and_port = request.try_referral_host_port();
 
         assert!(host_and_port.is_err());
         assert!(matches!(host_and_port, Err(HostAndPortConstructionError::MissingHortOrPort)));
@@ -109,7 +116,7 @@ mod tests {
         let headers = request.metadata_mut();
         headers.insert(REFERRAL_HOST, "192.168.0.1".parse().unwrap());
 
-        let host_and_port = try_referral_host_port_from(&request);
+        let host_and_port = request.try_referral_host_port();
 
         assert!(host_and_port.is_err());
         assert!(matches!(host_and_port, Err(HostAndPortConstructionError::MissingHortOrPort)));
@@ -122,7 +129,7 @@ mod tests {
         headers.insert(REFERRAL_HOST, "invalid_host".parse().unwrap());
         headers.insert(REFERRAL_PORT, "9888".parse().unwrap());
 
-        let host_and_port = try_referral_host_port_from(&request);
+        let host_and_port = request.try_referral_host_port();
 
         assert!(host_and_port.is_err());
         assert!(matches!(host_and_port, Err(HostAndPortConstructionError::InvalidHost(_, _))));
@@ -134,7 +141,7 @@ mod tests {
         let headers = request.metadata_mut();
         headers.insert(REFERRAL_HOST, "192.168.0.1".parse().unwrap());
 
-        let host = get_referral_host_from(&request).unwrap();
+        let host = request.get_referral_host().unwrap();
         assert_eq!("192.168.0.1".to_string(), host);
     }
 
@@ -142,7 +149,7 @@ mod tests {
     fn get_non_existent_host() {
         let request = Request::new(());
 
-        let host = get_referral_host_from(&request);
+        let host = request.get_referral_host();
         assert_eq!(None, host);
     }
 
@@ -152,7 +159,7 @@ mod tests {
         let headers = request.metadata_mut();
         headers.insert(REFERRAL_PORT, MetadataValue::from(8912));
 
-        let port = get_referral_port_from(&request).unwrap();
+        let port = request.get_referral_port().unwrap();
         assert_eq!(8912, port);
     }
 
@@ -160,7 +167,7 @@ mod tests {
     fn get_non_existent_port() {
         let request = Request::new(());
 
-        let port = get_referral_port_from(&request);
+        let port = request.get_referral_port();
         assert_eq!(None, port);
     }
 }

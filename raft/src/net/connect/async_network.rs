@@ -1,7 +1,7 @@
 use tonic::metadata::MetadataValue;
 use tonic::Request;
 
-use crate::net::connect::headers::{REFERRAL_HOST, REFERRAL_PORT};
+use crate::net::connect::host_port_extractor::{REFERRAL_HOST, REFERRAL_PORT};
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
 
@@ -80,7 +80,7 @@ mod tests {
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
-        use crate::net::connect::headers::{get_referral_host_from, get_referral_port_from};
+        use crate::net::connect::host_port_extractor::HostAndPortExtractor;
         use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
 
@@ -123,8 +123,8 @@ mod tests {
         impl<'a> ServiceClientProvider<TestRequest, ResponseWithSourceFootprint> for FootprintTestClient {
             async fn call(&self, request: Request<TestRequest>, _: HostAndPort) -> Result<Response<ResponseWithSourceFootprint>, ServiceResponseError> {
                 let response = ResponseWithSourceFootprint {
-                    host: get_referral_host_from(&request),
-                    port: get_referral_port_from(&request),
+                    host: request.get_referral_host(),
+                    port: request.get_referral_port(),
                 };
 
                 return Ok(Response::new(response));
