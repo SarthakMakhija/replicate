@@ -13,7 +13,7 @@ pub const REFERRAL_PORT: &str = "raft.referral.port";
 #[derive(Debug)]
 pub enum HostAndPortConstructionError {
     MissingHortOrPort,
-    InvalidHost(AddrParseError),
+    InvalidHost(AddrParseError, String),
 }
 
 impl Display for HostAndPortConstructionError {
@@ -21,8 +21,8 @@ impl Display for HostAndPortConstructionError {
         match self {
             HostAndPortConstructionError::MissingHortOrPort =>
                 write!(f, "can not construct HostAndPort, either the host or the port is missing"),
-            HostAndPortConstructionError::InvalidHost(e) =>
-                write!(f, "can not construct HostAndPort, host is invalid",)
+            HostAndPortConstructionError::InvalidHost(_, host) =>
+                write!(f, "can not construct HostAndPort, host {} is invalid", host)
         }
     }
 }
@@ -31,7 +31,7 @@ impl Error for HostAndPortConstructionError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
             HostAndPortConstructionError::MissingHortOrPort => None,
-            HostAndPortConstructionError::InvalidHost(ref err) => Some(err),
+            HostAndPortConstructionError::InvalidHost(ref err, _) => Some(err),
         }
     }
 }
@@ -43,9 +43,10 @@ pub fn try_referral_host_port_from<Payload>(request: &Request<Payload>) -> Resul
         return Err(HostAndPortConstructionError::MissingHortOrPort);
     }
 
-    return match HostAndPort::try_new(optional_host.unwrap(), u16::try_from(optional_port.unwrap()).unwrap()) {
+    let host = optional_host.unwrap();
+    return match HostAndPort::try_new(&host, u16::try_from(optional_port.unwrap()).unwrap()) {
         Ok(host_and_port) => Ok(host_and_port),
-        Err(err) => Err(HostAndPortConstructionError::InvalidHost(err))
+        Err(err) => Err(HostAndPortConstructionError::InvalidHost(err, host))
     };
 }
 
@@ -124,7 +125,7 @@ mod tests {
         let host_and_port = try_referral_host_port_from(&request);
 
         assert!(host_and_port.is_err());
-        assert!(matches!(host_and_port, Err(HostAndPortConstructionError::InvalidHost(_))));
+        assert!(matches!(host_and_port, Err(HostAndPortConstructionError::InvalidHost(_, _))));
     }
 
     #[test]

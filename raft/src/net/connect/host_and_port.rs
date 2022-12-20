@@ -11,7 +11,7 @@ impl HostAndPort {
         return HostAndPort { host, port };
     }
 
-    pub fn try_new(host: String, port: u16) -> Result<HostAndPort, std::net::AddrParseError> {
+    pub fn try_new(host: &str, port: u16) -> Result<HostAndPort, std::net::AddrParseError> {
         let address = format!("{}:{}", host, port);
         let socket_address: SocketAddr = address.parse()?;
         return Ok(
@@ -20,10 +20,10 @@ impl HostAndPort {
     }
 
     pub fn as_string_with_http(&self) -> String {
-        return self.as_string_with_protocol(String::from("http"));
+        return self.as_string_with_protocol("http");
     }
 
-    pub fn as_string_with_protocol(&self, protocol: String) -> String {
+    pub fn as_string_with_protocol(&self, protocol: &str) -> String {
         return format!("{}://{}:{}/", protocol, self.host, self.port);
     }
 
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn try_new() {
-        let host_and_port = HostAndPort::try_new("127.0.0.1".to_string(), 9091);
+        let host_and_port = HostAndPort::try_new("127.0.0.1", 9091);
         let host_and_port = host_and_port.unwrap();
 
         assert_eq!(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9091), host_and_port);
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn try_new_with_error() {
-        let host_and_port = HostAndPort::try_new("127#0#0#1".to_string(), 9091);
+        let host_and_port = HostAndPort::try_new("127#0#0#1", 9091);
         let is_error = host_and_port.is_err();
 
         assert!(is_error);
