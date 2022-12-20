@@ -20,7 +20,7 @@ use crate::quorum::rpc::grpc::PutKeyValueResponse;
 
 pub(crate) struct Client {
     replica: Arc<Replica>,
-    clock: Arc<dyn Clock>,
+    clock: Box<dyn Clock>,
 }
 
 impl Client {
@@ -95,7 +95,7 @@ impl Client {
         let clock = SystemClock::new();
         return Client {
             replica,
-            clock: Arc::new(clock),
+            clock: Box::new(clock),
         };
     }
 }
