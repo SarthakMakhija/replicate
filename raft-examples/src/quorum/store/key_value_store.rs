@@ -9,7 +9,7 @@ use raft::net::connect::headers::{get_referral_host_from, get_referral_port_from
 use raft::net::connect::host_and_port::HostAndPort;
 use raft::net::replica::Replica;
 
-use crate::quorum::factory::ServiceRequestFactory;
+use crate::quorum::factory::service_request::ServiceRequestFactory;
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;

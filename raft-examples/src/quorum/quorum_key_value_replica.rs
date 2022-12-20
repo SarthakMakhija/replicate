@@ -6,7 +6,7 @@ use raft::clock::clock::{Clock, SystemClock};
 use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
 use raft::net::replica::Replica;
 
-use crate::quorum::factory::ServiceRequestFactory;
+use crate::quorum::factory::service_request::ServiceRequestFactory;
 use crate::quorum::read_repair::ReadRepair;
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyRequest;
