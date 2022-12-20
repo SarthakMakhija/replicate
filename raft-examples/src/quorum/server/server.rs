@@ -105,7 +105,17 @@ impl Server {
         let self_address = self.replica.clone().get_self_address();
         let timestamp = self.clock.now_seconds();
         let handler = async move {
-            storage.insert(request.key.clone(), Value::new(request.value.clone(), timestamp));
+            let key = request.key.clone();
+            match storage.get(&key) {
+                None => {
+                    storage.insert(key, Value::new(request.value.clone(), timestamp));
+                }
+                Some(value_ref) if value_ref.value().is_timestamp_lesser_than(request.timestamp) => {
+                    storage.insert(key, Value::new(request.value.clone(), timestamp));
+                }
+                _ => {}
+            }
+
             let service_request = ServiceRequest::new(
                 PutKeyValueResponse { was_put: true, correlation_id },
                 Box::new(PutKeyValueResponseClient {}),
