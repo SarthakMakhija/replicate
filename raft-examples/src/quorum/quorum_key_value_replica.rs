@@ -41,7 +41,7 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
             .await;
 
         let completion_response = async_quorum_callback.handle().await;
-        let response_by_host = completion_response.success_responses().unwrap();
+        let response_by_host = completion_response.success_response().unwrap();
         let response = ReadRepair::new(self.replica.clone(), response_by_host).repair().await;
 
         return Ok(Response::new(response));
@@ -65,7 +65,7 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
             .await;
 
         let completion_response = async_quorum_callback.handle().await;
-        let response = completion_response.success_responses().unwrap().values().next().unwrap();
+        let response = completion_response.success_response().unwrap().values().next().unwrap();
         return Ok(Response::new(ClientResponse::put_key_value_response(response.was_put, response.correlation_id)));
     }
 

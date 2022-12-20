@@ -96,7 +96,7 @@ mod tests {
         expected.insert(response_from_other, GetValueResponse { value: "two".to_string() });
 
         assert_eq!(2, completion_response.response_len());
-        assert_eq!(&expected, completion_response.success_responses().unwrap());
+        assert_eq!(&expected, completion_response.success_response().unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -127,7 +127,7 @@ mod tests {
         expected.insert(response_from_other, GetValueResponse { value: "two".to_string() });
 
         assert_eq!(2, completion_response.response_len());
-        assert_eq!(&expected, completion_response.success_responses().unwrap());
+        assert_eq!(&expected, completion_response.success_response().unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -147,7 +147,7 @@ mod tests {
         let completion_response = handle.await;
 
         assert_eq!(2, completion_response.response_len());
-        let error_responses = completion_response.error_responses().unwrap();
+        let error_responses = completion_response.error_response().unwrap();
         let test_error_one = error_responses.get(&response_from_1).unwrap().downcast_ref::<TestError>().unwrap();
         assert_eq!("test error one", test_error_one.message);
 

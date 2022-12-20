@@ -364,7 +364,7 @@ mod tests {
         );
 
         let quorum_completion_response = async_quorum_callback.handle().await;
-        assert_eq!("some value".to_string(), quorum_completion_response.success_responses().unwrap().get(&from).unwrap().value);
+        assert_eq!("some value".to_string(), quorum_completion_response.success_response().unwrap().get(&from).unwrap().value);
 
         replica.singular_update_queue.shutdown();
     }

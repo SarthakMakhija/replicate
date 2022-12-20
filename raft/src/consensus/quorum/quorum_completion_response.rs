@@ -21,7 +21,7 @@ impl<Response: Any> QuorumCompletionResponse<Response> {
         };
     }
 
-    pub fn success_responses(&self) -> Option<&HashMap<HostAndPort, Response>> {
+    pub fn success_response(&self) -> Option<&HashMap<HostAndPort, Response>> {
         return match self {
             QuorumCompletionResponse::Success(r) => {
                 Some(r)
@@ -32,7 +32,7 @@ impl<Response: Any> QuorumCompletionResponse<Response> {
         };
     }
 
-    pub fn error_responses(&self) -> Option<&HashMap<HostAndPort, ResponseErrorType>> {
+    pub fn error_response(&self) -> Option<&HashMap<HostAndPort, ResponseErrorType>> {
         return match self {
             QuorumCompletionResponse::Success(_) => {
                 None

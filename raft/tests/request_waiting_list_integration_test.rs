@@ -37,7 +37,7 @@ async fn handle_single_response_type() {
     request_waiting_list.handle_response(20, response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
 
     let get_response = get_handle.await.unwrap();
-    let all_gets = get_response.success_responses().unwrap();
+    let all_gets = get_response.success_response().unwrap();
 
     let mut expected = HashMap::new();
     expected.insert(response_from_1, GetValueResponse { value: "one".to_string() });
@@ -90,7 +90,7 @@ async fn handle_multiple_response_types() {
     request_waiting_list.handle_response(40, response_from_other.clone(), Ok(Box::new(SetValueResponse { key: "key2".to_string(), value: "value2".to_string() })));
 
     let get_response = get_handle.await.unwrap();
-    let all_gets = get_response.success_responses().unwrap();
+    let all_gets = get_response.success_response().unwrap();
 
     let mut expected = HashMap::new();
     expected.insert(response_from_1.clone(), GetValueResponse { value: "one".to_string() });
@@ -100,7 +100,7 @@ async fn handle_multiple_response_types() {
     assert_eq!(&expected, all_gets);
 
     let set_response = set_handle.await.unwrap();
-    let all_sets = set_response.success_responses().unwrap();
+    let all_sets = set_response.success_response().unwrap();
 
     let mut expected = HashMap::new();
     expected.insert(response_from_1, SetValueResponse { key: "key1".to_string(), value: "value1".to_string() });
@@ -151,7 +151,7 @@ async fn handle_multiple_response_types_with_error() {
     request_waiting_list.handle_response(40, response_from_other.clone(), Err(Box::new(TestError{message: "Test error".to_string()})));
 
     let get_response = get_handle.await.unwrap();
-    let all_gets = get_response.success_responses().unwrap();
+    let all_gets = get_response.success_response().unwrap();
 
     let mut expected = HashMap::new();
     expected.insert(response_from_1, GetValueResponse { value: "one".to_string() });
@@ -163,7 +163,7 @@ async fn handle_multiple_response_types_with_error() {
     let set_response = set_handle.await.unwrap();
     assert_eq!(1, set_response.response_len());
 
-    let error_responses = set_response.error_responses().unwrap();
+    let error_responses = set_response.error_response().unwrap();
     let test_error = error_responses.get(&response_from_other).unwrap().downcast_ref::<TestError>().unwrap();
     assert_eq!("Test error", test_error.message);
 }
