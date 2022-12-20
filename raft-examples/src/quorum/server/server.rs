@@ -4,7 +4,6 @@ use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use tonic::{Request, Response, Status};
 
-use raft::clock::clock::{Clock, SystemClock};
 use raft::net::connect::async_network::AsyncNetwork;
 use raft::net::connect::headers::{get_referral_host_from, get_referral_port_from};
 use raft::net::connect::host_and_port::HostAndPort;
@@ -22,10 +21,13 @@ use crate::quorum::value::Value;
 pub(crate) struct Server {
     replica: Arc<Replica>,
     storage: Arc<DashMap<String, Value>>,
-    clock: Box<dyn Clock>,
 }
 
 impl Server {
+    pub(crate) fn set_initial_state(&self, key_value: (String, Value)) {
+        self.storage.clone().insert(key_value.0, key_value.1);
+    }
+
     pub(crate) async fn acknowledge_get(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
         let optional_host = get_referral_host_from(&request);
         let optional_port = get_referral_port_from(&request);
@@ -49,7 +51,6 @@ impl Server {
 
         let handler = async move {
             let value: Option<Ref<String, Value>> = storage.get(&key);
-
             let response = match value {
                 None => {
                     GetValueByKeyResponse { key, value: "".to_string(), correlation_id, timestamp: 0 }
@@ -97,7 +98,7 @@ impl Server {
         }
 
         let request = request.into_inner();
-        println!("Received a versioned set request for key {}", request.key.clone());
+        println!("Received a versioned put request for key {} with timestamp {}", request.key.clone(), request.timestamp);
 
         let correlation_id = request.correlation_id;
         let originating_host_port = HostAndPort::try_new(
@@ -107,18 +108,9 @@ impl Server {
 
         let storage = self.storage.clone();
         let self_address = self.replica.clone().get_self_address();
-        let timestamp = self.clock.now_seconds();
         let handler = async move {
             let key = request.key.clone();
-            match storage.get(&key) {
-                None => {
-                    storage.insert(key, Value::new(request.value.clone(), timestamp));
-                }
-                Some(value_ref) if value_ref.value().is_timestamp_lesser_than(request.timestamp) => {
-                    storage.insert(key, Value::new(request.value.clone(), timestamp));
-                }
-                _ => {}
-            }
+            storage.insert(key, Value::new(request.value.clone(), request.timestamp));
 
             let service_request = ServiceRequest::new(
                 PutKeyValueResponse { was_put: true, correlation_id },
@@ -159,7 +151,6 @@ impl Server {
         return Server {
             replica,
             storage: Arc::new(DashMap::new()),
-            clock: Box::new(SystemClock::new()),
         };
     }
 }

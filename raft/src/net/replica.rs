@@ -236,12 +236,12 @@ mod tests {
 
     #[tokio::test]
     async fn send_one_way_to_the_hosts_successfully() {
-        let any_replica_port = 8988;
-        let any_other_replica_port = 8989;
+        let any_replica_port = 9988;
+        let any_other_replica_port = 9989;
 
         let replica = Replica::new(
             String::from("neptune"),
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
             ],

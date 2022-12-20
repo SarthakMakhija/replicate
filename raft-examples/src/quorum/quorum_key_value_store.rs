@@ -14,11 +14,13 @@ use crate::quorum::rpc::grpc::PutKeyValueResponse;
 
 use crate::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValue;
 use crate::quorum::server::server::Server;
+use crate::quorum::value::Value;
 
 pub struct QuorumKeyValueStoreService {
     client: Client,
     server: Server,
 }
+
 
 #[tonic::async_trait]
 impl QuorumKeyValue for QuorumKeyValueStoreService {
@@ -53,5 +55,9 @@ impl QuorumKeyValueStoreService {
             client: Client::new(replica.clone()),
             server: Server::new(replica.clone()),
         };
+    }
+
+    pub fn set_initial_state(&self, key_value: (String, Value)) {
+        self.server.set_initial_state(key_value);
     }
 }

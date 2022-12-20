@@ -10,6 +10,7 @@ use raft::net::replica::Replica;
 
 use crate::quorum::client_provider::CorrelatingGetValueByKeyRequestClient;
 use crate::quorum::client_provider::VersionedPutKeyValueRequestClient;
+use crate::quorum::read_repair::ReadRepair;
 
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyRequest;
@@ -46,19 +47,16 @@ impl Client {
             .await;
 
         let completion_response = async_quorum_callback.handle().await;
-        let response = completion_response.success_responses().unwrap().values().next().unwrap();
-        return Ok(Response::new(
-            GetValueByKeyResponse {
-                key: response.key.clone(),
-                value: response.value.clone(),
-                correlation_id: response.correlation_id,
-                timestamp: response.timestamp,
-            })
-        );
+        let response_by_host = completion_response.success_responses().unwrap();
+        println!("response by host {:?}", response_by_host);
+        let read_repair = ReadRepair::new(self.replica.clone(), response_by_host);
+        let response = read_repair.repair().await;
+
+        return Ok(Response::new(response));
     }
 
     pub(crate) async fn put(&self, request: PutKeyValueRequest) -> Result<Response<PutKeyValueResponse>, Status> {
-        println!("received a set request by the client for key {}", request.key.clone());
+        println!("received a put request by the client for key {}", request.key.clone());
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
             let correlation_id = correlation_id_generator.generate();

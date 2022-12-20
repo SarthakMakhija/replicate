@@ -21,6 +21,7 @@ use raft_examples::quorum::rpc::grpc::PutKeyValueRequest;
 use raft_examples::quorum::rpc::grpc::PutKeyValueResponse;
 use raft_examples::quorum::rpc::grpc::quorum_key_value_client::QuorumKeyValueClient;
 use raft_examples::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValueServer;
+use raft_examples::quorum::value::Value;
 
 struct GetValueByKeyRequestClient {}
 
@@ -57,9 +58,9 @@ fn put_key_value() {
     let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6541);
     let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6542);
 
-    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
-    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
-    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
+    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other], None);
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other], None);
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one], None);
 
     let_services_start();
 
@@ -98,9 +99,9 @@ fn get_value_for_non_existing_key() {
     let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6551);
     let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6552);
 
-    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
-    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
-    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
+    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other], None);
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other], None);
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one], None);
 
     let_services_start();
 
@@ -120,7 +121,45 @@ fn get_value_for_non_existing_key() {
     });
 }
 
-fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
+#[test]
+fn get_latest_value_after_read_repair() {
+    let runtime = Builder::new_multi_thread()
+        .thread_name("read_repair_key_value".to_string())
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6560);
+    let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6561);
+    let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6562);
+
+    let initial_state = Some(("HDD".to_string(), Value::new("New Hard disk".to_string(), 200)));
+    let all_services_shutdown_handle_one = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other], initial_state);
+
+    let initial_state = Some(("HDD".to_string(), Value::new("New Hard disk".to_string(), 200)));
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other], initial_state);
+
+    let initial_state = Some(("HDD".to_string(), Value::new("Old Hard disk".to_string(), 100)));
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one], initial_state);
+
+    let_services_start();
+
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let get_handle = send_get_request(self_host_and_port, &runtime, "HDD".to_string());
+    blocking_runtime.block_on(async move {
+        let response: GetValueByKeyResponse = get_handle.await.unwrap().unwrap();
+
+        all_services_shutdown_handle_one.shutdown().await.unwrap();
+        all_services_shutdown_handle_two.shutdown().await.unwrap();
+        all_services_shutdown_handle_three.shutdown().await.unwrap();
+
+        assert_eq!("HDD".to_string(), response.key.clone());
+        assert_eq!("New Hard disk".to_string(), response.value.clone());
+    });
+}
+
+fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, initial_state: Option<(String, Value)>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         String::from("mark"),
@@ -130,6 +169,9 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     );
 
     let store = QuorumKeyValueStoreService::new(Arc::new(replica));
+    if let Some(state) = initial_state {
+        store.set_initial_state(state);
+    }
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
@@ -140,7 +182,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     all_services_shutdown_handle
 }
 
-fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
+fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, initial_state: Option<(String, Value)>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         String::from("mark"),
@@ -150,6 +192,9 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     );
 
     let store = QuorumKeyValueStoreService::new(Arc::new(replica));
+    if let Some(state) = initial_state {
+        store.set_initial_state(state);
+    }
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
@@ -160,7 +205,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     all_services_shutdown_handle
 }
 
-fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
+fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, initial_state: Option<(String, Value)>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         String::from("mark"),
@@ -170,6 +215,9 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
     );
 
     let store = QuorumKeyValueStoreService::new(Arc::new(replica));
+    if let Some(state) = initial_state {
+        store.set_initial_state(state);
+    }
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
