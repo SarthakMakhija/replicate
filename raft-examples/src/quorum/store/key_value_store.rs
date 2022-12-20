@@ -18,12 +18,12 @@ use crate::quorum::rpc::grpc::PutKeyValueResponse;
 use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
 use crate::quorum::value::Value;
 
-pub(crate) struct Server {
+pub(crate) struct KeyValueStore {
     replica: Arc<Replica>,
     storage: Arc<DashMap<String, Value>>,
 }
 
-impl Server {
+impl KeyValueStore {
     pub(crate) fn set_initial_state(&self, key_value: (String, Value)) {
         self.storage.clone().insert(key_value.0, key_value.1);
     }
@@ -146,9 +146,9 @@ impl Server {
     }
 }
 
-impl Server {
-    pub(crate) fn new(replica: Arc<Replica>) -> Server {
-        return Server {
+impl KeyValueStore {
+    pub(crate) fn new(replica: Arc<Replica>) -> KeyValueStore {
+        return KeyValueStore {
             replica,
             storage: Arc::new(DashMap::new()),
         };

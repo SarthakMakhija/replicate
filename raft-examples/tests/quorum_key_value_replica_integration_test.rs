@@ -14,7 +14,7 @@ use raft::net::connect::host_and_port::HostAndPort;
 use raft::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
 use raft::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 use raft::net::replica::Replica;
-use raft_examples::quorum::quorum_key_value_store::QuorumKeyValueStoreService;
+use raft_examples::quorum::quorum_key_value_replica::QuorumKeyValueReplicaService;
 use raft_examples::quorum::rpc::grpc::GetValueByKeyRequest;
 use raft_examples::quorum::rpc::grpc::GetValueByKeyResponse;
 use raft_examples::quorum::rpc::grpc::PutKeyValueRequest;
@@ -168,7 +168,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         Arc::new(SystemClock::new()),
     );
 
-    let store = QuorumKeyValueStoreService::new(Arc::new(replica));
+    let store = QuorumKeyValueReplicaService::new(Arc::new(replica));
     if let Some(state) = initial_state {
         store.set_initial_state(state);
     }
@@ -191,7 +191,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         Arc::new(SystemClock::new()),
     );
 
-    let store = QuorumKeyValueStoreService::new(Arc::new(replica));
+    let store = QuorumKeyValueReplicaService::new(Arc::new(replica));
     if let Some(state) = initial_state {
         store.set_initial_state(state);
     }
@@ -214,7 +214,7 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
         Arc::new(SystemClock::new()),
     );
 
-    let store = QuorumKeyValueStoreService::new(Arc::new(replica));
+    let store = QuorumKeyValueReplicaService::new(Arc::new(replica));
     if let Some(state) = initial_state {
         store.set_initial_state(state);
     }

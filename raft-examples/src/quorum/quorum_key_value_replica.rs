@@ -1,5 +1,6 @@
 use std::sync::Arc;
-use tonic::{Response, Status};
+
+use tonic::{Request, Response, Status};
 
 use raft::clock::clock::{Clock, SystemClock};
 use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
@@ -8,24 +9,29 @@ use raft::net::connect::random_correlation_id_generator::RandomCorrelationIdGene
 use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
-use crate::quorum::client_provider::CorrelatingGetValueByKeyRequestClient;
-use crate::quorum::client_provider::VersionedPutKeyValueRequestClient;
+use crate::quorum::client_provider::{CorrelatingGetValueByKeyRequestClient, VersionedPutKeyValueRequestClient};
 use crate::quorum::read_repair::ReadRepair;
-
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
 use crate::quorum::rpc::grpc::PutKeyValueRequest;
-use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;
+use crate::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValue;
+use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
+use crate::quorum::store::key_value_store::KeyValueStore;
+use crate::quorum::value::Value;
 
-pub(crate) struct Client {
+pub struct QuorumKeyValueReplicaService {
     replica: Arc<Replica>,
+    key_value_store: KeyValueStore,
     clock: Box<dyn Clock>,
 }
 
-impl Client {
-    pub(crate) async fn get_by(&self, request: GetValueByKeyRequest) -> Result<Response<GetValueByKeyResponse>, Status> {
+
+#[tonic::async_trait]
+impl QuorumKeyValue for QuorumKeyValueReplicaService {
+    async fn get_by(&self, request: Request<GetValueByKeyRequest>) -> Result<Response<GetValueByKeyResponse>, Status> {
+        let request = request.into_inner();
         println!("received a get request by the client for key {}", request.key.clone());
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
@@ -48,14 +54,14 @@ impl Client {
 
         let completion_response = async_quorum_callback.handle().await;
         let response_by_host = completion_response.success_responses().unwrap();
-        println!("response by host {:?}", response_by_host);
         let read_repair = ReadRepair::new(self.replica.clone(), response_by_host);
         let response = read_repair.repair().await;
 
         return Ok(Response::new(response));
     }
 
-    pub(crate) async fn put(&self, request: PutKeyValueRequest) -> Result<Response<PutKeyValueResponse>, Status> {
+    async fn put(&self, request: Request<PutKeyValueRequest>) -> Result<Response<PutKeyValueResponse>, Status> {
+        let request = request.into_inner();
         println!("received a put request by the client for key {}", request.key.clone());
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
@@ -83,18 +89,38 @@ impl Client {
         return Ok(Response::new(
             PutKeyValueResponse {
                 was_put: response.was_put,
-                correlation_id: response.correlation_id
+                correlation_id: response.correlation_id,
             })
         );
     }
+
+    async fn acknowledge_get(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
+        return self.key_value_store.acknowledge_get(request).await;
+    }
+
+    async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
+        return self.key_value_store.finish_get(request).await;
+    }
+
+    async fn acknowledge_put(&self, request: Request<VersionedPutKeyValueRequest>) -> Result<Response<()>, Status> {
+        return self.key_value_store.acknowledge_put(request).await;
+    }
+
+    async fn finish_put(&self, request: Request<PutKeyValueResponse>) -> Result<Response<()>, Status> {
+        return self.key_value_store.finish_put(request).await;
+    }
 }
 
-impl Client {
-    pub(crate) fn new(replica: Arc<Replica>) -> Client {
-        let clock = SystemClock::new();
-        return Client {
-            replica,
-            clock: Box::new(clock),
+impl QuorumKeyValueReplicaService {
+    pub fn new(replica: Arc<Replica>) -> QuorumKeyValueReplicaService {
+        return QuorumKeyValueReplicaService {
+            replica: replica.clone(),
+            key_value_store: KeyValueStore::new(replica.clone()),
+            clock: Box::new(SystemClock::new()),
         };
+    }
+
+    pub fn set_initial_state(&self, key_value: (String, Value)) {
+        self.key_value_store.set_initial_state(key_value);
     }
 }
