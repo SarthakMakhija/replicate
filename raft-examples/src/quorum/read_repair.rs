@@ -4,6 +4,7 @@ use std::sync::Arc;
 use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
 use raft::net::connect::host_and_port::HostAndPort;
 use raft::net::replica::Replica;
+use crate::quorum::factory::client_response::ClientResponse;
 
 use crate::quorum::factory::service_request::ServiceRequestFactory;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
@@ -25,29 +26,15 @@ impl<'a> ReadRepair<'a> {
     pub(crate) async fn repair(&self) -> GetValueByKeyResponse {
         let latest_value: Option<&GetValueByKeyResponse> = self.get_latest_value();
         return match latest_value {
-            None => {
-                GetValueByKeyResponse {
-                    key: "".to_string(),
-                    value: "".to_string(),
-                    correlation_id: 0,
-                    timestamp: 0,
-                }
-            }
-            Some(get_value_by_key_response) => {
-                self.perform_read_repair(get_value_by_key_response).await
-            }
+            None => ClientResponse::empty_get_value_by_key_response(),
+            Some(get_value_by_key_response) => self.perform_read_repair(get_value_by_key_response).await
         }
     }
 
     async fn perform_read_repair(&self, latest_value: &GetValueByKeyResponse) -> GetValueByKeyResponse {
         let hosts_with_stale_values = self.get_hosts_with_stale_values(latest_value.timestamp);
         if hosts_with_stale_values.is_empty() {
-            return GetValueByKeyResponse {
-                key: latest_value.key.clone(),
-                value: latest_value.value.clone(),
-                correlation_id: latest_value.correlation_id,
-                timestamp: latest_value.timestamp,
-            };
+            return ClientResponse::get_value_by_key_response(latest_value);
         }
 
         println!("hosts_with_stale_values those needing read_repair {:?}", hosts_with_stale_values);
@@ -66,16 +53,7 @@ impl<'a> ReadRepair<'a> {
             .await;
 
         let _ = async_quorum_callback.handle().await;
-        return GetValueByKeyResponse {
-            key: latest_value.key.clone(),
-            value: latest_value.value.clone(),
-            correlation_id: latest_value.correlation_id,
-            timestamp: latest_value.timestamp,
-        };
-    }
-
-    fn get_latest_value(&self) -> Option<&GetValueByKeyResponse> {
-        return self.response_by_host.values().max_by(|this, other| this.timestamp.cmp(&other.timestamp));
+        return ClientResponse::get_value_by_key_response(latest_value);
     }
 
     fn get_hosts_with_stale_values(&self, latest_timestamp: u64) -> Vec<HostAndPort> {
@@ -88,5 +66,9 @@ impl<'a> ReadRepair<'a> {
                 return latest_timestamp > timestamp;
             })
             .collect();
+    }
+
+    fn get_latest_value(&self) -> Option<&GetValueByKeyResponse> {
+        return self.response_by_host.values().max_by(|this, other| this.timestamp.cmp(&other.timestamp));
     }
 }

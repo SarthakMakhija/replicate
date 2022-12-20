@@ -6,6 +6,7 @@ use raft::clock::clock::{Clock, SystemClock};
 use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
 use raft::net::replica::Replica;
 
+use crate::quorum::factory::client_response::ClientResponse;
 use crate::quorum::factory::service_request::ServiceRequestFactory;
 use crate::quorum::read_repair::ReadRepair;
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
@@ -23,7 +24,6 @@ pub struct QuorumKeyValueReplicaService {
     key_value_store: KeyValueStore,
     clock: Box<dyn Clock>,
 }
-
 
 #[tonic::async_trait]
 impl QuorumKeyValue for QuorumKeyValueReplicaService {
@@ -55,7 +55,7 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
             ServiceRequestFactory::versioned_put_key_value_request(
                 self.clock.now_seconds(),
                 request.key.clone(),
-                request.value.clone()
+                request.value.clone(),
             )
         };
 
@@ -67,12 +67,7 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
 
         let completion_response = async_quorum_callback.handle().await;
         let response = completion_response.success_responses().unwrap().values().next().unwrap();
-        return Ok(Response::new(
-            PutKeyValueResponse {
-                was_put: response.was_put,
-                correlation_id: response.correlation_id,
-            })
-        );
+        return Ok(Response::new(ClientResponse::put_key_value_response(response.was_put, response.correlation_id)));
     }
 
     async fn acknowledge_get(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {

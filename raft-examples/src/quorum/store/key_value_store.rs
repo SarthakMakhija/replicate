@@ -9,6 +9,7 @@ use raft::net::connect::headers::{get_referral_host_from, get_referral_port_from
 use raft::net::connect::host_and_port::HostAndPort;
 use raft::net::replica::Replica;
 
+use crate::quorum::factory::client_response::ClientResponse;
 use crate::quorum::factory::service_request::ServiceRequestFactory;
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
@@ -36,7 +37,6 @@ impl KeyValueStore {
         let request = request.into_inner();
         println!("Received a correlating get request for key {}", request.key.clone());
 
-
         let originating_host_port = HostAndPort::try_new(
             optional_host.unwrap(),
             u16::try_from(optional_port.unwrap()).unwrap(),
@@ -50,13 +50,14 @@ impl KeyValueStore {
         let handler = async move {
             let value: Option<Ref<String, Value>> = storage.get(&key);
             let response = match value {
-                None => {
-                    GetValueByKeyResponse { key, value: "".to_string(), correlation_id, timestamp: 0 }
-                }
-                Some(value_ref) => {
-                    let value = value_ref.value();
-                    GetValueByKeyResponse { key, value: String::from(value.get_value()), correlation_id, timestamp: value.get_timestamp() }
-                }
+                None =>
+                    ClientResponse::get_value_by_key_response_using_empty_value(key.clone(), correlation_id),
+                Some(value_ref) =>
+                    ClientResponse::get_value_by_key_response_using_value_ref(
+                        key.clone(),
+                        value_ref.value(),
+                        correlation_id,
+                    )
             };
             AsyncNetwork::send_with_source_footprint(
                 ServiceRequestFactory::get_value_by_key_response(correlation_id, response),
