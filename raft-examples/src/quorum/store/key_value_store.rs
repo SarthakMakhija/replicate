@@ -7,11 +7,9 @@ use tonic::{Request, Response, Status};
 use raft::net::connect::async_network::AsyncNetwork;
 use raft::net::connect::headers::{get_referral_host_from, get_referral_port_from};
 use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::connect::service_client::ServiceRequest;
 use raft::net::replica::Replica;
 
-use crate::quorum::client_provider::GetValueByKeyResponseClient;
-use crate::quorum::client_provider::PutKeyValueResponseClient;
+use crate::quorum::factory::ServiceRequestFactory;
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;
@@ -38,16 +36,16 @@ impl KeyValueStore {
         let request = request.into_inner();
         println!("Received a correlating get request for key {}", request.key.clone());
 
-        let key = request.key;
-        let correlation_id = request.correlation_id;
 
         let originating_host_port = HostAndPort::try_new(
             optional_host.unwrap(),
             u16::try_from(optional_port.unwrap()).unwrap(),
         );
 
+        let key = request.key;
+        let correlation_id = request.correlation_id;
         let storage = self.storage.clone();
-        let self_address = self.replica.clone().get_self_address();
+        let source_address = self.replica.clone().get_self_address();
 
         let handler = async move {
             let value: Option<Ref<String, Value>> = storage.get(&key);
@@ -60,12 +58,11 @@ impl KeyValueStore {
                     GetValueByKeyResponse { key, value: String::from(value.get_value()), correlation_id, timestamp: value.get_timestamp() }
                 }
             };
-            let service_request = ServiceRequest::new(
-                response,
-                Box::new(GetValueByKeyResponseClient {}),
-                correlation_id,
-            );
-            AsyncNetwork::send_with_source_footprint(service_request, self_address, originating_host_port.unwrap()).await.unwrap();
+            AsyncNetwork::send_with_source_footprint(
+                ServiceRequestFactory::get_value_by_key_response(correlation_id, response),
+                source_address,
+                originating_host_port.unwrap(),
+            ).await.unwrap();
         };
         let _ = &self.replica.add_to_queue(handler);
         return Ok(Response::new(()));
@@ -100,26 +97,24 @@ impl KeyValueStore {
         let request = request.into_inner();
         println!("Received a versioned put request for key {} with timestamp {}", request.key.clone(), request.timestamp);
 
-        let correlation_id = request.correlation_id;
         let originating_host_port = HostAndPort::try_new(
             optional_host.unwrap(),
             optional_port.unwrap(),
         );
 
+        let correlation_id = request.correlation_id;
         let storage = self.storage.clone();
-        let self_address = self.replica.clone().get_self_address();
+        let source_address = self.replica.clone().get_self_address();
+
         let handler = async move {
             let key = request.key.clone();
             storage.insert(key, Value::new(request.value.clone(), request.timestamp));
 
-            let service_request = ServiceRequest::new(
-                PutKeyValueResponse { was_put: true, correlation_id },
-                Box::new(PutKeyValueResponseClient {}),
-                correlation_id,
-            );
             AsyncNetwork::send_with_source_footprint(
-                service_request,
-                self_address,
+                ServiceRequestFactory::put_key_value_response(
+                    correlation_id
+                ),
+                source_address,
                 originating_host_port.unwrap(),
             ).await.unwrap();
         };
