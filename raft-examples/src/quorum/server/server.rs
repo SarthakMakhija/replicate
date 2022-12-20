@@ -78,10 +78,10 @@ impl Server {
             u16::try_from(optional_port.unwrap()).unwrap(),
         );
 
-        let request = request.into_inner();
-        println!("Received a response for key {}", request.key.clone());
+        let response = request.into_inner();
+        println!("Received a response for key {}", response.key.clone());
 
-        let _ = &self.replica.register_response(request.correlation_id, originating_host_port.unwrap(), Ok(Box::new(request)));
+        let _ = &self.replica.register_response(response.correlation_id, originating_host_port.unwrap(), Ok(Box::new(response)));
         return Ok(Response::new(()));
     }
 
@@ -142,10 +142,10 @@ impl Server {
             u16::try_from(optional_port.unwrap()).unwrap(),
         );
 
-        let request = request.into_inner();
-        println!("Received a put response {}", request.was_put);
+        let response = request.into_inner();
+        println!("Received a put response {}", response.was_put);
 
-        let _ = &self.replica.register_response(request.correlation_id, originating_host_port.unwrap(), Ok(Box::new(request)));
+        let _ = &self.replica.register_response(response.correlation_id, originating_host_port.unwrap(), Ok(Box::new(response)));
         return Ok(Response::new(()));
     }
 }
