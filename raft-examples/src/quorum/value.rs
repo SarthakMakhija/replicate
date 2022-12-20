@@ -18,4 +18,8 @@ impl Value {
     pub(crate) fn is_timestamp_lesser_than(&self, timestamp: u64) -> bool {
         return self.timestamp < timestamp;
     }
+
+    pub(crate) fn get_timestamp(&self) -> u64 {
+        return self.timestamp;
+    }
 }

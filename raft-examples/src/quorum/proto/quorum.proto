@@ -29,6 +29,7 @@ message GetValueByKeyResponse {
   //tag id 1 is reserved for correlation_id generated using procedural macro
   string key = 2;
   string value = 3;
+  uint64 timestamp = 4;
 }
 
 message PutKeyValueRequest {

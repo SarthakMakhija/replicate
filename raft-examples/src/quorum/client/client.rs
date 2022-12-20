@@ -52,6 +52,7 @@ impl Client {
                 key: response.key.clone(),
                 value: response.value.clone(),
                 correlation_id: response.correlation_id,
+                timestamp: response.timestamp,
             })
         );
     }

@@ -49,11 +49,15 @@ impl Server {
 
         let handler = async move {
             let value: Option<Ref<String, Value>> = storage.get(&key);
+
             let response = match value {
-                None =>
-                    GetValueByKeyResponse { key, value: "".to_string(), correlation_id },
-                Some(value_ref) =>
-                    GetValueByKeyResponse { key, value: String::from(value_ref.value().get_value()), correlation_id },
+                None => {
+                    GetValueByKeyResponse { key, value: "".to_string(), correlation_id, timestamp: 0 }
+                }
+                Some(value_ref) => {
+                    let value = value_ref.value();
+                    GetValueByKeyResponse { key, value: String::from(value.get_value()), correlation_id, timestamp: value.get_timestamp() }
+                }
             };
             let service_request = ServiceRequest::new(
                 response,
