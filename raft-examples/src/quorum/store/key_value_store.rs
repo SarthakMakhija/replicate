@@ -5,8 +5,7 @@ use dashmap::mapref::one::Ref;
 use tonic::{Request, Response, Status};
 
 use raft::net::connect::async_network::AsyncNetwork;
-use raft::net::connect::headers::{get_referral_host_from, get_referral_port_from};
-use raft::net::connect::host_and_port::HostAndPort;
+use raft::net::connect::headers::try_referral_host_port_from;
 use raft::net::replica::Replica;
 
 use crate::quorum::factory::client_response::ClientResponse;
@@ -28,19 +27,10 @@ impl KeyValueStore {
     }
 
     pub(crate) async fn acknowledge_get(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
-        let optional_host = get_referral_host_from(&request);
-        let optional_port = get_referral_port_from(&request);
-        if optional_host.is_none() || optional_port.is_none() {
-            return Err(Status::failed_precondition(format!("Missing originating host/port in acknowledge_get")));
-        }
+        let originating_host_port = try_referral_host_port_from(&request).unwrap();
 
         let request = request.into_inner();
         println!("Received a correlating get request for key {}", request.key.clone());
-
-        let originating_host_port = HostAndPort::try_new(
-            optional_host.unwrap(),
-            u16::try_from(optional_port.unwrap()).unwrap(),
-        );
 
         let key = request.key;
         let correlation_id = request.correlation_id;
@@ -62,7 +52,7 @@ impl KeyValueStore {
             AsyncNetwork::send_with_source_footprint(
                 ServiceRequestFactory::get_value_by_key_response(correlation_id, response),
                 source_address,
-                originating_host_port.unwrap(),
+                originating_host_port,
             ).await.unwrap();
         };
         let _ = &self.replica.add_to_queue(handler);
@@ -70,38 +60,20 @@ impl KeyValueStore {
     }
 
     pub(crate) async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
-        let optional_host = get_referral_host_from(&request);
-        let optional_port = get_referral_port_from(&request);
-        if optional_host.is_none() || optional_port.is_none() {
-            return Err(Status::failed_precondition(format!("Missing originating host/port in finish_get")));
-        }
-
-        let originating_host_port = HostAndPort::try_new(
-            optional_host.unwrap(),
-            u16::try_from(optional_port.unwrap()).unwrap(),
-        );
+        let originating_host_port = try_referral_host_port_from(&request).unwrap();
 
         let response = request.into_inner();
         println!("Received a response for key {}", response.key.clone());
 
-        let _ = &self.replica.register_response(response.correlation_id, originating_host_port.unwrap(), Ok(Box::new(response)));
+        let _ = &self.replica.register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
         return Ok(Response::new(()));
     }
 
     pub(crate) async fn acknowledge_put(&self, request: Request<VersionedPutKeyValueRequest>) -> Result<Response<()>, Status> {
-        let optional_host = get_referral_host_from(&request);
-        let optional_port = get_referral_port_from(&request);
-        if optional_host.is_none() || optional_port.is_none() {
-            return Err(Status::failed_precondition(format!("Missing originating host/port in acknowledge_set")));
-        }
+        let originating_host_port = try_referral_host_port_from(&request).unwrap();
 
         let request = request.into_inner();
         println!("Received a versioned put request for key {} with timestamp {}", request.key.clone(), request.timestamp);
-
-        let originating_host_port = HostAndPort::try_new(
-            optional_host.unwrap(),
-            optional_port.unwrap(),
-        );
 
         let correlation_id = request.correlation_id;
         let storage = self.storage.clone();
@@ -116,7 +88,7 @@ impl KeyValueStore {
                     correlation_id
                 ),
                 source_address,
-                originating_host_port.unwrap(),
+                originating_host_port,
             ).await.unwrap();
         };
         let _ = &self.replica.add_to_queue(handler);
@@ -124,20 +96,12 @@ impl KeyValueStore {
     }
 
     pub(crate) async fn finish_put(&self, request: Request<PutKeyValueResponse>) -> Result<Response<()>, Status> {
-        let optional_host = get_referral_host_from(&request);
-        let optional_port = get_referral_port_from(&request);
-        if optional_host.is_none() || optional_port.is_none() {
-            return Err(Status::failed_precondition(format!("Missing originating host/port in finish_put")));
-        }
-        let originating_host_port = HostAndPort::try_new(
-            optional_host.unwrap(),
-            u16::try_from(optional_port.unwrap()).unwrap(),
-        );
+        let originating_host_port = try_referral_host_port_from(&request).unwrap();
 
         let response = request.into_inner();
         println!("Received a put response {}", response.was_put);
 
-        let _ = &self.replica.register_response(response.correlation_id, originating_host_port.unwrap(), Ok(Box::new(response)));
+        let _ = &self.replica.register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
         return Ok(Response::new(()));
     }
 }
