@@ -28,7 +28,6 @@ impl KeyValueStore {
 
     pub(crate) async fn acknowledge_get(&self, request: Request<CorrelatingGetValueByKeyRequest>) -> Result<Response<()>, Status> {
         let originating_host_port = try_referral_host_port_from(&request).unwrap();
-
         let request = request.into_inner();
         println!("Received a correlating get request for key {}", request.key.clone());
 
@@ -61,7 +60,6 @@ impl KeyValueStore {
 
     pub(crate) async fn finish_get(&self, request: Request<GetValueByKeyResponse>) -> Result<Response<()>, Status> {
         let originating_host_port = try_referral_host_port_from(&request).unwrap();
-
         let response = request.into_inner();
         println!("Received a response for key {}", response.key.clone());
 
@@ -71,7 +69,6 @@ impl KeyValueStore {
 
     pub(crate) async fn acknowledge_put(&self, request: Request<VersionedPutKeyValueRequest>) -> Result<Response<()>, Status> {
         let originating_host_port = try_referral_host_port_from(&request).unwrap();
-
         let request = request.into_inner();
         println!("Received a versioned put request for key {} with timestamp {}", request.key.clone(), request.timestamp);
 
@@ -97,7 +94,6 @@ impl KeyValueStore {
 
     pub(crate) async fn finish_put(&self, request: Request<PutKeyValueResponse>) -> Result<Response<()>, Status> {
         let originating_host_port = try_referral_host_port_from(&request).unwrap();
-
         let response = request.into_inner();
         println!("Received a put response {}", response.was_put);
 
