@@ -46,17 +46,25 @@ impl Replica {
                                                                       service_request_constructor: S,
                                                                       response_callback: ResponseCallbackType) -> TotalFailedSends
         where S: Fn() -> ServiceRequest<Payload, ()> {
+        return self.send_one_way_to(&self.peer_addresses, service_request_constructor, response_callback).await;
+    }
+
+    pub async fn send_one_way_to<Payload: Send + 'static, S>(&self,
+                                                             hosts: &Vec<HostAndPort>,
+                                                             service_request_constructor: S,
+                                                             response_callback: ResponseCallbackType) -> TotalFailedSends
+        where S: Fn() -> ServiceRequest<Payload, ()> {
         let mut send_task_handles = Vec::new();
-        for peer_address in &self.peer_addresses {
-            if peer_address.eq(&self.self_address) {
+        for address in hosts {
+            if address.eq(&self.self_address) {
                 continue;
             }
 
             let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
-            send_task_handles.push(self.send_one_way_to(
+            send_task_handles.push(self.send_one_way(
                 &self.request_waiting_list,
                 service_request,
-                peer_address.clone(),
+                address.clone(),
                 response_callback.clone(),
             ));
         }
@@ -93,12 +101,11 @@ impl Replica {
         return self.self_address.clone();
     }
 
-    fn send_one_way_to<Payload: Send + 'static>(&self,
-                                                request_waiting_list: &RequestWaitingList,
-                                                service_request: ServiceRequest<Payload, ()>,
-                                                target_address: HostAndPort,
-                                                response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId, HostAndPort)> {
-
+    fn send_one_way<Payload: Send + 'static>(&self,
+                                             request_waiting_list: &RequestWaitingList,
+                                             service_request: ServiceRequest<Payload, ()>,
+                                             target_address: HostAndPort,
+                                             response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId, HostAndPort)> {
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, target_address.clone(), response_callback);
 
@@ -222,6 +229,41 @@ mod tests {
 
         let total_failed_sends =
             replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+
+        assert_eq!(0, total_failed_sends);
+        replica.singular_update_queue.shutdown();
+    }
+
+    #[tokio::test]
+    async fn send_one_way_to_the_hosts_successfully() {
+        let any_replica_port = 8988;
+        let any_other_replica_port = 8989;
+
+        let replica = Replica::new(
+            String::from("neptune"),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let correlation_id_generator = RandomCorrelationIdGenerator::new();
+        let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
+        let service_request_constructor = || {
+            ServiceRequest::new(
+                GetValueRequest {},
+                Box::new(GetValueRequestSuccessClient {}),
+                correlation_id_generator.generate(),
+            )
+        };
+
+        let total_failed_sends =
+            replica.send_one_way_to(
+                &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
+                service_request_constructor,
+                async_quorum_callback.clone()
+            ).await;
 
         assert_eq!(0, total_failed_sends);
         replica.singular_update_queue.shutdown();
