@@ -4,6 +4,7 @@ use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use tonic::{Request, Response, Status};
 
+use raft::clock::clock::{Clock, SystemClock};
 use raft::net::connect::async_network::AsyncNetwork;
 use raft::net::connect::headers::{get_referral_host_from, get_referral_port_from};
 use raft::net::connect::host_and_port::HostAndPort;
@@ -12,15 +13,16 @@ use raft::net::replica::Replica;
 
 use crate::quorum::client_provider::GetValueByKeyResponseClient;
 use crate::quorum::client_provider::PutKeyValueResponseClient;
-
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
-use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;
+use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
+use crate::quorum::value::Value;
 
 pub(crate) struct Server {
     replica: Arc<Replica>,
-    storage: Arc<DashMap<String, String>>,
+    storage: Arc<DashMap<String, Value>>,
+    clock: Box<dyn Clock>,
 }
 
 impl Server {
@@ -46,12 +48,12 @@ impl Server {
         let self_address = self.replica.clone().get_self_address();
 
         let handler = async move {
-            let value: Option<Ref<String, String>> = storage.get(&key);
+            let value: Option<Ref<String, Value>> = storage.get(&key);
             let response = match value {
                 None =>
                     GetValueByKeyResponse { key, value: "".to_string(), correlation_id },
                 Some(value_ref) =>
-                    GetValueByKeyResponse { key, value: String::from(value_ref.value()), correlation_id },
+                    GetValueByKeyResponse { key, value: String::from(value_ref.value().get_value()), correlation_id },
             };
             let service_request = ServiceRequest::new(
                 response,
@@ -96,15 +98,16 @@ impl Server {
         let correlation_id = request.correlation_id;
         let originating_host_port = HostAndPort::try_new(
             optional_host.unwrap(),
-            optional_port.unwrap()
+            optional_port.unwrap(),
         );
 
         let storage = self.storage.clone();
         let self_address = self.replica.clone().get_self_address();
+        let timestamp = self.clock.now_seconds();
         let handler = async move {
-            storage.insert(request.key.clone(), request.value.clone());
+            storage.insert(request.key.clone(), Value::new(request.value.clone(), timestamp));
             let service_request = ServiceRequest::new(
-                PutKeyValueResponse{was_put: true, correlation_id},
+                PutKeyValueResponse { was_put: true, correlation_id },
                 Box::new(PutKeyValueResponseClient {}),
                 correlation_id,
             );
@@ -124,7 +127,6 @@ impl Server {
         if optional_host.is_none() || optional_port.is_none() {
             return Err(Status::failed_precondition(format!("Missing originating host/port in finish_put")));
         }
-
         let originating_host_port = HostAndPort::try_new(
             optional_host.unwrap(),
             u16::try_from(optional_port.unwrap()).unwrap(),
@@ -143,6 +145,7 @@ impl Server {
         return Server {
             replica,
             storage: Arc::new(DashMap::new()),
+            clock: Box::new(SystemClock::new()),
         };
     }
 }
