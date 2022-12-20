@@ -21,7 +21,7 @@ use raft_examples::quorum::rpc::grpc::PutKeyValueRequest;
 use raft_examples::quorum::rpc::grpc::PutKeyValueResponse;
 use raft_examples::quorum::rpc::grpc::quorum_key_value_client::QuorumKeyValueClient;
 use raft_examples::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValueServer;
-use raft_examples::quorum::value::Value;
+use raft_examples::quorum::store::value::Value;
 
 struct GetValueByKeyRequestClient {}
 

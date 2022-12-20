@@ -15,7 +15,7 @@ use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;
 use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
-use crate::quorum::value::Value;
+use crate::quorum::store::value::Value;
 
 pub(crate) struct KeyValueStore {
     replica: Arc<Replica>,

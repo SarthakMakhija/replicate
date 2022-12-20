@@ -17,7 +17,7 @@ use crate::quorum::rpc::grpc::PutKeyValueResponse;
 use crate::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValue;
 use crate::quorum::rpc::grpc::VersionedPutKeyValueRequest;
 use crate::quorum::store::key_value_store::KeyValueStore;
-use crate::quorum::value::Value;
+use crate::quorum::store::value::Value;
 
 pub struct QuorumKeyValueReplicaService {
     replica: Arc<Replica>,

@@ -2,7 +2,7 @@ use raft::net::connect::correlation_id::CorrelationId;
 
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;
-use crate::quorum::value::Value;
+use crate::quorum::store::value::Value;
 
 pub(crate) struct ClientResponse {}
 
