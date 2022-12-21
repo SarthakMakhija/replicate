@@ -23,7 +23,7 @@ impl<'a> ReadRepair<'a> {
         };
     }
 
-    pub(crate) async fn repair(&self) -> GetValueByKeyResponse {
+    pub(crate) async fn attempt(&self) -> GetValueByKeyResponse {
         let latest_value: Option<&GetValueByKeyResponse> = self.get_latest_value();
         return match latest_value {
             None => ClientResponse::empty_get_value_by_key_response(),
