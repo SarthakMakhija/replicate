@@ -17,4 +17,3 @@
 3. [Dashmap](https://crates.io/crates/dashmap)
    - concurrent hashmap
 
-*Repository name will change*
