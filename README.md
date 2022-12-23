@@ -1,4 +1,4 @@
-[![Build](https://github.com/SarthakMakhija/raft/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/SarthakMakhija/raft/actions/workflows/build.yml)
+[![Build](https://github.com/SarthakMakhija/replicate/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/SarthakMakhija/replicate/actions/workflows/build.yml)
 
 ## Concepts to build
 1. Singular update queue
