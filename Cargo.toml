@@ -3,5 +3,6 @@
 members = [
     "replicate",
     "replicate-macro",
-    "replicate-examples"
+    "replicate-examples",
+    "raft"
 ]
