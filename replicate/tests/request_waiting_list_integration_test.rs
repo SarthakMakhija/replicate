@@ -4,11 +4,11 @@ use std::fmt::{Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::time::Duration;
-use raft::clock::clock::SystemClock;
+use replicate::clock::clock::SystemClock;
 
-use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::request_waiting_list::request_waiting_list::RequestWaitingList;
+use replicate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
+use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handle_single_response_type() {

@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "raft",
-    "raft-macro",
-    "raft-examples"
+    "replicate",
+    "replicate-macro",
+    "replicate-examples"
 ]

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use raft::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::replica::Replica;
+use replicate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
+use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::replica::Replica;
 use crate::quorum::factory::client_response::ClientResponse;
 
 use crate::quorum::factory::service_request::ServiceRequestFactory;

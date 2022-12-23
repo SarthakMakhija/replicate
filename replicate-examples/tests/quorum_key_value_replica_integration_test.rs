@@ -8,20 +8,20 @@ use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinHandle;
 use tonic::{Request, Response};
 
-use raft::clock::clock::SystemClock;
-use raft::net::connect::async_network::AsyncNetwork;
-use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
-use raft::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
-use raft::net::replica::Replica;
-use raft_examples::quorum::quorum_key_value_replica::QuorumKeyValueReplicaService;
-use raft_examples::quorum::rpc::grpc::GetValueByKeyRequest;
-use raft_examples::quorum::rpc::grpc::GetValueByKeyResponse;
-use raft_examples::quorum::rpc::grpc::PutKeyValueRequest;
-use raft_examples::quorum::rpc::grpc::PutKeyValueResponse;
-use raft_examples::quorum::rpc::grpc::quorum_key_value_client::QuorumKeyValueClient;
-use raft_examples::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValueServer;
-use raft_examples::quorum::store::value::Value;
+use replicate::clock::clock::SystemClock;
+use replicate::net::connect::async_network::AsyncNetwork;
+use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
+use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
+use replicate::net::replica::Replica;
+use replicate_examples::quorum::quorum_key_value_replica::QuorumKeyValueReplicaService;
+use replicate_examples::quorum::rpc::grpc::GetValueByKeyRequest;
+use replicate_examples::quorum::rpc::grpc::GetValueByKeyResponse;
+use replicate_examples::quorum::rpc::grpc::PutKeyValueRequest;
+use replicate_examples::quorum::rpc::grpc::PutKeyValueResponse;
+use replicate_examples::quorum::rpc::grpc::quorum_key_value_client::QuorumKeyValueClient;
+use replicate_examples::quorum::rpc::grpc::quorum_key_value_server::QuorumKeyValueServer;
+use replicate_examples::quorum::store::value::Value;
 
 struct GetValueByKeyRequestClient {}
 

@@ -4,9 +4,9 @@ use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use tonic::{Request, Response, Status};
 
-use raft::net::connect::async_network::AsyncNetwork;
-use raft::net::connect::host_port_extractor::HostAndPortExtractor;
-use raft::net::replica::Replica;
+use replicate::net::connect::async_network::AsyncNetwork;
+use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
+use replicate::net::replica::Replica;
 
 use crate::quorum::factory::client_response::ClientResponse;
 use crate::quorum::factory::service_request::ServiceRequestFactory;

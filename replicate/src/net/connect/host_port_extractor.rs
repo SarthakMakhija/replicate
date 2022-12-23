@@ -4,8 +4,8 @@ use std::net::AddrParseError;
 
 use crate::net::connect::host_and_port::HostAndPort;
 
-pub const REFERRAL_HOST: &str = "raft.referral.host";
-pub const REFERRAL_PORT: &str = "raft.referral.port";
+pub const REFERRAL_HOST: &str = "replicate.referral.host";
+pub const REFERRAL_PORT: &str = "replicate.referral.port";
 
 #[derive(Debug)]
 pub enum HostAndPortConstructionError {

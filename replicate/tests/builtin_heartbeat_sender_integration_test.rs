@@ -3,10 +3,10 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use raft::heartbeat::builtin_heartbeat_sender::BuiltinHeartbeatSender;
-use raft::heartbeat::heartbeat_sender::HeartbeatSender;
-use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
+use replicate::heartbeat::builtin_heartbeat_sender::BuiltinHeartbeatSender;
+use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
+use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn builtin_heartbeat_sender_with_success() {

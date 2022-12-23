@@ -1,13 +1,13 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::thread;
 use std::time::Duration;
-use raft::net::connect::async_network::AsyncNetwork;
+use replicate::net::connect::async_network::AsyncNetwork;
 
-use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
-use raft::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
-use raft::net::connect::service_client::ServiceResponseError;
-use raft::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
+use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
+use replicate::net::connect::service::heartbeat::service_request::HeartbeatServiceRequest;
+use replicate::net::connect::service_client::ServiceResponseError;
+use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn send() {

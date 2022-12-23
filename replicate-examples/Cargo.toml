@@ -1,20 +1,19 @@
 [package]
-name = "raft"
+name = "replicate-examples"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-raft-macro = { path = "../raft-macro" }
-dashmap = "5.4.0"
+replicate = {path = "../replicate" }
+replicate-macro = { path = "../replicate-macro" }
 tonic = "0.8"
 prost = "0.11"
-tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
 async-trait = "0.1.58"
-tokio-threadpool = "0.1.18"
-rand = "0.8.5"
+dashmap = "5.4.0"
+tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
 
 [build-dependencies]
-raft-macro = { path = "../raft-macro" }
+replicate-macro = { path = "../replicate-macro" }
 tonic-build = "0.8"

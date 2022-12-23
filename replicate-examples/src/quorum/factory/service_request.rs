@@ -1,6 +1,6 @@
-use raft::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
-use raft::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
-use raft::net::connect::service_client::ServiceRequest;
+use replicate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
+use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
+use replicate::net::connect::service_client::ServiceRequest;
 
 use crate::quorum::client_provider::CorrelatingGetValueByKeyRequestClient;
 use crate::quorum::client_provider::GetValueByKeyResponseClient;

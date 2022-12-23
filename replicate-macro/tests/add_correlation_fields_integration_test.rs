@@ -1,4 +1,4 @@
-use raft_macro::add_correlation_id;
+use replicate_macro::add_correlation_id;
 
 #[test]
 fn add_correlation_id_field() {

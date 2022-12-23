@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use tonic::{Request, Response};
 
-use raft::net::connect::host_and_port::HostAndPort;
-use raft::net::connect::service_client::{ServiceClientProvider, ServiceResponseError};
+use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::connect::service_client::{ServiceClientProvider, ServiceResponseError};
 
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;

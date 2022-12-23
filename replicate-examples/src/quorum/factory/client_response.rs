@@ -1,4 +1,4 @@
-use raft::net::connect::correlation_id::CorrelationId;
+use replicate::net::connect::correlation_id::CorrelationId;
 
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;
 use crate::quorum::rpc::grpc::PutKeyValueResponse;
