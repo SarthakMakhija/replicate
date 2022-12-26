@@ -1,24 +1,48 @@
 use std::sync::RwLock;
 
+use crate::replica_role::ReplicaRole;
+
 pub struct State {
-    term: RwLock<u64>,
+    consensus_state: RwLock<ConsensusState>,
+}
+
+struct ConsensusState {
+    term: u64,
+    role: ReplicaRole,
 }
 
 impl State {
     pub fn new() -> State {
         return State {
-            term: RwLock::new(0),
+            consensus_state: RwLock::new(ConsensusState {
+                term: 0,
+                role: ReplicaRole::Follower,
+            }),
         };
     }
 
-    pub(crate) fn increment_term(&self) -> u64 {
-        let mut guard = self.term.write().unwrap();
-        *guard = *guard + 1;
-        return *guard;
+    pub(crate) fn be_candidate(&self) -> u64 {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let mut consensus_state = &mut *write_guard;
+        consensus_state.term = consensus_state.term + 1;
+        consensus_state.role = ReplicaRole::Candidate;
+
+        return consensus_state.term;
+    }
+
+    pub(crate) fn be_leader(&self) {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let mut consensus_state = &mut *write_guard;
+        consensus_state.role = ReplicaRole::Leader;
     }
 
     pub fn get_term(&self) -> u64 {
-        let guard = self.term.read().unwrap();
-        return *guard;
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).term;
+    }
+
+    pub fn get_role(&self) -> ReplicaRole {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).role;
     }
 }

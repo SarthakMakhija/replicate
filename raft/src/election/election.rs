@@ -3,8 +3,8 @@ use std::sync::Arc;
 use replicate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::replica::Replica;
 
-use crate::net::rpc::grpc::RequestVoteResponse;
 use crate::net::factory::service_request::ServiceRequestFactory;
+use crate::net::rpc::grpc::RequestVoteResponse;
 use crate::state::State;
 
 pub struct Election {
@@ -26,7 +26,7 @@ impl Election {
         let state = self.state.clone();
 
         replica.add_to_queue(async move {
-            let term = state.increment_term();
+            let term = state.be_candidate();
             let service_request_constructor = || {
                 ServiceRequestFactory::request_vote(
                     inner_replica.get_name().to_string(),
@@ -43,7 +43,9 @@ impl Election {
                 service_request_constructor,
                 async_quorum_callback.clone(),
             ).await;
-            let _ = async_quorum_callback.handle().await;
+
+            let quorum_completion_response = async_quorum_callback.handle().await;
+            if quorum_completion_response.is_success() { state.be_leader() }
         });
     }
 }

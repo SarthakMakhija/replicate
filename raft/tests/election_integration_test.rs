@@ -11,6 +11,7 @@ use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 use replicate::net::replica::Replica;
 use raft::net::rpc::grpc::voting_server::VotingServer;
+use raft::replica_role::ReplicaRole;
 
 #[test]
 fn start_elections_with_new_term() {
@@ -44,6 +45,7 @@ fn start_elections_with_new_term() {
     election.start();
     thread::sleep(Duration::from_secs(1));
     assert_eq!(2, state.get_term());
+    assert_eq!(ReplicaRole::Leader, state.get_role());
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
