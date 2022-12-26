@@ -6,7 +6,7 @@ use replicate::net::connect::service_client::{ServiceClientProvider, ServiceResp
 
 use crate::net::rpc::grpc::RequestVote;
 use crate::net::rpc::grpc::RequestVoteResponse;
-use crate::net::rpc::grpc::voting_client::VotingClient;
+use crate::net::rpc::grpc::raft_client::RaftClient;
 
 pub(crate) struct RequestVoteClient {}
 
@@ -15,7 +15,7 @@ pub(crate) struct RequestVoteResponseClient {}
 #[async_trait]
 impl ServiceClientProvider<RequestVote, ()> for RequestVoteClient {
     async fn call(&self, request: Request<RequestVote>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
-        let mut client = VotingClient::connect(address.as_string_with_http()).await?;
+        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_request_vote(request).await?;
         return Ok(response);
         //TODO: Handle error
@@ -25,7 +25,7 @@ impl ServiceClientProvider<RequestVote, ()> for RequestVoteClient {
 #[async_trait]
 impl ServiceClientProvider<RequestVoteResponse, ()> for RequestVoteResponseClient {
     async fn call(&self, request: Request<RequestVoteResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
-        let mut client = VotingClient::connect(address.as_string_with_http()).await?;
+        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.finish_request_vote(request).await?;
         return Ok(response);
         //TODO: Handle error

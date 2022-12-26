@@ -7,18 +7,18 @@ use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 use replicate::net::replica::Replica;
 
 use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse};
-use crate::net::rpc::grpc::voting_server::Voting;
+use crate::net::rpc::grpc::raft_server::Raft;
 use crate::net::factory::service_request::ServiceRequestFactory;
 use crate::state::State;
 
-pub struct VotingService {
+pub struct RaftService {
     state: Arc<State>,
     replica: Arc<Replica>,
 }
 
-impl VotingService {
+impl RaftService {
     pub fn new(state: Arc<State>, replica: Arc<Replica>) -> Self {
-        return VotingService {
+        return RaftService {
             state,
             replica,
         };
@@ -26,7 +26,7 @@ impl VotingService {
 }
 
 #[tonic::async_trait]
-impl Voting for VotingService {
+impl Raft for RaftService {
     async fn acknowledge_request_vote(&self, request: Request<RequestVote>) -> Result<Response<()>, tonic::Status> {
         let originating_host_port = request.try_referral_host_port().unwrap();
 

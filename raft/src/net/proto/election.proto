@@ -4,8 +4,7 @@ import "google/protobuf/empty.proto";
 
 package raft.election;
 
-//one service..
-service Voting {
+service Raft {
   rpc acknowledge_request_vote (RequestVote) returns (google.protobuf.Empty) {}
   rpc finish_request_vote (RequestVoteResponse) returns (google.protobuf.Empty) {}
 }

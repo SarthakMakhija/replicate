@@ -1,1 +1,1 @@
-pub mod voting_service;
+pub mod raft_service;

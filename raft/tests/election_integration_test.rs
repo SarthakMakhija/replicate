@@ -4,13 +4,13 @@ use std::thread;
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 use raft::election::election::Election;
-use raft::net::service::voting_service::VotingService;
+use raft::net::service::raft_service::RaftService;
 use raft::state::State;
 use replicate::clock::clock::SystemClock;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 use replicate::net::replica::Replica;
-use raft::net::rpc::grpc::voting_server::VotingServer;
+use raft::net::rpc::grpc::raft_server::RaftServer;
 use raft::replica_role::ReplicaRole;
 
 #[test]
@@ -69,7 +69,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            VotingServer::new(VotingService::new(state, replica.clone())),
+            RaftServer::new(RaftService::new(state, replica.clone())),
             all_services_shutdown_receiver,
         ).await;
     });
@@ -88,7 +88,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            VotingServer::new(VotingService::new(state, Arc::new(replica))),
+            RaftServer::new(RaftService::new(state, Arc::new(replica))),
             all_services_shutdown_receiver,
         ).await;
     });
@@ -107,7 +107,7 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            VotingServer::new(VotingService::new(state, Arc::new(replica))),
+            RaftServer::new(RaftService::new(state, Arc::new(replica))),
             all_services_shutdown_receiver,
         ).await;
     });
