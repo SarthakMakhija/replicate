@@ -2,10 +2,10 @@ use replicate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenera
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use replicate::net::connect::service_client::ServiceRequest;
 
-use crate::quorum::client_provider::CorrelatingGetValueByKeyRequestClient;
-use crate::quorum::client_provider::GetValueByKeyResponseClient;
-use crate::quorum::client_provider::PutKeyValueResponseClient;
-use crate::quorum::client_provider::VersionedPutKeyValueRequestClient;
+use crate::quorum::factory::client_provider::CorrelatingGetValueByKeyRequestClient;
+use crate::quorum::factory::client_provider::GetValueByKeyResponseClient;
+use crate::quorum::factory::client_provider::PutKeyValueResponseClient;
+use crate::quorum::factory::client_provider::VersionedPutKeyValueRequestClient;
 
 use crate::quorum::rpc::grpc::CorrelatingGetValueByKeyRequest;
 use crate::quorum::rpc::grpc::GetValueByKeyResponse;

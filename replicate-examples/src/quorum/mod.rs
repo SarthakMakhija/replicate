@@ -1,4 +1,3 @@
-mod client_provider;
 pub(crate) mod read_repair;
 pub(crate) mod factory;
 pub mod rpc;
