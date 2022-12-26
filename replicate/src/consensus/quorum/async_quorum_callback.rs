@@ -28,8 +28,7 @@ impl<Response: Any + Send + Sync + Debug> AsyncQuorumCallback<Response> {
     pub fn new_with_success_condition<>(expected_total_responses: usize, success_condition: SuccessCondition<Response>) -> Arc<AsyncQuorumCallback<Response>> {
         return Arc::new(AsyncQuorumCallback {
             quorum_completion_handle: QuorumCompletionHandle {
-                success_responses: RwLock::new(HashMap::new()),
-                error_responses: RwLock::new(HashMap::new()),
+                responses: RwLock::new(HashMap::new()),
                 expected_total_responses,
                 majority_quorum: expected_total_responses / 2 + 1,
                 success_condition,
@@ -157,7 +156,7 @@ mod tests {
 
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
-        let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+        let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50053);
 
         async_quorum_callback.on_response(response_from_1.clone(), Err(Box::new(TestError { message: "test error one".to_string() })));
         async_quorum_callback.on_response(response_from_2.clone(), Err(Box::new(TestError { message: "test error two".to_string() })));
@@ -206,7 +205,7 @@ mod tests {
 
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
-        let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+        let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50053);
 
         async_quorum_callback.on_response(response_from_1.clone(), Err(Box::new(TestError { message: "test error one".to_string() })));
         async_quorum_callback.on_response(response_from_2.clone(), Err(Box::new(TestError { message: "test error two".to_string() })));

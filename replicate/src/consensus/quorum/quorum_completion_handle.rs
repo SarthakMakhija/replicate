@@ -12,8 +12,7 @@ use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseErrorType};
 
 pub struct QuorumCompletionHandle<Response: Any + Send + Sync + Debug> {
-    pub(crate) success_responses: RwLock<HashMap<HostAndPort, Response>>,
-    pub(crate) error_responses: RwLock<HashMap<HostAndPort, ResponseErrorType>>,
+    pub(crate) responses: RwLock<HashMap<HostAndPort, Result<Response, ResponseErrorType>>>,
     pub(crate) expected_total_responses: usize,
     pub(crate) majority_quorum: usize,
     pub(crate) success_condition: SuccessCondition<Response>,
@@ -31,10 +30,10 @@ impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
                 let optional_response: Option<Box<Response>> = any_response.downcast::<Response>().ok();
                 let unwrapped = optional_response.unwrap();
                 let typed_response = *unwrapped;
-                self.success_responses.write().unwrap().insert(from, typed_response);
+                self.responses.write().unwrap().insert(from, Ok(typed_response));
             }
             Err(e) => {
-                self.error_responses.write().unwrap().insert(from, e);
+                self.responses.write().unwrap().insert(from, Err(e));
             }
         }
 
@@ -57,22 +56,20 @@ impl<Response: Any + Send + Sync + Debug> Future for &QuorumCompletionHandle<Res
             guard.waker = Some(ctx.waker().clone());
         }
 
-        let mut write_guard = self.success_responses.write().unwrap();
+        let mut write_guard = self.responses.write().unwrap();
 
-        let total_non_error_responses = write_guard.len();
+        let total_non_error_responses = self.non_error_response_count(&write_guard);
         let success_response_count = self.success_response_count(&mut write_guard);
         if success_response_count >= self.majority_quorum {
             let all_responses = self.all_success_responses(&mut write_guard);
             return Poll::Ready(QuorumCompletionResponse::Success(all_responses));
         }
 
-        let mut write_guard = self.error_responses.write().unwrap();
-
-        let error_response_count = write_guard.len();
+        let error_response_count = self.error_response_count(&write_guard);
         if total_non_error_responses + error_response_count == self.expected_total_responses {
-            let all_responses = self.all_error_responses(&mut write_guard);
-            if !all_responses.is_empty() {
-                return Poll::Ready(QuorumCompletionResponse::Error(all_responses));
+            let all_error_responses = self.all_error_responses(&mut write_guard);
+            if !all_error_responses.is_empty() {
+                return Poll::Ready(QuorumCompletionResponse::Error(all_error_responses));
             }
             return Poll::Ready(QuorumCompletionResponse::SuccessConditionNotMet);
         }
@@ -81,15 +78,37 @@ impl<Response: Any + Send + Sync + Debug> Future for &QuorumCompletionHandle<Res
 }
 
 impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
-    fn success_response_count(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Response>>) -> usize {
-        return responses_guard.iter().filter(|response|(self.success_condition)(response.1)).count();
+    fn non_error_response_count(&self, responses_guard: &RwLockWriteGuard<HashMap<HostAndPort, Result<Response, ResponseErrorType>>>) -> usize {
+        return responses_guard.iter().filter(|response| response.1.is_ok()).count();
     }
 
-    fn all_success_responses(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Response>>) -> HashMap<HostAndPort, Response> {
-        return responses_guard.drain().collect();
+    fn error_response_count(&self, responses_guard: &RwLockWriteGuard<HashMap<HostAndPort, Result<Response, ResponseErrorType>>>) -> usize {
+        return responses_guard.iter().filter(|response| response.1.is_err()).count();
     }
 
-    fn all_error_responses(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, ResponseErrorType>>) -> HashMap<HostAndPort, ResponseErrorType> {
-        return responses_guard.drain().collect();
+    fn success_response_count(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Result<Response, ResponseErrorType>>>) -> usize {
+        return responses_guard
+            .iter()
+            .filter(|response| response.1.is_ok())
+            .map(|response| response.1)
+            .map(|response| response.as_ref().unwrap())
+            .filter(|response| (self.success_condition)(response))
+            .count();
+    }
+
+    fn all_success_responses(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Result<Response, ResponseErrorType>>>) -> HashMap<HostAndPort, Response> {
+        return responses_guard
+            .drain()
+            .filter(|response| response.1.is_ok())
+            .map(|response| (response.0, response.1.unwrap()))
+            .collect();
+    }
+
+    fn all_error_responses(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Result<Response, ResponseErrorType>>>) -> HashMap<HostAndPort, ResponseErrorType> {
+        return responses_guard
+            .drain()
+            .filter(|response| response.1.is_err())
+            .map(|response| (response.0, response.1.unwrap_err()))
+            .collect();
     }
 }
