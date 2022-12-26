@@ -100,6 +100,27 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn successful_responses_with_success_condition() {
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(2, success_condition);
+        let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+        async_quorum_callback.on_response(response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "ok".to_string() })));
+        async_quorum_callback.on_response(response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "ok".to_string() })));
+        let handle = async_quorum_callback.handle();
+
+        let completion_response = handle.await;
+
+        let mut expected = HashMap::new();
+        expected.insert(response_from_1, GetValueResponse { value: "ok".to_string() });
+        expected.insert(response_from_other, GetValueResponse { value: "ok".to_string() });
+
+        assert_eq!(2, completion_response.response_len());
+        assert_eq!(&expected, completion_response.success_response().unwrap());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn successful_responses_after_delay() {
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3);
         let async_quorum_callback_one = Arc::new(RwLock::new(async_quorum_callback));
@@ -141,6 +162,55 @@ mod tests {
         async_quorum_callback.on_response(response_from_1.clone(), Err(Box::new(TestError { message: "test error one".to_string() })));
         async_quorum_callback.on_response(response_from_2.clone(), Err(Box::new(TestError { message: "test error two".to_string() })));
         async_quorum_callback.on_response(response_from_3.clone(), Ok(Box::new(GetValueResponse { value: "two".to_string() })));
+
+        let handle = async_quorum_callback.handle();
+
+        let completion_response = handle.await;
+
+        assert_eq!(2, completion_response.response_len());
+        let error_responses = completion_response.error_response().unwrap();
+        let test_error_one = error_responses.get(&response_from_1).unwrap().downcast_ref::<TestError>().unwrap();
+        assert_eq!("test error one", test_error_one.message);
+
+        let test_error_two = error_responses.get(&response_from_2).unwrap().downcast_ref::<TestError>().unwrap();
+        assert_eq!("test error two", test_error_two.message);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn response_with_success_condition_not_met() {
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(2, success_condition);
+        let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+        async_quorum_callback.on_response(response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "ok".to_string() })));
+        async_quorum_callback.on_response(response_from_other.clone(), Ok(Box::new(GetValueResponse { value: "not ok".to_string() })));
+        let handle = async_quorum_callback.handle();
+
+        let completion_response = handle.await;
+
+        let mut expected = HashMap::new();
+        expected.insert(response_from_1, GetValueResponse { value: "ok".to_string() });
+        expected.insert(response_from_other, GetValueResponse { value: "ok".to_string() });
+
+        assert!(completion_response.is_success_condition_not_met())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn failed_responses_with_success_condition_not_met() {
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
+            3,
+            success_condition
+        );
+
+        let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let response_from_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+        let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+        async_quorum_callback.on_response(response_from_1.clone(), Err(Box::new(TestError { message: "test error one".to_string() })));
+        async_quorum_callback.on_response(response_from_2.clone(), Err(Box::new(TestError { message: "test error two".to_string() })));
+        async_quorum_callback.on_response(response_from_3.clone(), Ok(Box::new(GetValueResponse { value: "not ok".to_string() })));
 
         let handle = async_quorum_callback.handle();
 

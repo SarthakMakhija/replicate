@@ -59,7 +59,8 @@ impl<Response: Any + Send + Sync + Debug> Future for &QuorumCompletionHandle<Res
 
         let mut write_guard = self.success_responses.write().unwrap();
 
-        let success_response_count = write_guard.len();
+        let total_non_error_responses = write_guard.len();
+        let success_response_count = self.success_response_count(&mut write_guard);
         if success_response_count >= self.majority_quorum {
             let all_responses = self.all_success_responses(&mut write_guard);
             return Poll::Ready(QuorumCompletionResponse::Success(all_responses));
@@ -68,15 +69,22 @@ impl<Response: Any + Send + Sync + Debug> Future for &QuorumCompletionHandle<Res
         let mut write_guard = self.error_responses.write().unwrap();
 
         let error_response_count = write_guard.len();
-        if success_response_count + error_response_count == self.expected_total_responses {
+        if total_non_error_responses + error_response_count == self.expected_total_responses {
             let all_responses = self.all_error_responses(&mut write_guard);
-            return Poll::Ready(QuorumCompletionResponse::Error(all_responses));
+            if !all_responses.is_empty() {
+                return Poll::Ready(QuorumCompletionResponse::Error(all_responses));
+            }
+            return Poll::Ready(QuorumCompletionResponse::SuccessConditionNotMet);
         }
         return Poll::Pending;
     }
 }
 
 impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
+    fn success_response_count(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Response>>) -> usize {
+        return responses_guard.iter().filter(|response|(self.success_condition)(response.1)).count();
+    }
+
     fn all_success_responses(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Response>>) -> HashMap<HostAndPort, Response> {
         return responses_guard.drain().collect();
     }
