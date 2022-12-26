@@ -26,7 +26,7 @@ impl Election {
         let state = self.state.clone();
 
         replica.add_to_queue(async move {
-            let term = state.be_candidate();
+            let term = state.change_to_follower();
             let service_request_constructor = || {
                 ServiceRequestFactory::request_vote(
                     inner_replica.get_name().to_string(),
@@ -45,7 +45,7 @@ impl Election {
             ).await;
 
             let quorum_completion_response = async_quorum_callback.handle().await;
-            if quorum_completion_response.is_success() { state.be_leader() }
+            if quorum_completion_response.is_success() { state.change_to_leader() }
         });
     }
 }

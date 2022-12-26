@@ -21,7 +21,7 @@ impl State {
         };
     }
 
-    pub(crate) fn be_candidate(&self) -> u64 {
+    pub(crate) fn change_to_follower(&self) -> u64 {
         let mut write_guard = self.consensus_state.write().unwrap();
         let mut consensus_state = &mut *write_guard;
         consensus_state.term = consensus_state.term + 1;
@@ -30,7 +30,7 @@ impl State {
         return consensus_state.term;
     }
 
-    pub(crate) fn be_leader(&self) {
+    pub(crate) fn change_to_leader(&self) {
         let mut write_guard = self.consensus_state.write().unwrap();
         let mut consensus_state = &mut *write_guard;
         consensus_state.role = ReplicaRole::Leader;
