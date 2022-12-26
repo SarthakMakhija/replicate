@@ -1,13 +1,15 @@
 [![Build](https://github.com/SarthakMakhija/replicate/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/SarthakMakhija/replicate/actions/workflows/build.yml)
 
 ## Concepts to build
-1. Singular update queue
-2. Request waiting list
-3. Heartbeat
-4. Quorum
-5. Raft
-6. Viewstamped replication
-7. Group membership
+
+- [X] Singular update queue
+- [X] Request waiting list
+- [X] Quorum callback
+- [X] Async network calls (grpc)
+- [X] Quorum (as example using the building blocks)
+- [ ] Raft
+- [ ] Heartbeat
+- [ ] Viewstamped replication
 
 ## Libraries that might come in
 1. [tokio](https://tokio.rs/)
