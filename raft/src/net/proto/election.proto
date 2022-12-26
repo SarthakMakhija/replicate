@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package raft.election;
+
+//one service..
+service Voting {
+  rpc acknowledge_request_vote (RequestVote) returns (google.protobuf.Empty) {}
+  rpc finish_request_vote (RequestVoteResponse) returns (google.protobuf.Empty) {}
+}
+
+message RequestVote {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  string nodeId = 2;
+  uint64 term = 3;
+}
+
+message RequestVoteResponse {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  uint64 term = 2;
+  bool voted = 3;
+}

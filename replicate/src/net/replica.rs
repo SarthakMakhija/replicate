@@ -101,6 +101,10 @@ impl Replica {
         return self.self_address.clone();
     }
 
+    pub fn get_name(&self) -> &str {
+        return &self.name;
+    }
+
     fn send_one_way<Payload: Send + 'static>(&self,
                                              request_waiting_list: &RequestWaitingList,
                                              service_request: ServiceRequest<Payload, ()>,

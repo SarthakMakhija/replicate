@@ -678,8 +678,13 @@ dependencies = [
 name = "raft"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "prost",
  "replicate",
  "replicate-macro",
+ "tokio",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]

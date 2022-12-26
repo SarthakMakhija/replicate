@@ -8,3 +8,11 @@ edition = "2021"
 [dependencies]
 replicate = {path = "../replicate" }
 replicate-macro = { path = "../replicate-macro" }
+tonic = "0.8"
+prost = "0.11"
+tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
+async-trait = "0.1.58"
+
+[build-dependencies]
+replicate-macro = { path = "../replicate-macro" }
+tonic-build = "0.8"
