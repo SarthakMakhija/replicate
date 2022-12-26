@@ -8,6 +8,12 @@
 - [X] Async network calls (grpc)
 - [X] Quorum (as example using the building blocks)
 - [ ] Raft
+  - [ ] Election 
+  - [ ] Election timer 
+  - [ ] State transition (leader/follower/candidate) 
+  - [ ] Log  
+  - [ ] Log replication 
+  - [ ] Retries 
 - [ ] Heartbeat
 - [ ] Viewstamped replication
 
