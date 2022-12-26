@@ -11,10 +11,10 @@
   - [ ] Election 
   - [ ] Election timer 
   - [ ] State transition (leader/follower/candidate) 
-  - [ ] Log  
+  - [ ] Log
   - [ ] Log replication 
-  - [ ] Retries 
-- [ ] Heartbeat
+  - [ ] Retries
+  - [ ] Heartbeat
 - [ ] Viewstamped replication
 
 ## Libraries that might come in
