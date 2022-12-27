@@ -28,7 +28,7 @@ impl Election {
         let state = self.state.clone();
 
         replica.add_to_queue(async move {
-            let term = state.change_to_follower();
+            let term = state.change_to_candidate(inner_replica.get_id());
             let service_request_constructor = || {
                 ServiceRequestFactory::request_vote(
                     inner_replica.get_id(),

@@ -7,6 +7,7 @@ pub struct State {
 struct ConsensusState {
     term: u64,
     role: ReplicaRole,
+    voted_for: Option<u64>,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -22,15 +23,17 @@ impl State {
             consensus_state: RwLock::new(ConsensusState {
                 term: 0,
                 role: ReplicaRole::Follower,
+                voted_for: None,
             }),
         };
     }
 
-    pub(crate) fn change_to_follower(&self) -> u64 {
+    pub(crate) fn change_to_candidate(&self, replica_id: u64) -> u64 {
         let mut write_guard = self.consensus_state.write().unwrap();
         let mut consensus_state = &mut *write_guard;
         consensus_state.term = consensus_state.term + 1;
         consensus_state.role = ReplicaRole::Candidate;
+        consensus_state.voted_for = Some(replica_id);
 
         return consensus_state.term;
     }
