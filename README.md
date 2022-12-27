@@ -6,6 +6,7 @@
 - [X] Request waiting list
 - [X] Quorum callback
 - [X] Async network calls (grpc)
+- [X] Heartbeat scheduler
 - [X] Quorum (as example using the building blocks)
 - [ ] Raft
   - [ ] Election 
@@ -14,7 +15,7 @@
   - [ ] Log
   - [ ] Log replication 
   - [ ] Retries
-  - [ ] Heartbeat
+  - [ ] Heartbeat sender
 - [ ] Viewstamped replication
 
 ## Libraries that might come in
