@@ -9,12 +9,12 @@ use crate::net::factory::client_provider::{RequestVoteClient, RequestVoteRespons
 pub(crate) struct ServiceRequestFactory {}
 
 impl ServiceRequestFactory {
-    pub(crate) fn request_vote(node_id: String, term: u64) -> ServiceRequest<RequestVote, ()> {
+    pub(crate) fn request_vote(replica_id: u64, term: u64) -> ServiceRequest<RequestVote, ()> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(
             RequestVote {
-                node_id,
+                replica_id,
                 term,
                 correlation_id,
             },

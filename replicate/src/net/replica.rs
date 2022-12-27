@@ -16,7 +16,7 @@ use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 pub type TotalFailedSends = usize;
 
 pub struct Replica {
-    name: String,
+    id: u64,
     self_address: HostAndPort,
     peer_addresses: Vec<HostAndPort>,
     request_waiting_list: RequestWaitingList,
@@ -24,7 +24,7 @@ pub struct Replica {
 }
 
 impl Replica {
-    pub fn new(name: String,
+    pub fn new(id: u64,
                self_address: HostAndPort,
                peer_addresses: Vec<HostAndPort>,
                clock: Arc<dyn Clock>) -> Self {
@@ -34,7 +34,7 @@ impl Replica {
             Duration::from_secs(2),
         );
         return Replica {
-            name,
+            id,
             self_address,
             peer_addresses,
             request_waiting_list,
@@ -101,8 +101,8 @@ impl Replica {
         return self.self_address.clone();
     }
 
-    pub fn get_name(&self) -> &str {
-        return &self.name;
+    pub fn get_id(&self) -> u64 {
+        return self.id;
     }
 
     fn send_one_way<Payload: Send + 'static>(&self,
@@ -212,7 +212,7 @@ mod tests {
         let any_other_replica_port = 8989;
 
         let replica = Replica::new(
-            String::from("neptune"),
+            10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
@@ -244,7 +244,7 @@ mod tests {
         let any_other_replica_port = 9989;
 
         let replica = Replica::new(
-            String::from("neptune"),
+            10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
@@ -266,7 +266,7 @@ mod tests {
             replica.send_one_way_to(
                 &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
                 service_request_constructor,
-                async_quorum_callback.clone()
+                async_quorum_callback.clone(),
             ).await;
 
         assert_eq!(0, total_failed_sends);
@@ -279,7 +279,7 @@ mod tests {
         let any_other_replica_port = 8988;
 
         let replica = Replica::new(
-            String::from("neptune"),
+            10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
@@ -311,7 +311,7 @@ mod tests {
         let storage = Arc::new(RwLock::new(HashMap::new()));
         let readable_storage = storage.clone();
         let replica = Replica::new(
-            String::from("neptune"),
+            10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
@@ -337,7 +337,7 @@ mod tests {
         let any_other_replica_port = 8989;
 
         let replica = Replica::new(
-            String::from("neptune"),
+            10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn total_peer_count_excluding_self() {
         let replica = Replica::new(
-            String::from("neptune"),
+            10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn total_peer_count() {
         let replica = Replica::new(
-            String::from("neptune"),
+            10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),

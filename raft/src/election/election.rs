@@ -31,7 +31,7 @@ impl Election {
             let term = state.change_to_follower();
             let service_request_constructor = || {
                 ServiceRequestFactory::request_vote(
-                    inner_replica.get_name().to_string(),
+                    inner_replica.get_id(),
                     term,
                 )
             };

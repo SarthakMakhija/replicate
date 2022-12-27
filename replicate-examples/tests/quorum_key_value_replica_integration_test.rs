@@ -162,7 +162,7 @@ fn get_latest_value_after_read_repair() {
 fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, initial_state: Option<(String, Value)>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
-        String::from("mark"),
+        10,
         self_host_and_port.clone(),
         peers,
         Arc::new(SystemClock::new()),
@@ -185,7 +185,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
 fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, initial_state: Option<(String, Value)>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
-        String::from("mark"),
+        20,
         self_host_and_port.clone(),
         peers,
         Arc::new(SystemClock::new()),
@@ -208,7 +208,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
 fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, initial_state: Option<(String, Value)>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
-        String::from("mark"),
+        30,
         self_host_and_port.clone(),
         peers,
         Arc::new(SystemClock::new()),
