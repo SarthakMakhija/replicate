@@ -6,11 +6,14 @@ use replicate::net::connect::service_client::{ServiceClientProvider, ServiceResp
 
 use crate::net::rpc::grpc::RequestVote;
 use crate::net::rpc::grpc::RequestVoteResponse;
+use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::raft_client::RaftClient;
 
 pub(crate) struct RequestVoteClient {}
 
 pub(crate) struct RequestVoteResponseClient {}
+
+pub(crate) struct RaftHeartbeatServiceClient {}
 
 #[async_trait]
 impl ServiceClientProvider<RequestVote, ()> for RequestVoteClient {
@@ -27,6 +30,16 @@ impl ServiceClientProvider<RequestVoteResponse, ()> for RequestVoteResponseClien
     async fn call(&self, request: Request<RequestVoteResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.finish_request_vote(request).await?;
+        return Ok(response);
+        //TODO: Handle error
+    }
+}
+
+#[async_trait]
+impl ServiceClientProvider<AppendEntries, ()> for RaftHeartbeatServiceClient {
+    async fn call(&self, request: Request<AppendEntries>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
+        let response = client.acknowledge_heartbeat(request).await?;
         return Ok(response);
         //TODO: Handle error
     }

@@ -103,6 +103,10 @@ impl Replica {
         return self.self_address.clone();
     }
 
+    pub fn get_peers(&self) -> &Vec<HostAndPort> {
+        return &self.peer_addresses;
+    }
+
     pub fn get_id(&self) -> ReplicaId {
         return self.id;
     }

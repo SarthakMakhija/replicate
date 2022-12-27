@@ -5,7 +5,8 @@ use replicate::net::replica::ReplicaId;
 
 use crate::net::rpc::grpc::RequestVote;
 use crate::net::rpc::grpc::RequestVoteResponse;
-use crate::net::factory::client_provider::{RequestVoteClient, RequestVoteResponseClient};
+use crate::net::rpc::grpc::AppendEntries;
+use crate::net::factory::client_provider::{RaftHeartbeatServiceClient, RequestVoteClient, RequestVoteResponseClient};
 
 pub(crate) struct ServiceRequestFactory {}
 
@@ -32,6 +33,21 @@ impl ServiceRequestFactory {
                 correlation_id,
             },
             Box::new(RequestVoteResponseClient {}),
+            correlation_id,
+        );
+    }
+
+    pub(crate) fn heartbeat(term: u64, leader_id: ReplicaId) -> ServiceRequest<AppendEntries, ()> {
+        let correlation_id_generator = RandomCorrelationIdGenerator::new();
+        let correlation_id = correlation_id_generator.generate();
+
+        return ServiceRequest::new(
+            AppendEntries {
+                term,
+                leader_id,
+                correlation_id,
+            },
+            Box::new(RaftHeartbeatServiceClient {}),
             correlation_id,
         );
     }

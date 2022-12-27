@@ -6,7 +6,7 @@ use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 use replicate::net::replica::Replica;
 
-use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse};
+use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse, AppendEntries};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::net::factory::service_request::ServiceRequestFactory;
 use crate::state::State;
@@ -60,6 +60,11 @@ impl Raft for RaftService {
         println!("received RequestVoteResponse with voted? {}", response.voted);
 
         let _ = &self.replica.register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
+        return Ok(Response::new(()));
+    }
+
+    async fn acknowledge_heartbeat(&self, _: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
+        println!("received heartbeat on {:?}", self.replica.get_self_address());
         return Ok(Response::new(()));
     }
 }
