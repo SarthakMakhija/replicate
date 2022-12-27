@@ -1,4 +1,5 @@
 use std::sync::RwLock;
+use replicate::net::replica::ReplicaId;
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
@@ -28,7 +29,7 @@ impl State {
         };
     }
 
-    pub(crate) fn change_to_candidate(&self, replica_id: u64) -> u64 {
+    pub(crate) fn change_to_candidate(&self, replica_id: ReplicaId) -> u64 {
         let mut write_guard = self.consensus_state.write().unwrap();
         let mut consensus_state = &mut *write_guard;
         consensus_state.term = consensus_state.term + 1;

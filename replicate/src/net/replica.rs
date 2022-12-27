@@ -15,8 +15,10 @@ use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
 pub type TotalFailedSends = usize;
 
+pub type ReplicaId = u64;
+
 pub struct Replica {
-    id: u64,
+    id: ReplicaId,
     self_address: HostAndPort,
     peer_addresses: Vec<HostAndPort>,
     request_waiting_list: RequestWaitingList,
@@ -24,7 +26,7 @@ pub struct Replica {
 }
 
 impl Replica {
-    pub fn new(id: u64,
+    pub fn new(id: ReplicaId,
                self_address: HostAndPort,
                peer_addresses: Vec<HostAndPort>,
                clock: Arc<dyn Clock>) -> Self {
@@ -101,7 +103,7 @@ impl Replica {
         return self.self_address.clone();
     }
 
-    pub fn get_id(&self) -> u64 {
+    pub fn get_id(&self) -> ReplicaId {
         return self.id;
     }
 

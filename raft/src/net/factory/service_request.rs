@@ -1,6 +1,7 @@
 use replicate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use replicate::net::connect::service_client::ServiceRequest;
+use replicate::net::replica::ReplicaId;
 
 use crate::net::rpc::grpc::RequestVote;
 use crate::net::rpc::grpc::RequestVoteResponse;
@@ -9,7 +10,7 @@ use crate::net::factory::client_provider::{RequestVoteClient, RequestVoteRespons
 pub(crate) struct ServiceRequestFactory {}
 
 impl ServiceRequestFactory {
-    pub(crate) fn request_vote(replica_id: u64, term: u64) -> ServiceRequest<RequestVote, ()> {
+    pub(crate) fn request_vote(replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, ()> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(
