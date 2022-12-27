@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package replicate.tests.echo;
+
+service Echo {
+  rpc acknowledge_echo(EchoRequest) returns (EchoResponse){}
+}
+
+message EchoRequest {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  string message = 2;
+}
+
+message EchoResponse {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
+  string message = 2;
+}

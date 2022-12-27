@@ -10,18 +10,10 @@ use tonic::transport::Server;
 use tonic::transport::server::Router;
 
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service::heartbeat::service::grpc::heartbeat_server::HeartbeatServer;
-use crate::net::connect::service::heartbeat::service::HeartbeatService;
 
 pub struct ServiceRegistration {}
 
 impl ServiceRegistration {
-    pub async fn register_default_services_on(address: &HostAndPort, all_services_shutdown_signal_receiver: Receiver<()>) {
-        let heartbeat_service = HeartbeatService::default();
-        let router = Server::builder().add_service(HeartbeatServer::new(heartbeat_service));
-
-        Self::serve(router, address, all_services_shutdown_signal_receiver).await;
-    }
 
     pub async fn register_services_on<S>(address: &HostAndPort, service: S, all_services_shutdown_signal_receiver: Receiver<()>)
         where
@@ -33,9 +25,6 @@ impl ServiceRegistration {
 
         let mut server: Server = Server::builder();
         let router = server.add_service(service);
-
-        let heartbeat_service = HeartbeatService::default();
-        let router = router.add_service(HeartbeatServer::new(heartbeat_service));
 
         Self::serve(router, address, all_services_shutdown_signal_receiver).await;
     }
