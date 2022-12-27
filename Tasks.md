@@ -41,3 +41,4 @@
     7. Decide on `threadpool` implementation in `SingularUpdateQueue`
     8. Support vector of services in ServiceRegistration
 13. Change `package raft.election` in raft.proto
+14. Check wherever `Arc` is used, if it can be replaced by `Rc` or `Box`
