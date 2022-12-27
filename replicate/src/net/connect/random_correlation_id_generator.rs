@@ -5,7 +5,12 @@ pub struct RandomCorrelationIdGenerator {}
 
 impl CorrelationIdGenerator for RandomCorrelationIdGenerator {
     fn generate(&self) -> CorrelationId {
-        return thread_rng().gen();
+        loop {
+            let correlation_id =  thread_rng().gen();
+            if correlation_id > 0 {
+                return correlation_id;
+            }
+        }
     }
 }
 
@@ -16,7 +21,6 @@ impl RandomCorrelationIdGenerator {
 }
 
 #[cfg(test)]
-#[allow(unused_comparisons)]
 mod tests {
     use crate::net::connect::correlation_id::CorrelationIdGenerator;
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
@@ -25,6 +29,6 @@ mod tests {
     fn generate_correlation_id() {
         let generator = RandomCorrelationIdGenerator::new();
         let correlation_id = generator.generate();
-        assert!(correlation_id >= 0);
+        assert!(correlation_id > 0);
     }
 }
