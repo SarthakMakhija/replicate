@@ -5,13 +5,12 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 use raft::election::election::Election;
 use raft::net::service::raft_service::RaftService;
-use raft::state::State;
+use raft::state::{ReplicaRole, State};
 use replicate::clock::clock::SystemClock;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 use replicate::net::replica::Replica;
 use raft::net::rpc::grpc::raft_server::RaftServer;
-use raft::replica_role::ReplicaRole;
 
 #[test]
 fn start_elections_with_new_term() {

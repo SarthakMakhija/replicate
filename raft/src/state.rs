@@ -1,7 +1,5 @@
 use std::sync::RwLock;
 
-use crate::replica_role::ReplicaRole;
-
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
 }
@@ -9,6 +7,13 @@ pub struct State {
 struct ConsensusState {
     term: u64,
     role: ReplicaRole,
+}
+
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub enum ReplicaRole {
+    Leader,
+    Follower,
+    Candidate
 }
 
 impl State {
