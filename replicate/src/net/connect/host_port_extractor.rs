@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::net::AddrParseError;
+use tonic::{Code, Status};
 
 use crate::net::connect::host_and_port::HostAndPort;
 
@@ -33,6 +34,15 @@ impl Error for HostAndPortConstructionError {
     }
 }
 
+impl From<HostAndPortConstructionError> for Status {
+    fn from(err: HostAndPortConstructionError) -> Self {
+        return Status::new(
+            Code::FailedPrecondition,
+            err.to_string()
+        )
+    }
+}
+
 pub trait HostAndPortExtractor {
     fn try_referral_host_port(&self) -> Result<HostAndPort, HostAndPortConstructionError> {
         let optional_host = self.get_referral_host();
@@ -59,6 +69,7 @@ mod tests {
 
     use crate::net::connect::host_port_extractor::{HostAndPortConstructionError, HostAndPortExtractor, REFERRAL_HOST, REFERRAL_PORT};
     use crate::net::connect::host_and_port::HostAndPort;
+    use tonic::{Code, Status};
 
     #[test]
     fn get_host_and_port() {
@@ -108,5 +119,16 @@ mod tests {
 
         assert!(host_and_port.is_err());
         assert!(matches!(host_and_port, Err(HostAndPortConstructionError::InvalidHost(_, _))));
+    }
+
+    #[test]
+    fn status_from_host_and_port_construction_error() {
+        let missing_host_or_port = HostAndPortConstructionError::MissingHortOrPort;
+        let error_message = format!("{}", &missing_host_or_port);
+
+        let status = Status::from(missing_host_or_port);
+
+        assert_eq!(Code::FailedPrecondition ,status.code());
+        assert!(status.to_string().contains(&error_message));
     }
 }
