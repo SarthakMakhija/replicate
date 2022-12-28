@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use std::fmt::{Display, Formatter};
 use std::sync::{Arc, RwLock};
 use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
-use replicate::net::connect::service_client::ServiceResponseError;
+use replicate::net::connect::error::ServiceResponseError;
 
 use replicate::net::replica::{Replica, ReplicaId};
 use crate::net::factory::service_request::ServiceRequestFactory;

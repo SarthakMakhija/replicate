@@ -59,7 +59,7 @@ mod tests {
         use async_trait::async_trait;
 
         use crate::heartbeat::heartbeat_sender::HeartbeatSender;
-        use crate::net::connect::service_client::ServiceResponseError;
+        use crate::net::connect::error::ServiceResponseError;
 
         pub struct HeartbeatCounter {
             pub counter: Arc<AtomicU16>,

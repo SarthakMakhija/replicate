@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use tonic::{Request, Response};
 
 use replicate::net::connect::host_and_port::HostAndPort;
-use replicate::net::connect::service_client::{ServiceClientProvider, ServiceResponseError};
+use replicate::net::connect::service_client::ServiceClientProvider;
+use replicate::net::connect::error::ServiceResponseError;
 
 use crate::net::rpc::grpc::RequestVote;
 use crate::net::rpc::grpc::RequestVoteResponse;

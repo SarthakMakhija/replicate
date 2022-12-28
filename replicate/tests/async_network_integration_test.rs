@@ -9,7 +9,8 @@ use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
-use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
+use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
+use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 
 use crate::grpc::{EchoRequest, EchoResponse};

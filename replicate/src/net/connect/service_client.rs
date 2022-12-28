@@ -1,9 +1,8 @@
-use std::error::Error;
-
 use async_trait::async_trait;
 use tonic::{Request, Response};
-use crate::net::connect::correlation_id::CorrelationId;
 
+use crate::net::connect::correlation_id::CorrelationId;
+use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
 
 pub struct ServiceRequest<Payload, Response>
@@ -27,8 +26,6 @@ impl<Payload: Send, Response> ServiceRequest<Payload, Response>
         };
     }
 }
-
-pub type ServiceResponseError = Box<dyn Error + Send + Sync + 'static>;
 
 #[async_trait]
 pub trait ServiceClientProvider<Payload: Send, R>: Send + Sync {

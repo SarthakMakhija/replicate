@@ -3,7 +3,8 @@ use tonic::Request;
 
 use crate::net::connect::host_port_extractor::{REFERRAL_HOST, REFERRAL_PORT};
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
+use crate::net::connect::service_client::ServiceRequest;
+use crate::net::connect::error::ServiceResponseError;
 
 pub struct AsyncNetwork {}
 
@@ -82,7 +83,8 @@ mod tests {
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
         use crate::net::connect::host_port_extractor::HostAndPortExtractor;
         use crate::net::connect::host_and_port::HostAndPort;
-        use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest, ServiceResponseError};
+        use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
+        use crate::net::connect::error::ServiceResponseError;
 
         pub(crate) struct TestRequest {
             pub(crate) id: u8,

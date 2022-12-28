@@ -9,7 +9,8 @@ use crate::clock::clock::Clock;
 use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_client::{ServiceRequest, ServiceResponseError};
+use crate::net::connect::service_client::ServiceRequest;
+use crate::net::connect::error::ServiceResponseError;
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType};
 use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
@@ -200,7 +201,8 @@ mod tests {
 
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
         use crate::net::connect::host_and_port::HostAndPort;
-        use crate::net::connect::service_client::{ServiceClientProvider, ServiceResponseError};
+        use crate::net::connect::service_client::{ServiceClientProvider};
+        use crate::net::connect::error::ServiceResponseError;
 
         #[derive(Debug)]
         pub struct GetValueRequest {}

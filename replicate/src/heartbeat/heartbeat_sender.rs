@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::net::connect::service_client::ServiceResponseError;
+use crate::net::connect::error::ServiceResponseError;
 
 #[async_trait]
 pub trait HeartbeatSender: Send + Sync {
