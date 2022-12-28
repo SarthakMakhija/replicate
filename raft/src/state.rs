@@ -77,6 +77,10 @@ impl State {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).voted_for;
     }
+
+    pub(crate) fn get_replica(&self) -> Arc<Replica> {
+        return self.replica.clone();
+    }
 }
 
 #[derive(Debug)]

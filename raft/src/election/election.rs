@@ -11,19 +11,15 @@ use crate::state::State;
 
 pub struct Election {
     state: Arc<State>,
-    replica: Arc<Replica>,
 }
 
 impl Election {
-    pub fn new(state: Arc<State>, replica: Arc<Replica>) -> Self {
-        return Election {
-            state,
-            replica,
-        };
+    pub fn new(state: Arc<State>) -> Self {
+        return Election { state };
     }
 
     pub fn start(&self) {
-        let replica = self.replica.clone();
+        let replica = self.state.get_replica();
         let inner_replica = replica.clone();
         let state = self.state.clone();
 
@@ -46,10 +42,10 @@ impl Election {
                 async_quorum_callback.clone(),
             ).await;
 
-            async_quorum_callback.on_response(inner_replica.get_self_address(), Ok(Box::new(RequestVoteResponse{
+            async_quorum_callback.on_response(inner_replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
                 term,
                 voted: true,
-                correlation_id: RESERVED_CORRELATION_ID
+                correlation_id: RESERVED_CORRELATION_ID,
             })));
 
             let quorum_completion_response = async_quorum_callback.handle().await;

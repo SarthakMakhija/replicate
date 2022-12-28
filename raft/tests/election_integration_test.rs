@@ -25,17 +25,15 @@ fn start_elections_with_new_term() {
     let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3561);
     let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3562);
 
-    let (all_services_shutdown_handle_one, replica_self, state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
+    let (all_services_shutdown_handle_one, state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
     let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
     let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
 
     let_services_start();
 
-    let election = Election::new(
-        state.clone(),
-        replica_self.clone()
-    );
+    let election = Election::new(state.clone());
     election.start();
+
     thread::sleep(Duration::from_secs(1));
     assert_eq!(1, state.get_term());
 
@@ -52,7 +50,7 @@ fn start_elections_with_new_term() {
     });
 }
 
-fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> (AllServicesShutdownHandle, Arc<Replica>, Arc<State>) {
+fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> (AllServicesShutdownHandle, Arc<State>) {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         10,
@@ -64,7 +62,6 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     let replica = Arc::new(replica);
     let state = Arc::new(State::new(replica.clone()));
     let inner_state = state.clone();
-    let cloned = replica.clone();
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
@@ -72,7 +69,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
             all_services_shutdown_receiver,
         ).await;
     });
-    (all_services_shutdown_handle, cloned, state.clone())
+    (all_services_shutdown_handle, state.clone())
 }
 
 fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
