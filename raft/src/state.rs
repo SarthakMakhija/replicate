@@ -103,7 +103,7 @@ impl Error for HeartbeatSendError {}
 
 #[async_trait]
 impl HeartbeatSender for State {
-    async fn send(&self) -> Result<(), ServiceResponseError> {
+    async fn send_heartbeat(&self) -> Result<(), ServiceResponseError> {
         let term = self.get_term();
         let leader_id = self.replica.get_id();
         let service_request_constructor = || {

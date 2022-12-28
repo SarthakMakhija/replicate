@@ -31,7 +31,7 @@ impl HeartbeatScheduler {
                 if !keep_running.load(Ordering::SeqCst) {
                     return;
                 }
-                let _ = heartbeat_sender.send().await;
+                let _ = heartbeat_sender.send_heartbeat().await;
                 interval.tick().await;
             }
         });
@@ -67,7 +67,7 @@ mod tests {
 
         #[async_trait]
         impl HeartbeatSender for HeartbeatCounter {
-            async fn send(&self) -> Result<(), ServiceResponseError> {
+            async fn send_heartbeat(&self) -> Result<(), ServiceResponseError> {
                 self.counter.clone().fetch_add(1, Ordering::SeqCst);
                 return Ok(());
             }

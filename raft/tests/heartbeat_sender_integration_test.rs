@@ -34,7 +34,7 @@ fn send_heartbeats_to_followers() {
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
-        let result = state.send().await;
+        let result = state.send_heartbeat().await;
         assert!(result.is_ok());
 
         let _ = all_services_shutdown_handle_one.shutdown().await;
@@ -68,7 +68,7 @@ fn send_heartbeats_to_followers_with_failure() {
     });
 
     blocking_runtime.block_on(async move {
-        let result = state.send().await;
+        let result = state.send_heartbeat().await;
         assert!(result.is_err());
 
         let heartbeat_send_error = result.unwrap_err().downcast::<HeartbeatSendError>().unwrap();
