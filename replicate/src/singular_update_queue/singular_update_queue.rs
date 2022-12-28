@@ -1,5 +1,7 @@
 use std::future::Future;
+
 use tokio::runtime::{Builder, Runtime};
+use tokio::task::JoinHandle;
 
 pub(crate) struct SingularUpdateQueue {
     thread_pool: Runtime,
@@ -21,6 +23,13 @@ impl SingularUpdateQueue {
             F: Future + Send + 'static,
             F::Output: Send + 'static { self.thread_pool.spawn(handler); }
 
+    pub(crate) fn add<F>(&self, handler: F) -> JoinHandle<<F as Future>::Output>
+        where
+            F: Future + Send + 'static,
+            F::Output: Send + 'static {
+        return self.thread_pool.spawn(handler);
+    }
+
     pub(crate) fn shutdown(self) {
         let _ = self.thread_pool.shutdown_background();
     }
@@ -30,6 +39,7 @@ impl SingularUpdateQueue {
 mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
+
     use tokio::sync::mpsc;
 
     use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
@@ -53,7 +63,6 @@ mod tests {
 
         singular_update_queue.shutdown();
     }
-
 
     #[tokio::test]
     async fn get_with_insert_by_multiple_tasks() {
@@ -86,4 +95,20 @@ mod tests {
         singular_update_queue.shutdown();
     }
 
+    #[tokio::test]
+    async fn add_single_task() {
+        let storage = Arc::new(RwLock::new(HashMap::new()));
+        let singular_update_queue = SingularUpdateQueue::new();
+
+        let handle = singular_update_queue.add(async move {
+            storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
+            return ("WAL".to_string(), "write-ahead log".to_string());
+        });
+
+        let (key, value) = handle.await.unwrap();
+        assert_eq!("WAL", key);
+        assert_eq!("write-ahead log", value);
+
+        singular_update_queue.shutdown();
+    }
 }
