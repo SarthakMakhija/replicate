@@ -120,6 +120,14 @@ impl Replica {
         singular_update_queue.submit(handler);
     }
 
+    pub fn add_to_queue<F>(&self, handler: F) -> JoinHandle<<F as Future>::Output>
+        where
+            F: Future + Send + 'static,
+            F::Output: Send + 'static {
+        let singular_update_queue = &self.singular_update_queue;
+        return singular_update_queue.add(handler);
+    }
+
     pub fn register_response(&self, correlation_id: CorrelationId, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
         let _ = &self.request_waiting_list.handle_response(correlation_id, from, response);
     }
@@ -342,7 +350,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn add_to_queue() {
+    async fn submit_to_queue() {
         let any_replica_port = 8988;
         let storage = Arc::new(RwLock::new(HashMap::new()));
         let readable_storage = storage.clone();
@@ -365,6 +373,29 @@ mod tests {
         let read_storage = readable_storage.read().unwrap();
 
         assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
+        replica.singular_update_queue.shutdown();
+    }
+
+    #[tokio::test]
+    async fn add_to_queue() {
+        let any_replica_port = 8988;
+        let storage = Arc::new(RwLock::new(HashMap::new()));
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
+            Arc::new(SystemClock::new()),
+        );
+
+        let handle = replica.add_to_queue(async move {
+            storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
+            return ("WAL".to_string(), "write-ahead log".to_string());
+        });
+        let (key, value) = handle.await.unwrap();
+
+        assert_eq!("WAL".to_string(), key);
+        assert_eq!("write-ahead log".to_string(), value);
+
         replica.singular_update_queue.shutdown();
     }
 
