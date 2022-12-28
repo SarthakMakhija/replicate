@@ -11,11 +11,11 @@ use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::AppendEntriesResponse;
 use crate::net::rpc::grpc::raft_client::RaftClient;
 
-pub(crate) struct RequestVoteClient {}
+pub struct RequestVoteClient {}
 
-pub(crate) struct RequestVoteResponseClient {}
+pub struct RequestVoteResponseClient {}
 
-pub(crate) struct RaftHeartbeatServiceClient {}
+pub struct RaftHeartbeatServiceClient {}
 
 #[async_trait]
 impl ServiceClientProvider<RequestVote, ()> for RequestVoteClient {
@@ -23,7 +23,6 @@ impl ServiceClientProvider<RequestVote, ()> for RequestVoteClient {
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_request_vote(request).await?;
         return Ok(response);
-        //TODO: Handle error
     }
 }
 
@@ -33,7 +32,6 @@ impl ServiceClientProvider<RequestVoteResponse, ()> for RequestVoteResponseClien
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.finish_request_vote(request).await?;
         return Ok(response);
-        //TODO: Handle error
     }
 }
 
@@ -43,7 +41,6 @@ impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for RaftHeartbe
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_heartbeat(request).await?;
         return Ok(response);
-        //TODO: Handle error
     }
 }
 
