@@ -5,9 +5,9 @@ use tonic::{Request, Response};
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 
-use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse, AppendEntries};
-use crate::net::rpc::grpc::raft_server::Raft;
 use crate::net::factory::service_request::ServiceRequestFactory;
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse};
+use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::State;
 
 pub struct RaftService {
@@ -34,7 +34,6 @@ impl Raft for RaftService {
         println!("received RequestVote with term {}", request.term);
         let handler = async move {
             let term = state.get_term();
-            //TODO: Validate from raft paper
             let voted: bool = if request.term > term {
                 true
             } else {
@@ -59,8 +58,147 @@ impl Raft for RaftService {
         return Ok(Response::new(()));
     }
 
-    async fn acknowledge_heartbeat(&self, _: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
+    async fn acknowledge_heartbeat(&self, request: Request<AppendEntries>) -> Result<Response<AppendEntriesResponse>, tonic::Status> {
         println!("received heartbeat on {:?}", self.state.get_replica_reference().get_self_address());
-        return Ok(Response::new(()));
+        let state = self.state.clone();
+        let replica = self.state.get_replica_reference();
+
+        let request = request.into_inner();
+        let handler = async move {
+            let term = state.get_term();
+            if request.term > term {
+                state.change_to_follower(request.term);
+                return AppendEntriesResponse { success: true, term: request.term };
+            }
+            if request.term == term {
+                return AppendEntriesResponse { success: true, term };
+            }
+            return AppendEntriesResponse { success: false, term };
+        };
+
+        return match replica.add_to_queue(handler).await {
+            Ok(append_entries_response) =>
+                Ok(Response::new(append_entries_response)),
+            Err(err) =>
+                Err(tonic::Status::unknown(err.to_string()))
+        };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+    use std::sync::Arc;
+    use tonic::{Request, Response};
+    use replicate::clock::clock::SystemClock;
+    use replicate::net::connect::host_and_port::HostAndPort;
+    use replicate::net::replica::Replica;
+    use crate::net::service::raft_service::RaftService;
+    use crate::state::State;
+    use crate::net::rpc::grpc::raft_server::Raft;
+    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse};
+    use tokio::runtime::Builder;
+
+    #[test]
+    fn acknowledge_heartbeat_with_request_containing_higher_term() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let state = Arc::new(State::new(replica.clone()));
+        let raft_service = RaftService::new(state.clone());
+
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+        let response = blocking_runtime.block_on(async move {
+            let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
+                Request::new(
+                    AppendEntries {
+                        term: 1,
+                        leader_id: replica.get_id(),
+                        correlation_id: 20
+                    }
+                )
+            ).await;
+            return result.unwrap().into_inner();
+        });
+
+        assert_eq!(true, response.success);
+        assert_eq!(1, response.term);
+        assert_eq!(1, state.get_term());
+    }
+
+    #[test]
+    fn acknowledge_heartbeat_with_request_containing_same_term() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2069);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let state = Arc::new(State::new(replica.clone()));
+        let raft_service = RaftService::new(state.clone());
+
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+        let response = blocking_runtime.block_on(async move {
+            let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
+                Request::new(
+                    AppendEntries {
+                        term: 0,
+                        leader_id: replica.get_id(),
+                        correlation_id: 20
+                    }
+                )
+            ).await;
+            return result.unwrap().into_inner();
+        });
+
+        assert_eq!(true, response.success);
+        assert_eq!(0, response.term);
+        assert_eq!(0, state.get_term());
+    }
+
+    #[test]
+    fn acknowledge_heartbeat_with_request_containing_smaller_term() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2068);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let state = Arc::new(State::new(replica.clone()));
+        state.change_to_candidate();
+
+        let raft_service = RaftService::new(state.clone());
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+        let response = blocking_runtime.block_on(async move {
+            let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
+                Request::new(
+                    AppendEntries {
+                        term: 0,
+                        leader_id: replica.get_id(),
+                        correlation_id: 20
+                    }
+                )
+            ).await;
+            return result.unwrap().into_inner();
+        });
+
+        assert_eq!(false, response.success);
+        assert_eq!(1, response.term);
+        assert_eq!(1, state.get_term());
     }
 }

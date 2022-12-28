@@ -8,7 +8,7 @@ service Raft {
   rpc acknowledge_request_vote (RequestVote) returns (google.protobuf.Empty) {}
   rpc finish_request_vote (RequestVoteResponse) returns (google.protobuf.Empty) {}
 
-  rpc acknowledge_heartbeat (AppendEntries) returns (google.protobuf.Empty) {}
+  rpc acknowledge_heartbeat (AppendEntries) returns (AppendEntriesResponse) {}
 }
 
 message RequestVote {
@@ -27,4 +27,9 @@ message AppendEntries {
   //tag id 1 is reserved for correlation_id generated using procedural macro
   uint64 term = 2;
   uint64 leader_id = 3;
+}
+
+message AppendEntriesResponse {
+  uint64 term = 2;
+  bool success = 3;
 }
