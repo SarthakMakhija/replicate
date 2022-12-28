@@ -1,9 +1,10 @@
-use async_trait::async_trait;
-
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
-use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::service_client::ServiceResponseError;
 use replicate::net::replica::Replica;
 
@@ -15,36 +16,35 @@ pub struct RaftHeartbeatSender {
     replica: Arc<Replica>,
 }
 
+#[derive(Debug)]
+pub struct HeartbeatSendError {
+    pub total_failed_sends: usize,
+}
+
+impl Display for HeartbeatSendError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let message = format!("Total failures in sending heartbeat {}", self.total_failed_sends);
+        write!(formatter, "{}", message)
+    }
+}
+
+impl Error for HeartbeatSendError {}
+
 #[async_trait]
 impl HeartbeatSender for RaftHeartbeatSender {
     async fn send(&self) -> Result<(), ServiceResponseError> {
         let term = self.state.get_term();
         let leader_id = self.replica.get_id();
-        let mut handles = Vec::new();
+        let service_request_constructor = || {
+            ServiceRequestFactory::heartbeat(term, leader_id)
+        };
+        let total_failed_sends =
+            self.replica.send_one_way_to_replicas_without_callback(service_request_constructor).await;
 
-        let peers = self.replica.get_peers().clone();
-        for peer_address in peers {
-            let service_server_request = ServiceRequestFactory::heartbeat(
-                term,
-                leader_id,
-            );
-            handles.push(tokio::spawn(async move{
-                return AsyncNetwork::send_without_source_footprint(
-                    service_server_request,
-                    peer_address,
-                ).await;
-            }));
-        }
-
-        let mut done = Ok(());
-        for handle in handles {
-            let result = handle.await.unwrap();
-            if result.is_err() {
-                eprintln!("Could not send heartbeat {}", result.as_ref().unwrap_err());
-                done = result;
-            }
-        }
-        return done;
+        return match total_failed_sends {
+            0 => Ok(()),
+            _ => Err(Box::new(HeartbeatSendError { total_failed_sends }))
+        };
     }
 }
 

@@ -82,6 +82,36 @@ impl Replica {
         return total_failed_sends;
     }
 
+    pub async fn send_one_way_to_replicas_without_callback<Payload: Send + 'static, S>(&self,
+                                                                                       service_request_constructor: S) -> TotalFailedSends
+        where S: Fn() -> ServiceRequest<Payload, ()> {
+
+        let mut send_task_handles = Vec::new();
+        let peer_addresses = self.peer_addresses.clone();
+        for address in peer_addresses {
+            if address.eq(&self.self_address) {
+                continue;
+            }
+
+            let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
+            send_task_handles.push(tokio::spawn(async move {
+                return AsyncNetwork::send_without_source_footprint(
+                    service_request,
+                    address,
+                ).await;
+            }));
+        }
+
+        let mut total_failed_sends: TotalFailedSends = 0;
+        for handle in send_task_handles {
+            let result = handle.await.unwrap();
+            if result.is_err() {
+                total_failed_sends = total_failed_sends + 1;
+            }
+        }
+        return total_failed_sends;
+    }
+
     pub fn add_to_queue<F>(&self, handler: F)
         where
             F: Future + Send + 'static,
@@ -411,5 +441,65 @@ mod tests {
 
         let total_peer_count = replica.total_peer_count();
         assert_eq!(3, total_peer_count);
+    }
+
+    #[tokio::test]
+    async fn send_one_way_to_the_replicas_without_callback_successfully() {
+        let any_other_replica_port = 1989;
+
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let correlation_id_generator = RandomCorrelationIdGenerator::new();
+        let service_request_constructor = || {
+            ServiceRequest::new(
+                GetValueRequest {},
+                Box::new(GetValueRequestSuccessClient {}),
+                correlation_id_generator.generate(),
+            )
+        };
+
+        let total_failed_sends =
+            replica.send_one_way_to_replicas_without_callback(service_request_constructor, ).await;
+
+        assert_eq!(0, total_failed_sends);
+        replica.singular_update_queue.shutdown();
+    }
+
+    #[tokio::test]
+    async fn send_one_way_to_replicas_without_callback_with_failure() {
+        let any_replica_port = 8988;
+        let any_other_replica_port = 8988;
+
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let correlation_id_generator = RandomCorrelationIdGenerator::new();
+        let service_request_constructor = || {
+            ServiceRequest::new(
+                GetValueRequest {},
+                Box::new(GetValueRequestFailureClient {}),
+                correlation_id_generator.generate(),
+            )
+        };
+
+        let total_failed_sends =
+            replica.send_one_way_to_replicas_without_callback(service_request_constructor).await;
+
+        assert_eq!(2, total_failed_sends);
+        replica.singular_update_queue.shutdown();
     }
 }
