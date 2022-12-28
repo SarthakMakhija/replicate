@@ -110,7 +110,7 @@ impl HeartbeatSender for State {
             ServiceRequestFactory::heartbeat(term, leader_id)
         };
         let total_failed_sends =
-            self.replica.send_one_way_to_replicas_without_callback(service_request_constructor).await;
+            self.replica.send_to_replicas_without_callback(service_request_constructor).await;
 
         println!("total failures {}", total_failed_sends);
         return match total_failed_sends {

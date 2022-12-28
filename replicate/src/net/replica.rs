@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,26 +45,30 @@ impl Replica {
         };
     }
 
-    pub async fn send_one_way_to_replicas<Payload: Send + 'static, S>(&self,
-                                                                      service_request_constructor: S,
-                                                                      response_callback: ResponseCallbackType) -> TotalFailedSends
-        where S: Fn() -> ServiceRequest<Payload, ()> {
-        return self.send_one_way_to(&self.peer_addresses, service_request_constructor, response_callback).await;
+    pub async fn send_to_replicas<Payload, S, Response>(&self,
+                                                        service_request_constructor: S,
+                                                        response_callback: ResponseCallbackType) -> TotalFailedSends
+        where Payload: Send + 'static,
+              Response: Send + Debug + 'static,
+              S: Fn() -> ServiceRequest<Payload, Response> {
+        return self.send_to(&self.peer_addresses, service_request_constructor, response_callback).await;
     }
 
-    pub async fn send_one_way_to<Payload: Send + 'static, S>(&self,
-                                                             hosts: &Vec<HostAndPort>,
-                                                             service_request_constructor: S,
-                                                             response_callback: ResponseCallbackType) -> TotalFailedSends
-        where S: Fn() -> ServiceRequest<Payload, ()> {
+    pub async fn send_to<Payload, S, Response>(&self,
+                                               hosts: &Vec<HostAndPort>,
+                                               service_request_constructor: S,
+                                               response_callback: ResponseCallbackType) -> TotalFailedSends
+        where Payload: Send + 'static,
+              Response: Send + Debug + 'static,
+              S: Fn() -> ServiceRequest<Payload, Response> {
         let mut send_task_handles = Vec::new();
         for address in hosts {
             if address.eq(&self.self_address) {
                 continue;
             }
 
-            let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
-            send_task_handles.push(self.send_one_way(
+            let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
+            send_task_handles.push(self.send(
                 &self.request_waiting_list,
                 service_request,
                 address.clone(),
@@ -82,10 +87,11 @@ impl Replica {
         return total_failed_sends;
     }
 
-    pub async fn send_one_way_to_replicas_without_callback<Payload: Send + 'static, S>(&self,
-                                                                                       service_request_constructor: S) -> TotalFailedSends
-        where S: Fn() -> ServiceRequest<Payload, ()> {
-
+    pub async fn send_to_replicas_without_callback<Payload, S, Response>(&self,
+                                                                         service_request_constructor: S) -> TotalFailedSends
+        where Payload: Send + 'static,
+              Response: Send + Debug + 'static,
+              S: Fn() -> ServiceRequest<Payload, Response> {
         let mut send_task_handles = Vec::new();
         let peer_addresses = self.peer_addresses.clone();
         for address in peer_addresses {
@@ -93,7 +99,7 @@ impl Replica {
                 continue;
             }
 
-            let service_request: ServiceRequest<Payload, ()> = service_request_constructor();
+            let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
             send_task_handles.push(tokio::spawn(async move {
                 return AsyncNetwork::send_without_source_footprint(
                     service_request,
@@ -149,11 +155,13 @@ impl Replica {
         return self.id;
     }
 
-    fn send_one_way<Payload: Send + 'static>(&self,
-                                             request_waiting_list: &RequestWaitingList,
-                                             service_request: ServiceRequest<Payload, ()>,
-                                             target_address: HostAndPort,
-                                             response_callback: ResponseCallbackType) -> JoinHandle<(Result<(), ServiceResponseError>, CorrelationId, HostAndPort)> {
+    fn send<Payload, Response>(&self,
+                               request_waiting_list: &RequestWaitingList,
+                               service_request: ServiceRequest<Payload, Response>,
+                               target_address: HostAndPort,
+                               response_callback: ResponseCallbackType) -> JoinHandle<(Result<Response, ServiceResponseError>, CorrelationId, HostAndPort)>
+        where Payload: Send + 'static,
+              Response: Send + Debug + 'static {
         let correlation_id = service_request.correlation_id;
         request_waiting_list.add(correlation_id, target_address.clone(), response_callback);
 
@@ -276,7 +284,7 @@ mod tests {
         };
 
         let total_failed_sends =
-            replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+            replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
         assert_eq!(0, total_failed_sends);
         replica.singular_update_queue.shutdown();
@@ -307,7 +315,7 @@ mod tests {
         };
 
         let total_failed_sends =
-            replica.send_one_way_to(
+            replica.send_to(
                 &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
                 service_request_constructor,
                 async_quorum_callback.clone(),
@@ -343,7 +351,7 @@ mod tests {
         };
 
         let total_failed_sends =
-            replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+            replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
         assert_eq!(2, total_failed_sends);
         replica.singular_update_queue.shutdown();
@@ -423,7 +431,7 @@ mod tests {
         };
 
         let total_failed_sends =
-            replica.send_one_way_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+            replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
         assert_eq!(0, total_failed_sends);
 
@@ -497,7 +505,7 @@ mod tests {
         };
 
         let total_failed_sends =
-            replica.send_one_way_to_replicas_without_callback(service_request_constructor, ).await;
+            replica.send_to_replicas_without_callback(service_request_constructor).await;
 
         assert_eq!(0, total_failed_sends);
         replica.singular_update_queue.shutdown();
@@ -528,7 +536,7 @@ mod tests {
         };
 
         let total_failed_sends =
-            replica.send_one_way_to_replicas_without_callback(service_request_constructor).await;
+            replica.send_to_replicas_without_callback(service_request_constructor).await;
 
         assert_eq!(2, total_failed_sends);
         replica.singular_update_queue.shutdown();

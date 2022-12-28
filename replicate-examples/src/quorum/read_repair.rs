@@ -49,7 +49,7 @@ impl<'a> ReadRepair<'a> {
         let async_quorum_callback = AsyncQuorumCallback::<PutKeyValueResponse>::new(expected_responses);
 
         let _ = &self.replica
-            .send_one_way_to(&hosts_with_stale_values, service_request_constructor, async_quorum_callback.clone())
+            .send_to(&hosts_with_stale_values, service_request_constructor, async_quorum_callback.clone())
             .await;
 
         let _ = async_quorum_callback.handle().await;

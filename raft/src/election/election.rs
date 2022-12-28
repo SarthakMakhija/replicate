@@ -36,7 +36,7 @@ impl Election {
                 expected_responses,
                 success_condition,
             );
-            let _ = inner_replica.send_one_way_to_replicas(
+            let _ = inner_replica.send_to_replicas(
                 service_request_constructor,
                 async_quorum_callback.clone(),
             ).await;
