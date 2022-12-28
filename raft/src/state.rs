@@ -1,8 +1,10 @@
-use std::sync::RwLock;
-use replicate::net::replica::ReplicaId;
+use std::sync::{Arc, RwLock};
+
+use replicate::net::replica::{Replica, ReplicaId};
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
+    replica: Arc<Replica>,
 }
 
 struct ConsensusState {
@@ -15,12 +17,13 @@ struct ConsensusState {
 pub enum ReplicaRole {
     Leader,
     Follower,
-    Candidate
+    Candidate,
 }
 
 impl State {
-    pub fn new() -> State {
+    pub fn new(replica: Arc<Replica>) -> State {
         return State {
+            replica,
             consensus_state: RwLock::new(ConsensusState {
                 term: 0,
                 role: ReplicaRole::Follower,
@@ -29,12 +32,12 @@ impl State {
         };
     }
 
-    pub(crate) fn change_to_candidate(&self, self_replica_id: ReplicaId) -> u64 {
+    pub(crate) fn change_to_candidate(&self) -> u64 {
         let mut write_guard = self.consensus_state.write().unwrap();
         let mut consensus_state = &mut *write_guard;
         consensus_state.term = consensus_state.term + 1;
         consensus_state.role = ReplicaRole::Candidate;
-        consensus_state.voted_for = Some(self_replica_id);
+        consensus_state.voted_for = Some(self.replica.get_id());
 
         return consensus_state.term;
     }
@@ -71,12 +74,26 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+    use std::sync::Arc;
+    use replicate::clock::clock::SystemClock;
+    use replicate::net::connect::host_and_port::HostAndPort;
+    use replicate::net::replica::Replica;
     use crate::state::{ReplicaRole, State};
 
     #[test]
     fn become_candidate() {
-        let state = State::new();
-        state.change_to_candidate(10);
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica));
+        state.change_to_candidate();
 
         assert_eq!(1, state.get_term());
         assert_eq!(ReplicaRole::Candidate, state.get_role());
@@ -85,8 +102,17 @@ mod tests {
 
     #[test]
     fn become_leader() {
-        let state = State::new();
-        state.change_to_candidate(10);
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica));
+        state.change_to_candidate();
         state.change_to_leader();
 
         assert_eq!(1, state.get_term());
@@ -96,8 +122,17 @@ mod tests {
 
     #[test]
     fn become_follower() {
-        let state = State::new();
-        state.change_to_candidate(10);
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica));
+        state.change_to_candidate();
         state.change_to_follower(2);
 
         assert_eq!(2, state.get_term());

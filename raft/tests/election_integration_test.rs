@@ -25,11 +25,9 @@ fn start_elections_with_new_term() {
     let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3561);
     let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3562);
 
-    let state = Arc::new(State::new());
-
-    let (all_services_shutdown_handle_one, replica_self) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other], state.clone());
-    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other], Arc::new(State::new()));
-    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one], Arc::new(State::new()));
+    let (all_services_shutdown_handle_one, replica_self, state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
+    let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
+    let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
 
     let_services_start();
 
@@ -54,7 +52,7 @@ fn start_elections_with_new_term() {
     });
 }
 
-fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, state: Arc<State>) -> (AllServicesShutdownHandle, Arc<Replica>) {
+fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> (AllServicesShutdownHandle, Arc<Replica>, Arc<State>) {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         10,
@@ -64,18 +62,20 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     );
 
     let replica = Arc::new(replica);
+    let state = Arc::new(State::new(replica.clone()));
+    let inner_state = state.clone();
     let cloned = replica.clone();
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(state, replica.clone())),
+            RaftServer::new(RaftService::new(inner_state, replica.clone())),
             all_services_shutdown_receiver,
         ).await;
     });
-    (all_services_shutdown_handle, cloned)
+    (all_services_shutdown_handle, cloned, state.clone())
 }
 
-fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, state: Arc<State>) -> AllServicesShutdownHandle {
+fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         20,
@@ -83,18 +83,20 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         peers,
         Arc::new(SystemClock::new()),
     );
+    let replica = Arc::new(replica);
+    let state = Arc::new(State::new(replica.clone()));
 
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(state, Arc::new(replica))),
+            RaftServer::new(RaftService::new(state, replica)),
             all_services_shutdown_receiver,
         ).await;
     });
     all_services_shutdown_handle
 }
 
-fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>, state: Arc<State>) -> AllServicesShutdownHandle {
+fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         30,
@@ -103,10 +105,13 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
         Arc::new(SystemClock::new()),
     );
 
+    let replica = Arc::new(replica);
+    let state = Arc::new(State::new(replica.clone()));
+
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(state, Arc::new(replica))),
+            RaftServer::new(RaftService::new(state, replica)),
             all_services_shutdown_receiver,
         ).await;
     });
