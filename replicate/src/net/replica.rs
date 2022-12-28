@@ -112,7 +112,7 @@ impl Replica {
         return total_failed_sends;
     }
 
-    pub fn add_to_queue<F>(&self, handler: F)
+    pub fn submit_to_queue<F>(&self, handler: F)
         where
             F: Future + Send + 'static,
             F::Output: Send + 'static {
@@ -356,7 +356,7 @@ mod tests {
         );
 
         let (sender, mut receiver) = mpsc::channel(1);
-        replica.add_to_queue(async move {
+        replica.submit_to_queue(async move {
             storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
             sender.send(()).await.unwrap();
         });

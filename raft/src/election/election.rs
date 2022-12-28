@@ -22,7 +22,7 @@ impl Election {
         let inner_replica = replica.clone();
         let state = self.state.clone();
 
-        replica.add_to_queue(async move {
+        replica.submit_to_queue(async move {
             let term = state.change_to_candidate();
             let service_request_constructor = || {
                 ServiceRequestFactory::request_vote(

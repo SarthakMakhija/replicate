@@ -46,7 +46,7 @@ impl Raft for RaftService {
                 originating_host_port,
             ).await.unwrap();
         };
-        let _ = replica.add_to_queue(handler);
+        let _ = replica.submit_to_queue(handler);
         return Ok(Response::new(()));
     }
 

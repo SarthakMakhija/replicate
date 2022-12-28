@@ -54,7 +54,7 @@ impl KeyValueStore {
                 originating_host_port,
             ).await.unwrap();
         };
-        let _ = &self.replica.add_to_queue(handler);
+        let _ = &self.replica.submit_to_queue(handler);
         return Ok(Response::new(()));
     }
 
@@ -88,7 +88,7 @@ impl KeyValueStore {
                 originating_host_port,
             ).await.unwrap();
         };
-        let _ = &self.replica.add_to_queue(handler);
+        let _ = &self.replica.submit_to_queue(handler);
         return Ok(Response::new(()));
     }
 
