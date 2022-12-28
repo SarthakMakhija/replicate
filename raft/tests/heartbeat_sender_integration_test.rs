@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
-use raft::heartbeat::heartbeat_sender::{HeartbeatSendError, RaftHeartbeatSender};
+use raft::state::HeartbeatSendError;
 use raft::net::service::raft_service::RaftService;
 use raft::state::State;
 use replicate::clock::clock::SystemClock;
@@ -26,7 +26,7 @@ fn send_heartbeats_to_followers() {
     let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1561);
     let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1562);
 
-    let (all_services_shutdown_handle_one, replica_self, state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
+    let (all_services_shutdown_handle_one,state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
     let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
     let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
 
@@ -34,7 +34,7 @@ fn send_heartbeats_to_followers() {
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
-        let result = RaftHeartbeatSender::new(state, replica_self).send().await;
+        let result = state.send().await;
         assert!(result.is_ok());
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
@@ -56,7 +56,7 @@ fn send_heartbeats_to_followers_with_failure() {
     let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2561);
     let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2562);
 
-    let (all_services_shutdown_handle_one, replica_self, state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
+    let (all_services_shutdown_handle_one,state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
     let all_services_shutdown_handle_two = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
     let all_services_shutdown_handle_three = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
 
@@ -68,7 +68,7 @@ fn send_heartbeats_to_followers_with_failure() {
     });
 
     blocking_runtime.block_on(async move {
-        let result = RaftHeartbeatSender::new(state, replica_self).send().await;
+        let result = state.send().await;
         assert!(result.is_err());
 
         let heartbeat_send_error = result.unwrap_err().downcast::<HeartbeatSendError>().unwrap();
@@ -79,7 +79,7 @@ fn send_heartbeats_to_followers_with_failure() {
     });
 }
 
-fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> (AllServicesShutdownHandle, Arc<Replica>, Arc<State>) {
+fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> (AllServicesShutdownHandle, Arc<State>) {
     let (all_services_shutdown_handle, all_services_shutdown_receiver) = AllServicesShutdownHandle::new();
     let replica = Replica::new(
         10,
@@ -91,7 +91,6 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     let replica = Arc::new(replica);
     let state = Arc::new(State::new(replica.clone()));
     let inner_state = state.clone();
-    let cloned = replica.clone();
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
@@ -99,7 +98,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
             all_services_shutdown_receiver,
         ).await;
     });
-    (all_services_shutdown_handle, cloned, state)
+    (all_services_shutdown_handle, state)
 }
 
 fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> AllServicesShutdownHandle {

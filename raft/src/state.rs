@@ -1,6 +1,13 @@
+use std::error::Error;
+use async_trait::async_trait;
+
+use std::fmt::{Display, Formatter};
 use std::sync::{Arc, RwLock};
+use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
+use replicate::net::connect::service_client::ServiceResponseError;
 
 use replicate::net::replica::{Replica, ReplicaId};
+use crate::net::factory::service_request::ServiceRequestFactory;
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
@@ -69,6 +76,39 @@ impl State {
     fn get_voted_for(&self) -> Option<ReplicaId> {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).voted_for;
+    }
+}
+
+#[derive(Debug)]
+pub struct HeartbeatSendError {
+    pub total_failed_sends: usize,
+}
+
+impl Display for HeartbeatSendError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let message = format!("Total failures in sending heartbeat {}", self.total_failed_sends);
+        write!(formatter, "{}", message)
+    }
+}
+
+impl Error for HeartbeatSendError {}
+
+#[async_trait]
+impl HeartbeatSender for State {
+    async fn send(&self) -> Result<(), ServiceResponseError> {
+        let term = self.get_term();
+        let leader_id = self.replica.get_id();
+        let service_request_constructor = || {
+            ServiceRequestFactory::heartbeat(term, leader_id)
+        };
+        let total_failed_sends =
+            self.replica.send_one_way_to_replicas_without_callback(service_request_constructor).await;
+
+        println!("total failures {}", total_failed_sends);
+        return match total_failed_sends {
+            0 => Ok(()),
+            _ => Err(Box::new(HeartbeatSendError { total_failed_sends }))
+        };
     }
 }
 
