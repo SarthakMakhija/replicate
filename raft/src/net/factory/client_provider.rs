@@ -46,3 +46,72 @@ impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for RaftHeartbe
         //TODO: Handle error
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+    use tonic::Request;
+    use replicate::net::connect::host_and_port::HostAndPort;
+    use replicate::net::connect::service_client::ServiceClientProvider;
+    use crate::net::factory::client_provider::{RaftHeartbeatServiceClient, RequestVoteClient, RequestVoteResponseClient};
+    use crate::net::rpc::grpc::RequestVote;
+    use crate::net::rpc::grpc::RequestVoteResponse;
+    use crate::net::rpc::grpc::AppendEntries;
+
+    #[tokio::test]
+    async fn request_vote_client_with_connection_error() {
+        let client = RequestVoteClient{};
+        let request = Request::new(
+            RequestVote {
+                term: 1,
+                replica_id: 10,
+                correlation_id: 10,
+            }
+        );
+        let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
+
+        let result = client.call(request, address).await;
+        assert!(result.is_err());
+
+        let result = result.unwrap_err().downcast::<tonic::transport::Error>();
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn request_vote_response_client_with_connection_error() {
+        let client = RequestVoteResponseClient{};
+        let request = Request::new(
+            RequestVoteResponse {
+                term: 1,
+                voted: true,
+                correlation_id: 10,
+            }
+        );
+        let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
+
+        let result = client.call(request, address).await;
+        assert!(result.is_err());
+
+        let result = result.unwrap_err().downcast::<tonic::transport::Error>();
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn append_entries_client_with_connection_error() {
+        let client = RaftHeartbeatServiceClient{};
+        let request = Request::new(
+            AppendEntries {
+                term: 1,
+                leader_id: 10,
+                correlation_id: 10,
+            }
+        );
+        let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
+
+        let result = client.call(request, address).await;
+        assert!(result.is_err());
+
+        let result = result.unwrap_err().downcast::<tonic::transport::Error>();
+        assert!(result.is_ok());
+    }
+}
