@@ -1,52 +1,31 @@
 use std::error::Error;
-use std::fmt::{Display, Formatter};
-use tonic::Status;
-use crate::net::connect::host_and_port::HostAndPort;
+use tonic::{Code, Status};
+use crate::net::connect::host_port_extractor::HostAndPortConstructionError;
 
 pub type ServiceResponseError = Box<dyn Error + Send + Sync + 'static>;
 
-#[derive(Debug)]
-pub struct ServiceConnectError {
-    address: HostAndPort,
-    additional_message: String,
-}
-
-impl Display for ServiceConnectError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let message = format!("Failed to connect to the address {:?}, additional context {}", self.address, self.additional_message);
-        write!(formatter, "{}", message)
+impl From<HostAndPortConstructionError> for Status {
+    fn from(err: HostAndPortConstructionError) -> Self {
+        return Status::new(
+            Code::FailedPrecondition,
+            err.to_string()
+        )
     }
 }
 
-impl Error for ServiceConnectError {}
+#[cfg(test)]
+mod tests {
+    use tonic::{Code, Status};
+    use crate::net::connect::host_port_extractor::HostAndPortConstructionError;
 
-#[derive(Debug)]
-pub struct ServiceError {
-    address: HostAndPort,
-    additional_message: String,
-}
+    #[test]
+    fn status_from_host_and_port_construction_error() {
+        let missing_host_or_port = HostAndPortConstructionError::MissingHortOrPort;
+        let error_message = format!("{}", &missing_host_or_port);
 
-impl Display for ServiceError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let message = format!("Failed to invoke the service {} on the address {:?}, additional context {}", "NA", self.address, self.additional_message);
-        write!(formatter, "{}", message)
+        let status = Status::from(missing_host_or_port);
+
+        assert_eq!(Code::FailedPrecondition ,status.code());
+        assert!(status.to_string().contains(&error_message));
     }
-}
-
-impl Error for ServiceError {}
-
-pub fn transform_connection_result<T>(connection_result: Result<T, tonic::transport::Error>, address: HostAndPort) -> Result<T, ServiceResponseError> {
-    return match connection_result {
-        Ok(response) => Ok(response),
-        Err(err) => {
-            Err(Box::new(ServiceConnectError { address, additional_message: err.to_string() }))
-        }
-    };
-}
-
-pub fn transform_rpc_result<T>(rpc_result: Result<T, Status>, address: HostAndPort) -> Result<T, ServiceResponseError> {
-    return match rpc_result {
-        Ok(response) => Ok(response),
-        Err(status) => Err(Box::new(ServiceError { address, additional_message: status.message().to_string() }))
-    };
 }

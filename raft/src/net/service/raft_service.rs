@@ -23,7 +23,7 @@ impl RaftService {
 #[tonic::async_trait]
 impl Raft for RaftService {
     async fn acknowledge_request_vote(&self, request: Request<RequestVote>) -> Result<Response<()>, tonic::Status> {
-        let originating_host_port = request.try_referral_host_port().unwrap();
+        let originating_host_port = request.try_referral_host_port()?;
 
         let state = self.state.clone();
         let request = request.into_inner();
@@ -50,7 +50,7 @@ impl Raft for RaftService {
     }
 
     async fn finish_request_vote(&self, request: Request<RequestVoteResponse>) -> Result<Response<()>, tonic::Status> {
-        let originating_host_port = request.try_referral_host_port().unwrap();
+        let originating_host_port = request.try_referral_host_port()?;
         let response = request.into_inner();
         println!("received RequestVoteResponse with voted? {}", response.voted);
 
