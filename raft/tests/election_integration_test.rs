@@ -59,13 +59,12 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         Arc::new(SystemClock::new()),
     );
 
-    let replica = Arc::new(replica);
-    let state = Arc::new(State::new(replica.clone()));
+    let state = Arc::new(State::new(Arc::new(replica)));
     let inner_state = state.clone();
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(inner_state, replica.clone())),
+            RaftServer::new(RaftService::new(inner_state)),
             all_services_shutdown_receiver,
         ).await;
     });
@@ -80,13 +79,11 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         peers,
         Arc::new(SystemClock::new()),
     );
-    let replica = Arc::new(replica);
-    let state = Arc::new(State::new(replica.clone()));
-
+    let state = Arc::new(State::new(Arc::new(replica)));
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(state, replica)),
+            RaftServer::new(RaftService::new(state)),
             all_services_shutdown_receiver,
         ).await;
     });
@@ -102,13 +99,11 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
         Arc::new(SystemClock::new()),
     );
 
-    let replica = Arc::new(replica);
-    let state = Arc::new(State::new(replica.clone()));
-
+    let state = Arc::new(State::new(Arc::new(replica)));
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(state, replica)),
+            RaftServer::new(RaftService::new(state)),
             all_services_shutdown_receiver,
         ).await;
     });

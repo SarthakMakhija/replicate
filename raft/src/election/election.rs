@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use replicate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::correlation_id::RESERVED_CORRELATION_ID;
-use replicate::net::replica::Replica;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
 
 use crate::net::factory::service_request::ServiceRequestFactory;

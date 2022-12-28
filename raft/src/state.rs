@@ -81,6 +81,10 @@ impl State {
     pub(crate) fn get_replica(&self) -> Arc<Replica> {
         return self.replica.clone();
     }
+
+    pub(crate) fn get_replica_reference(&self) -> &Arc<Replica> {
+        return &self.replica;
+    }
 }
 
 #[derive(Debug)]

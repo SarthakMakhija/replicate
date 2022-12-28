@@ -4,7 +4,6 @@ use tonic::{Request, Response};
 
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
-use replicate::net::replica::Replica;
 
 use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse, AppendEntries};
 use crate::net::rpc::grpc::raft_server::Raft;
@@ -13,15 +12,11 @@ use crate::state::State;
 
 pub struct RaftService {
     state: Arc<State>,
-    replica: Arc<Replica>,
 }
 
 impl RaftService {
-    pub fn new(state: Arc<State>, replica: Arc<Replica>) -> Self {
-        return RaftService {
-            state,
-            replica,
-        };
+    pub fn new(state: Arc<State>) -> Self {
+        return RaftService { state };
     }
 }
 
@@ -33,7 +28,8 @@ impl Raft for RaftService {
         let state = self.state.clone();
         let request = request.into_inner();
         let correlation_id = request.correlation_id;
-        let source_address = self.replica.clone().get_self_address();
+        let replica = self.state.get_replica();
+        let source_address = replica.get_self_address();
 
         println!("received RequestVote with term {}", request.term);
         let handler = async move {
@@ -50,7 +46,7 @@ impl Raft for RaftService {
                 originating_host_port,
             ).await.unwrap();
         };
-        let _ = &self.replica.add_to_queue(handler);
+        let _ = replica.add_to_queue(handler);
         return Ok(Response::new(()));
     }
 
@@ -59,12 +55,12 @@ impl Raft for RaftService {
         let response = request.into_inner();
         println!("received RequestVoteResponse with voted? {}", response.voted);
 
-        let _ = &self.replica.register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
+        let _ = &self.state.get_replica_reference().register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
         return Ok(Response::new(()));
     }
 
     async fn acknowledge_heartbeat(&self, _: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
-        println!("received heartbeat on {:?}", self.replica.get_self_address());
+        println!("received heartbeat on {:?}", self.state.get_replica_reference().get_self_address());
         return Ok(Response::new(()));
     }
 }
