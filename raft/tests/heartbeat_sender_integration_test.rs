@@ -35,17 +35,11 @@ fn send_heartbeats_to_followers() {
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
         let result = state.send().await;
-        println!("result in send_heartbeats_to_followers is {:?}", result);
         assert!(result.is_ok());
 
-        let result1 = all_services_shutdown_handle_one.shutdown().await;
-        println!("result1 in send_heartbeats_to_followers is {:?}", result1);
-
-        let result2 = all_services_shutdown_handle_two.shutdown().await;
-        println!("result2 in send_heartbeats_to_followers is {:?}", result2);
-
-        let result3 = all_services_shutdown_handle_three.shutdown().await;
-        println!("result3 in send_heartbeats_to_followers is {:?}", result3);
+        let _ = all_services_shutdown_handle_one.shutdown().await;
+        let _ = all_services_shutdown_handle_two.shutdown().await;
+        let _ = all_services_shutdown_handle_three.shutdown().await;
     });
 }
 
@@ -70,22 +64,18 @@ fn send_heartbeats_to_followers_with_failure() {
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
-        all_services_shutdown_handle_three.shutdown().await.unwrap();
+        let _ = all_services_shutdown_handle_three.shutdown().await;
     });
 
     blocking_runtime.block_on(async move {
         let result = state.send().await;
-        println!("result in send_heartbeats_to_followers_with_failure is {:?}", result);
         assert!(result.is_err());
 
         let heartbeat_send_error = result.unwrap_err().downcast::<HeartbeatSendError>().unwrap();
         assert_eq!(1, heartbeat_send_error.total_failed_sends);
 
-        let result1 = all_services_shutdown_handle_one.shutdown().await;
-        println!("result1 in send_heartbeats_to_followers_with_failure is {:?}", result1);
-
-        let result2 = all_services_shutdown_handle_two.shutdown().await;
-        println!("result1 in send_heartbeats_to_followers_with_failure is {:?}", result2);
+        let _ = all_services_shutdown_handle_one.shutdown().await;
+        let _ = all_services_shutdown_handle_two.shutdown().await;
     });
 }
 
