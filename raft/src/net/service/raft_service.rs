@@ -39,11 +39,15 @@ impl Raft for RaftService {
             } else {
                 false
             };
-            AsyncNetwork::send_with_source_footprint(
+            let send_result = AsyncNetwork::send_with_source_footprint(
                 ServiceRequestFactory::request_vote_response(term, voted, correlation_id),
                 source_address,
                 originating_host_port,
-            ).await.unwrap();
+            ).await;
+
+            if send_result.is_err() {
+                eprintln!("failed to send request_vote_response to {:?}", originating_host_port);
+            }
         };
         let _ = replica.submit_to_queue(handler);
         return Ok(Response::new(()));

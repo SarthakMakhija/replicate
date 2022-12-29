@@ -48,11 +48,15 @@ impl KeyValueStore {
                         correlation_id,
                     )
             };
-            AsyncNetwork::send_with_source_footprint(
+            let send_result = AsyncNetwork::send_with_source_footprint(
                 ServiceRequestFactory::get_value_by_key_response(correlation_id, response),
                 source_address,
                 originating_host_port,
-            ).await.unwrap();
+            ).await;
+
+            if send_result.is_err() {
+                eprintln!("failed to send get_value_by_key_response to {:?}", originating_host_port);
+            }
         };
         let _ = &self.replica.submit_to_queue(handler);
         return Ok(Response::new(()));
@@ -80,13 +84,17 @@ impl KeyValueStore {
             let key = request.key.clone();
             storage.insert(key, Value::new(request.value.clone(), request.timestamp));
 
-            AsyncNetwork::send_with_source_footprint(
+            let send_result = AsyncNetwork::send_with_source_footprint(
                 ServiceRequestFactory::put_key_value_response(
                     correlation_id
                 ),
                 source_address,
                 originating_host_port,
-            ).await.unwrap();
+            ).await;
+
+            if send_result.is_err() {
+                eprintln!("failed to send put_key_value_response to {:?}", originating_host_port);
+            }
         };
         let _ = &self.replica.submit_to_queue(handler);
         return Ok(Response::new(()));
