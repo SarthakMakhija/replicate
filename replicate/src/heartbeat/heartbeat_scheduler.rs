@@ -5,6 +5,8 @@ use std::time::Duration;
 
 use tokio::time;
 
+use crate::net::connect::error::AnyError;
+
 pub struct HeartbeatScheduler {
     interval: Duration,
     keep_running: Arc<AtomicBool>,
@@ -22,7 +24,7 @@ impl HeartbeatScheduler {
         where
             F: Fn() -> T + Send + 'static,
             T: Future + Send + 'static,
-            T: Future<Output=()> + Send + 'static {
+            T: Future<Output=Result<(), AnyError>> + Send + 'static {
 
         let keep_running = self.keep_running.clone();
         let mut interval = time::interval(self.interval);
@@ -56,6 +58,7 @@ mod tests {
     use crate::heartbeat::heartbeat_scheduler::HeartbeatScheduler;
     use crate::heartbeat::heartbeat_scheduler::tests::setup::HeartbeatCounter;
     use crate::heartbeat::heartbeat_sender::HeartbeatSender;
+    use crate::net::connect::error::AnyError;
 
     mod setup {
         use std::sync::Arc;
@@ -64,7 +67,7 @@ mod tests {
         use async_trait::async_trait;
 
         use crate::heartbeat::heartbeat_sender::HeartbeatSender;
-        use crate::net::connect::error::ServiceResponseError;
+        use crate::net::connect::error::AnyError;
 
         pub struct HeartbeatCounter {
             pub counter: Arc<AtomicU16>,
@@ -72,7 +75,7 @@ mod tests {
 
         #[async_trait]
         impl HeartbeatSender for HeartbeatCounter {
-            async fn send_heartbeat(&self) -> Result<(), ServiceResponseError> {
+            async fn send_heartbeat(&self) -> Result<(), AnyError> {
                 self.counter.clone().fetch_add(1, Ordering::SeqCst);
                 return Ok(());
             }
@@ -86,7 +89,7 @@ mod tests {
         let readonly_counter = heartbeat_sender.clone();
 
         let mut heartbeat_scheduler = HeartbeatScheduler::new(Duration::from_millis(2));
-        heartbeat_scheduler.start_with(move || get_future( heartbeat_sender.clone()));
+        heartbeat_scheduler.start_with(move || get_future(heartbeat_sender.clone()));
 
         thread::sleep(Duration::from_millis(5));
         heartbeat_scheduler.stop();
@@ -94,9 +97,9 @@ mod tests {
         assert!(readonly_counter.counter.load(Ordering::SeqCst) >= 2);
     }
 
-    fn get_future(heartbeat_counter: Arc<HeartbeatCounter>) -> impl Future<Output=()> {
+    fn get_future(heartbeat_counter: Arc<HeartbeatCounter>) -> impl Future<Output=Result<(), AnyError>> {
         return async move {
-            let _ = heartbeat_counter.send_heartbeat().await;
+            return heartbeat_counter.send_heartbeat().await;
         };
     }
 }
