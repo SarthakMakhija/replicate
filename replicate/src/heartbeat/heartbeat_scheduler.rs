@@ -1,28 +1,29 @@
+use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tokio::time;
 
-use crate::heartbeat::heartbeat_sender::HeartbeatSenderType;
-
 pub struct HeartbeatScheduler {
-    sender: HeartbeatSenderType,
     interval: Duration,
     keep_running: Arc<AtomicBool>,
 }
 
 impl HeartbeatScheduler {
-    pub fn new(sender: HeartbeatSenderType, heartbeat_interval: Duration) -> HeartbeatScheduler {
+    pub fn new(heartbeat_interval: Duration) -> Self {
         return HeartbeatScheduler {
-            sender,
             interval: heartbeat_interval,
             keep_running: Arc::new(AtomicBool::new(true)),
         };
     }
 
-    pub fn start(&self) {
-        let heartbeat_sender = self.sender.clone();
+    pub fn start_with<F, T>(&self, future_generator: F)
+        where
+            F: Fn() -> T + Send + 'static,
+            T: Future + Send + 'static,
+            T: Future<Output=()> + Send + 'static {
+
         let keep_running = self.keep_running.clone();
         let mut interval = time::interval(self.interval);
 
@@ -31,7 +32,9 @@ impl HeartbeatScheduler {
                 if !keep_running.load(Ordering::SeqCst) {
                     return;
                 }
-                let _ = heartbeat_sender.send_heartbeat().await;
+                let future = future_generator();
+                let _ = future.await;
+
                 interval.tick().await;
             }
         });
@@ -44,6 +47,7 @@ impl HeartbeatScheduler {
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU16, Ordering};
     use std::thread;
@@ -51,6 +55,7 @@ mod tests {
 
     use crate::heartbeat::heartbeat_scheduler::HeartbeatScheduler;
     use crate::heartbeat::heartbeat_scheduler::tests::setup::HeartbeatCounter;
+    use crate::heartbeat::heartbeat_sender::HeartbeatSender;
 
     mod setup {
         use std::sync::Arc;
@@ -75,23 +80,23 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn start_heartbeat_scheduler() {
+    async fn start() {
         let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_sender = Arc::new(heartbeat_counter);
+        let readonly_counter = heartbeat_sender.clone();
 
-        let mut heartbeat_scheduler = HeartbeatScheduler::new(
-            heartbeat_sender.clone(),
-            Duration::from_millis(2),
-        );
+        let mut heartbeat_scheduler = HeartbeatScheduler::new(Duration::from_millis(2));
+        heartbeat_scheduler.start_with(move || get_future( heartbeat_sender.clone()));
 
-        heartbeat_scheduler.start();
         thread::sleep(Duration::from_millis(5));
-
         heartbeat_scheduler.stop();
 
-        let heartbeat_sender_cloned = heartbeat_sender.clone();
-        let count = heartbeat_sender_cloned.counter.clone().load(Ordering::SeqCst);
+        assert!(readonly_counter.counter.load(Ordering::SeqCst) >= 2);
+    }
 
-        assert!(count >= 2);
+    fn get_future(heartbeat_counter: Arc<HeartbeatCounter>) -> impl Future<Output=()> {
+        return async move {
+            let _ = heartbeat_counter.send_heartbeat().await;
+        };
     }
 }
