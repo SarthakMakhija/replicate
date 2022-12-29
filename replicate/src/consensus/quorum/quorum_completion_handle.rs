@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use std::task::{Context, Poll, Waker};
 
-use crate::consensus::quorum::async_quorum_callback::SuccessCondition;
+use crate::consensus::quorum::async_quorum_callback::{UnexpectedQuorumCallbackResponseError, SuccessCondition};
 use crate::consensus::quorum::quorum_completion_response::QuorumCompletionResponse;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseErrorType};
@@ -27,10 +27,18 @@ impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
     pub(crate) fn on_response(&self, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
         match response {
             Ok(any_response) => {
-                let optional_response: Option<Box<Response>> = any_response.downcast::<Response>().ok();
-                let unwrapped = optional_response.unwrap();
-                let typed_response = *unwrapped;
-                self.responses.write().unwrap().insert(from, Ok(typed_response));
+                let response_type_id = any_response.type_id();
+                let optional_response = any_response.downcast::<Response>().ok();
+                match optional_response {
+                    None => {
+                        let err = UnexpectedQuorumCallbackResponseError {response_type_id };
+                        self.responses.write().unwrap().insert(from, Err(Box::new(err)));
+                    }
+                    Some(response) => {
+                        let typed_response = *response;
+                        self.responses.write().unwrap().insert(from, Ok(typed_response));
+                    }
+                }
             }
             Err(e) => {
                 self.responses.write().unwrap().insert(from, Err(e));

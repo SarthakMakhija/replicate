@@ -1,7 +1,7 @@
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::consensus::quorum::quorum_completion_handle::{QuorumCompletionHandle, WakerState};
@@ -9,6 +9,19 @@ use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
 pub type SuccessCondition<Response> = Box<dyn Fn(&Response) -> bool + Send + Sync>;
+
+#[derive(Debug)]
+pub struct UnexpectedQuorumCallbackResponseError {
+    pub response_type_id: TypeId
+}
+
+impl Display for UnexpectedQuorumCallbackResponseError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "UnexpectedQuorumCallbackResponseError, received a response type id {:?}", self.response_type_id)
+    }
+}
+
+impl std::error::Error for UnexpectedQuorumCallbackResponseError {}
 
 pub struct AsyncQuorumCallback<Response: Any + Send + Sync + Debug> {
     quorum_completion_handle: QuorumCompletionHandle<Response>,
@@ -50,8 +63,8 @@ mod tests {
     use std::sync::{Arc, RwLock};
     use std::time::Duration;
 
-    use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
-    use crate::consensus::quorum::async_quorum_callback::tests::setup::{GetValueResponse, TestError};
+    use crate::consensus::quorum::async_quorum_callback::{AsyncQuorumCallback, UnexpectedQuorumCallbackResponseError};
+    use crate::consensus::quorum::async_quorum_callback::tests::setup::{GetValueResponse, PutValueResponse, TestError};
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::request_waiting_list::response_callback::ResponseCallback;
 
@@ -61,6 +74,12 @@ mod tests {
 
         #[derive(Eq, PartialEq, Debug)]
         pub struct GetValueResponse {
+            pub value: String,
+        }
+
+        #[derive(Eq, PartialEq, Debug)]
+        pub struct PutValueResponse {
+            pub key: String,
             pub value: String,
         }
 
@@ -76,6 +95,24 @@ mod tests {
         }
 
         impl Error for TestError {}
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn unexpected_response_error() {
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
+        let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+
+        async_quorum_callback.on_response(response_from_1.clone(), Ok(Box::new(GetValueResponse { value: "one".to_string() })));
+        async_quorum_callback.on_response(response_from_other.clone(), Ok(Box::new(PutValueResponse { key: "key".to_string(), value: "two".to_string() })));
+        let handle = async_quorum_callback.handle();
+
+        let completion_response = handle.await;
+
+        assert!(completion_response.is_error());
+        let error_responses = completion_response.error_response().unwrap();
+        let result_downcast_error = error_responses.get(&response_from_other).unwrap().downcast_ref::<UnexpectedQuorumCallbackResponseError>();
+        assert!(result_downcast_error.is_some());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
