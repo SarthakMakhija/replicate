@@ -120,7 +120,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
-        let response = blocking_runtime.block_on(async move {
+        let _ = blocking_runtime.block_on(async move {
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
