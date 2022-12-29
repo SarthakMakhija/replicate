@@ -52,7 +52,7 @@ pub trait HostAndPortExtractor {
         }
 
         let host = optional_host.unwrap();
-        return match HostAndPort::try_new(&host, u16::try_from(optional_port.unwrap()).unwrap()) {
+        return match HostAndPort::try_new(&host, optional_port.unwrap()) {
             Ok(host_and_port) => Ok(host_and_port),
             Err(err) => Err(HostAndPortConstructionError::InvalidHost(err, host))
         };
