@@ -91,7 +91,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         Arc::new(SystemClock::new()),
     );
 
-    let state = Arc::new(State::new(Arc::new(replica)));
+    let state = Arc::new(State::new(Arc::new(replica), Box::new(SystemClock::new())));
     let inner_state = state.clone();
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(

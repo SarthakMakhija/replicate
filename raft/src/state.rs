@@ -1,23 +1,28 @@
 use std::error::Error;
-use async_trait::async_trait;
-
 use std::fmt::{Display, Formatter};
 use std::sync::{Arc, RwLock};
+use std::time::SystemTime;
+
+use async_trait::async_trait;
+
+use replicate::clock::clock::Clock;
 use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
 use replicate::net::connect::error::ServiceResponseError;
-
 use replicate::net::replica::{Replica, ReplicaId};
+
 use crate::net::factory::service_request::ServiceRequestFactory;
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
     replica: Arc<Replica>,
+    clock: Box<dyn Clock>,
 }
 
 struct ConsensusState {
     term: u64,
     role: ReplicaRole,
     voted_for: Option<u64>,
+    heartbeat_received_time: Option<SystemTime>,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -28,15 +33,23 @@ pub enum ReplicaRole {
 }
 
 impl State {
-    pub fn new(replica: Arc<Replica>) -> State {
+    pub fn new(replica: Arc<Replica>, clock: Box<dyn Clock>) -> State {
         return State {
             replica,
+            clock,
             consensus_state: RwLock::new(ConsensusState {
                 term: 0,
                 role: ReplicaRole::Follower,
                 voted_for: None,
+                heartbeat_received_time: None,
             }),
         };
+    }
+
+    pub(crate) fn mark_heartbeat_received(&self) {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let mut consensus_state = &mut *write_guard;
+        consensus_state.heartbeat_received_time = Some(self.clock.now());
     }
 
     pub(crate) fn change_to_candidate(&self) -> u64 {
@@ -73,9 +86,9 @@ impl State {
         return (*guard).role;
     }
 
-    fn get_voted_for(&self) -> Option<ReplicaId> {
+    pub fn get_heartbeat_received_time(&self) -> Option<SystemTime> {
         let guard = self.consensus_state.read().unwrap();
-        return (*guard).voted_for;
+        return (*guard).heartbeat_received_time;
     }
 
     pub(crate) fn get_replica(&self) -> Arc<Replica> {
@@ -84,6 +97,11 @@ impl State {
 
     pub(crate) fn get_replica_reference(&self) -> &Arc<Replica> {
         return &self.replica;
+    }
+
+    fn get_voted_for(&self) -> Option<ReplicaId> {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).voted_for;
     }
 }
 
@@ -124,9 +142,11 @@ impl HeartbeatSender for State {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
+
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::replica::Replica;
+
     use crate::state::{ReplicaRole, State};
 
     #[test]
@@ -140,7 +160,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
         state.change_to_candidate();
 
         assert_eq!(1, state.get_term());
@@ -159,7 +179,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
         state.change_to_candidate();
         state.change_to_leader();
 
@@ -179,7 +199,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
         state.change_to_candidate();
         state.change_to_follower(2);
 

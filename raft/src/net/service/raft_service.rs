@@ -69,6 +69,7 @@ impl Raft for RaftService {
 
         let request = request.into_inner();
         let handler = async move {
+            state.mark_heartbeat_received();
             let term = state.get_term();
             if request.term > term {
                 state.change_to_follower(request.term);
@@ -104,6 +105,38 @@ mod tests {
     use tokio::runtime::Builder;
 
     #[test]
+    fn acknowledge_heartbeat_mark_heartbeat_received() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
+        let raft_service = RaftService::new(state.clone());
+
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+        let response = blocking_runtime.block_on(async move {
+            let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
+                Request::new(
+                    AppendEntries {
+                        term: 1,
+                        leader_id: replica.get_id(),
+                        correlation_id: 20
+                    }
+                )
+            ).await;
+            return result.unwrap().into_inner();
+        });
+
+        assert!(state.get_heartbeat_received_time().is_some());
+    }
+
+    #[test]
     fn acknowledge_heartbeat_with_request_containing_higher_term() {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
         let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
@@ -114,7 +147,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
-        let state = Arc::new(State::new(replica.clone()));
+        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
         let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -148,7 +181,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
-        let state = Arc::new(State::new(replica.clone()));
+        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
         let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -182,7 +215,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
-        let state = Arc::new(State::new(replica.clone()));
+        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
         state.change_to_candidate();
 
         let raft_service = RaftService::new(state.clone());
