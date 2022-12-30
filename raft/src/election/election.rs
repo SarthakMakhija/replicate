@@ -48,7 +48,11 @@ impl Election {
             })));
 
             let quorum_completion_response = async_quorum_callback.handle().await;
-            if quorum_completion_response.is_success() { state.change_to_leader() }
+            if quorum_completion_response.is_success() {
+                state.change_to_leader()
+            } else {
+                state.change_to_follower(term);
+            }
         });
     }
 }
