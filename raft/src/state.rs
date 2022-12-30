@@ -4,11 +4,8 @@ use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
-use async_trait::async_trait;
-
 use replicate::clock::clock::Clock;
-use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
-use replicate::net::connect::error::{AnyError, ServiceResponseError};
+use replicate::net::connect::error::AnyError;
 use replicate::net::replica::{Replica, ReplicaId};
 
 use crate::net::factory::service_request::ServiceRequestFactory;
@@ -142,25 +139,6 @@ impl Display for HeartbeatSendError {
 }
 
 impl Error for HeartbeatSendError {}
-
-#[async_trait]
-impl HeartbeatSender for State {
-    async fn send_heartbeat(&self) -> Result<(), ServiceResponseError> {
-        let term = self.get_term();
-        let leader_id = self.replica.get_id();
-        let service_request_constructor = || {
-            ServiceRequestFactory::heartbeat(term, leader_id)
-        };
-        let total_failed_sends =
-            self.replica.send_to_replicas_without_callback(service_request_constructor).await;
-
-        println!("total failures {}", total_failed_sends);
-        return match total_failed_sends {
-            0 => Ok(()),
-            _ => Err(Box::new(HeartbeatSendError { total_failed_sends }))
-        };
-    }
-}
 
 #[cfg(test)]
 mod tests {
