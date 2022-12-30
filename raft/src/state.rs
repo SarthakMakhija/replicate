@@ -13,7 +13,7 @@ use crate::net::factory::service_request::ServiceRequestFactory;
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
     replica: Arc<Replica>,
-    clock: Box<dyn Clock>,
+    clock: Arc<dyn Clock>,
 }
 
 struct ConsensusState {
@@ -31,7 +31,7 @@ pub enum ReplicaRole {
 }
 
 impl State {
-    pub fn new(replica: Arc<Replica>, clock: Box<dyn Clock>) -> Arc<State> {
+    pub fn new(replica: Arc<Replica>, clock: Arc<dyn Clock>) -> Arc<State> {
         let state = State {
             replica,
             clock,
@@ -175,7 +175,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
         state.change_to_candidate();
 
         assert_eq!(1, state.get_term());
@@ -194,7 +194,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
         state.change_to_candidate();
         state.change_to_leader();
 
@@ -214,7 +214,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
         state.change_to_candidate();
         state.change_to_follower(2);
 
@@ -234,7 +234,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
         state.mark_heartbeat_received();
 
         let election_timeout = Duration::from_millis(0);
@@ -242,7 +242,6 @@ mod tests {
         let election_starter = |_state| { count = count + 1; };
 
         state.maybe_start_election(&election_timeout, election_starter);
-
         assert_eq!(1, count);
     }
 
@@ -257,7 +256,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
         state.mark_heartbeat_received();
 
         let election_timeout = Duration::from_secs(100);
