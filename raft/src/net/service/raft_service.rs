@@ -103,6 +103,7 @@ mod tests {
     use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse};
     use tokio::runtime::Builder;
+    use crate::heartbeat_config::HeartbeatConfig;
 
     #[test]
     fn acknowledge_heartbeat_mark_heartbeat_received() {
@@ -117,7 +118,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::new(Arc::new(replica));
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -150,7 +151,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::new(Arc::new(replica));
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -186,7 +187,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::new(Arc::new(replica));
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -224,7 +225,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            let state = State::new(Arc::new(replica));
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             state.change_to_candidate();
             return state;
         });

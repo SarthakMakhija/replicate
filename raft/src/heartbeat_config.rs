@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use rand::{Rng, thread_rng};
 
-struct HeartbeatConfig {
+pub struct HeartbeatConfig {
     heartbeat_interval: Duration,
     heartbeat_timeout: Duration,
 }
@@ -11,7 +11,11 @@ impl HeartbeatConfig {
     const MAXIMUM_HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
     const HEARTBEAT_TIMEOUT_RANGE_MS: std::ops::RangeInclusive<u32> = 150..=300;
 
-    fn new(heartbeat_interval: Duration) -> Self {
+    pub fn default() -> Self {
+        return HeartbeatConfig::new(Duration::from_millis(50));
+    }
+
+    pub fn new(heartbeat_interval: Duration) -> Self {
         if heartbeat_interval.gt(&Self::MAXIMUM_HEARTBEAT_INTERVAL) {
             panic!(
                 "heartbeat interval can not be greater than the maximum interval defined {:?}",

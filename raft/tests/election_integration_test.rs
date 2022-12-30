@@ -4,6 +4,7 @@ use std::thread;
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 use raft::election::election::Election;
+use raft::heartbeat_config::HeartbeatConfig;
 use raft::net::service::raft_service::RaftService;
 use raft::state::{ReplicaRole, State};
 use replicate::clock::clock::SystemClock;
@@ -61,7 +62,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     let state = blocking_runtime.block_on(async move {
-        return State::new(Arc::new(replica));
+        return State::new(Arc::new(replica), HeartbeatConfig::default());
     });
     let inner_state = state.clone();
     runtime.spawn(async move {
@@ -84,7 +85,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     );
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     let state = blocking_runtime.block_on(async move {
-        return State::new(Arc::new(replica));
+        return State::new(Arc::new(replica), HeartbeatConfig::default());
     });
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
@@ -107,7 +108,7 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     let state = blocking_runtime.block_on(async move {
-        return State::new(Arc::new(replica));
+        return State::new(Arc::new(replica), HeartbeatConfig::default());
     });
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(

@@ -10,12 +10,14 @@ use replicate::net::connect::error::AnyError;
 use replicate::net::replica::{Replica, ReplicaId};
 
 use crate::election::election::Election;
+use crate::heartbeat_config::HeartbeatConfig;
 use crate::net::factory::service_request::ServiceRequestFactory;
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
     replica: Arc<Replica>,
     clock: Arc<dyn Clock>,
+    heartbeat_config: HeartbeatConfig,
     heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler,
     heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler,
 }
@@ -36,8 +38,12 @@ pub enum ReplicaRole {
 }
 
 impl State {
-    pub fn new(replica: Arc<Replica>) -> Arc<State> {
+    pub fn new(replica: Arc<Replica>, heartbeat_config: HeartbeatConfig) -> Arc<State> {
         let clock = replica.get_clock();
+        let heartbeat_config = heartbeat_config;
+        let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
+        let heartbeat_timeout = heartbeat_config.get_heartbeat_timeout();
+
         let state = State {
             consensus_state: RwLock::new(ConsensusState {
                 term: 0,
@@ -48,8 +54,9 @@ impl State {
             }),
             replica,
             clock,
-            heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler::new(Duration::from_millis(10)),
-            heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler::new(Duration::from_millis(5)),
+            heartbeat_config,
+            heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_interval),
+            heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_timeout),
         };
 
         let state = Arc::new(state);
@@ -173,9 +180,14 @@ impl State {
 
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_check_scheduler.stop();
-        heartbeat_check_scheduler.start_with(move ||
-            state.clone().get_heartbeat_checker(Duration::from_millis(10), |state| Election::new(state).start())
-        );
+        heartbeat_check_scheduler.start_with(move || {
+            let inner_state = state.clone();
+            let heartbeat_timeout = inner_state.heartbeat_config.get_heartbeat_timeout();
+            inner_state.get_heartbeat_checker(
+                heartbeat_timeout,
+                |state| Election::new(state).start(),
+            )
+        });
     }
 
     fn restart_heartbeat_sender(state: Arc<State>, heartbeat_send_scheduler: &SingleThreadedHeartbeatScheduler) {
@@ -211,6 +223,7 @@ mod tests {
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::replica::Replica;
 
+    use crate::heartbeat_config::HeartbeatConfig;
     use crate::state::{ReplicaRole, State};
 
     #[tokio::test(flavor = "multi_thread")]
@@ -224,7 +237,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         state.change_to_candidate();
 
         assert_eq!(1, state.get_term());
@@ -243,7 +256,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_leader();
@@ -264,7 +277,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_follower(2);
@@ -285,7 +298,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         state.mark_heartbeat_received();
 
         let heartbeat_timeout = Duration::from_millis(0);
@@ -297,7 +310,10 @@ mod tests {
             *write_guard = *write_guard + 1;
         };
 
-        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
+        let handle = tokio::spawn(state.get_heartbeat_checker(
+            heartbeat_timeout,
+            election_starter
+        ));
 
         let _ = handle.await;
         assert_eq!(1, *(count.read().unwrap()));
@@ -314,7 +330,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         let heartbeat_timeout = Duration::from_millis(5);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
@@ -325,7 +341,10 @@ mod tests {
         };
 
         thread::sleep(Duration::from_millis(5));
-        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
+        let handle = tokio::spawn(state.get_heartbeat_checker(
+            heartbeat_timeout,
+            election_starter
+        ));
 
         let _ = handle.await;
         assert_eq!(1, *(count.read().unwrap()));
@@ -342,7 +361,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         let heartbeat_timeout = Duration::from_millis(5);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
@@ -353,7 +372,10 @@ mod tests {
         };
 
         thread::sleep(Duration::from_millis(2));
-        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
+        let handle = tokio::spawn(state.get_heartbeat_checker(
+            heartbeat_timeout,
+            election_starter
+        ));
 
         let _ = handle.await;
         assert_eq!(0, *(count.read().unwrap()));
@@ -370,7 +392,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica));
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         state.mark_heartbeat_received();
 
         let heartbeat_timeout = Duration::from_secs(100);
@@ -382,7 +404,10 @@ mod tests {
             *write_guard = *write_guard + 1;
         };
 
-        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
+        let handle = tokio::spawn(state.get_heartbeat_checker(
+            heartbeat_timeout,
+            election_starter
+        ));
         let _ = handle.await;
 
         assert_eq!(0, *(count.read().unwrap()));
