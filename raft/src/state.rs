@@ -64,6 +64,9 @@ impl State {
         consensus_state.role = ReplicaRole::Candidate;
         consensus_state.voted_for = Some(self.replica.get_id());
 
+        self.heartbeat_send_scheduler.stop();
+        self.heartbeat_check_scheduler.stop();
+
         return consensus_state.term;
     }
 
