@@ -168,7 +168,7 @@ impl State {
     fn restart_heartbeat_sender(state: Arc<State>, heartbeat_send_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_send_scheduler.stop();
         heartbeat_send_scheduler.start_with(move ||
-            state.clone().get_heartbeat_sender()
+            state.get_heartbeat_sender()
         );
     }
 }

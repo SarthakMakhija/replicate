@@ -24,6 +24,8 @@ impl Election {
 
         replica.submit_to_queue(async move {
             let term = state.change_to_candidate();
+            println!("starting election with term {}", term);
+
             let service_request_constructor = || {
                 ServiceRequestFactory::request_vote(
                     inner_replica.get_id(),
