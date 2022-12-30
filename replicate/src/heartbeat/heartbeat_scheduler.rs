@@ -8,13 +8,13 @@ use tokio::time;
 
 use crate::net::connect::error::AnyError;
 
-pub struct HeartbeatScheduler {
+pub struct SingleThreadedHeartbeatScheduler {
     interval: Duration,
     keep_running: Arc<AtomicBool>,
     thread_pool: Runtime,
 }
 
-impl HeartbeatScheduler {
+impl SingleThreadedHeartbeatScheduler {
     pub fn new(heartbeat_interval: Duration) -> Self {
         let thread_pool = Builder::new_multi_thread()
             .worker_threads(1)
@@ -22,7 +22,7 @@ impl HeartbeatScheduler {
             .build()
             .unwrap();
 
-        return HeartbeatScheduler {
+        return SingleThreadedHeartbeatScheduler {
             interval: heartbeat_interval,
             keep_running: Arc::new(AtomicBool::new(true)),
             thread_pool,
@@ -68,7 +68,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use crate::heartbeat::heartbeat_scheduler::HeartbeatScheduler;
+    use crate::heartbeat::heartbeat_scheduler::SingleThreadedHeartbeatScheduler;
     use crate::heartbeat::heartbeat_scheduler::tests::setup::HeartbeatCounter;
     use crate::net::connect::error::AnyError;
 
@@ -96,7 +96,7 @@ mod tests {
         let heartbeat_counter = Arc::new(heartbeat_counter);
         let readonly_counter = heartbeat_counter.clone();
 
-        let mut heartbeat_scheduler = HeartbeatScheduler::new(Duration::from_millis(2));
+        let mut heartbeat_scheduler = SingleThreadedHeartbeatScheduler::new(Duration::from_millis(2));
         heartbeat_scheduler.start_with(move || get_future(heartbeat_counter.clone()));
 
         thread::sleep(Duration::from_millis(5));
