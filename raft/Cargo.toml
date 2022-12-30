@@ -12,6 +12,7 @@ tonic = "0.8"
 prost = "0.11"
 tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
 async-trait = "0.1.58"
+rand = "0.8.5"
 
 [build-dependencies]
 replicate-macro = { path = "../replicate-macro" }
