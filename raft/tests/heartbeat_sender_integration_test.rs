@@ -11,7 +11,6 @@ use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_registration::{AllServicesShutdownHandle, ServiceRegistration};
 use replicate::net::replica::Replica;
 use raft::net::rpc::grpc::raft_server::RaftServer;
-use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
 
 #[test]
 fn send_heartbeats_to_followers() {
@@ -32,9 +31,9 @@ fn send_heartbeats_to_followers() {
 
     let_services_start();
 
-    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let blocking_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
-        let result = state.send_heartbeat().await;
+        let result = state.get_heartbeat_sender().await;
         assert!(result.is_ok());
 
         let _ = all_services_shutdown_handle_one.shutdown().await;
@@ -68,7 +67,7 @@ fn send_heartbeats_to_followers_with_failure() {
     });
 
     blocking_runtime.block_on(async move {
-        let result = state.send_heartbeat().await;
+        let result = state.get_heartbeat_sender().await;
         assert!(result.is_err());
 
         let heartbeat_send_error = result.unwrap_err().downcast::<HeartbeatSendError>().unwrap();

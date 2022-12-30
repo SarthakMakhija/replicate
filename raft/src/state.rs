@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
@@ -7,7 +8,7 @@ use async_trait::async_trait;
 
 use replicate::clock::clock::Clock;
 use replicate::heartbeat::heartbeat_sender::HeartbeatSender;
-use replicate::net::connect::error::ServiceResponseError;
+use replicate::net::connect::error::{AnyError, ServiceResponseError};
 use replicate::net::replica::{Replica, ReplicaId};
 
 use crate::net::factory::service_request::ServiceRequestFactory;
@@ -89,6 +90,29 @@ impl State {
     pub fn get_heartbeat_received_time(&self) -> Option<SystemTime> {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).heartbeat_received_time;
+    }
+
+    pub fn get_heartbeat_sender(&self) -> impl Future<Output=Result<(), AnyError>> {
+        let term = self.get_term();
+        let leader_id = self.replica.get_id();
+        let replica = self.replica.clone();
+
+        return async move {
+            let service_request_constructor = || {
+                ServiceRequestFactory::heartbeat(term, leader_id)
+            };
+            let total_failed_sends =
+                replica.send_to_replicas_without_callback(service_request_constructor).await;
+
+            println!("total failures {}", total_failed_sends);
+            return match total_failed_sends {
+                0 => Ok(()),
+                _ => {
+                    let any_error: AnyError = Box::new(HeartbeatSendError { total_failed_sends });
+                    Err(any_error)
+                }
+            };
+        }
     }
 
     pub(crate) fn get_replica(&self) -> Arc<Replica> {
