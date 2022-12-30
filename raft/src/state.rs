@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::{Arc, RwLock};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use replicate::clock::clock::Clock;
 use replicate::net::connect::error::AnyError;
@@ -113,6 +113,17 @@ impl State {
         };
     }
 
+    pub(crate) fn maybe_start_election<F>(self: Arc<Self>, election_timeout: &Duration, election_starter: F)
+        where F: FnOnce(Arc<State>) -> () {
+        let write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &*write_guard;
+        if let Some(last_heartbeat_time) = consensus_state.heartbeat_received_time {
+            if self.clock.now().duration_since(last_heartbeat_time).unwrap().ge(election_timeout) {
+                election_starter(self.clone());
+            }
+        }
+    }
+
     pub(crate) fn get_replica(&self) -> Arc<Replica> {
         return self.replica.clone();
     }
@@ -145,6 +156,7 @@ impl Error for HeartbeatSendError {}
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
+    use std::time::Duration;
 
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
@@ -209,5 +221,51 @@ mod tests {
         assert_eq!(2, state.get_term());
         assert_eq!(ReplicaRole::Follower, state.get_role());
         assert_eq!(None, state.get_voted_for());
+    }
+
+    #[test]
+    fn maybe_start_election() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
+        state.mark_heartbeat_received();
+
+        let election_timeout = Duration::from_millis(0);
+        let mut count = 0;
+        let election_starter = |_state| { count = count + 1; };
+
+        state.maybe_start_election(&election_timeout, election_starter);
+
+        assert_eq!(1, count);
+    }
+
+    #[test]
+    fn maybe_not_start_election() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), Box::new(SystemClock::new()));
+        state.mark_heartbeat_received();
+
+        let election_timeout = Duration::from_secs(100);
+        let mut count = 0;
+        let election_starter = |_state| { count = count + 1; };
+
+        state.maybe_start_election(&election_timeout, election_starter);
+
+        assert_eq!(0, count);
     }
 }
