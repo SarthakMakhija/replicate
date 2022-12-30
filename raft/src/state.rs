@@ -31,8 +31,8 @@ pub enum ReplicaRole {
 }
 
 impl State {
-    pub fn new(replica: Arc<Replica>, clock: Box<dyn Clock>) -> State {
-        return State {
+    pub fn new(replica: Arc<Replica>, clock: Box<dyn Clock>) -> Arc<State> {
+        let state = State {
             replica,
             clock,
             consensus_state: RwLock::new(ConsensusState {
@@ -42,6 +42,7 @@ impl State {
                 heartbeat_received_time: None,
             }),
         };
+        return Arc::new(state);
     }
 
     pub(crate) fn mark_heartbeat_received(&self) {
@@ -109,7 +110,7 @@ impl State {
                     Err(any_error)
                 }
             };
-        }
+        };
     }
 
     pub(crate) fn get_replica(&self) -> Arc<Replica> {

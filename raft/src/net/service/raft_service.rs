@@ -115,7 +115,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
-        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
+        let state = State::new(replica.clone(), Box::new(SystemClock::new()));
         let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -147,7 +147,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
-        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
+        let state = State::new(replica.clone(), Box::new(SystemClock::new()));
         let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -181,7 +181,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
-        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
+        let state = State::new(replica.clone(), Box::new(SystemClock::new()));
         let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -215,7 +215,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
-        let state = Arc::new(State::new(replica.clone(), Box::new(SystemClock::new())));
+        let state = State::new(replica.clone(), Box::new(SystemClock::new()));
         state.change_to_candidate();
 
         let raft_service = RaftService::new(state.clone());
