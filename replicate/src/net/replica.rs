@@ -25,6 +25,7 @@ pub struct Replica {
     peer_addresses: Vec<HostAndPort>,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: SingularUpdateQueue,
+    clock: Arc<dyn Clock>,
 }
 
 impl Replica {
@@ -33,7 +34,7 @@ impl Replica {
                peer_addresses: Vec<HostAndPort>,
                clock: Arc<dyn Clock>) -> Self {
         let request_waiting_list = RequestWaitingList::new(
-            clock,
+            clock.clone(),
             Duration::from_secs(3),
             Duration::from_secs(2),
         );
@@ -43,6 +44,7 @@ impl Replica {
             peer_addresses,
             request_waiting_list,
             singular_update_queue: SingularUpdateQueue::new(),
+            clock
         };
     }
 
@@ -154,6 +156,10 @@ impl Replica {
 
     pub fn get_id(&self) -> ReplicaId {
         return self.id;
+    }
+
+    pub fn get_clock(&self) -> Arc<dyn Clock> {
+        return self.clock.clone();
     }
 
     fn send<Payload, Response>(&self,
