@@ -15,7 +15,7 @@ pub struct SingleThreadedHeartbeatScheduler {
 }
 
 impl SingleThreadedHeartbeatScheduler {
-    pub fn new(heartbeat_interval: Duration) -> Self {
+    pub fn new(interval: Duration) -> Self {
         let thread_pool = Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -23,7 +23,7 @@ impl SingleThreadedHeartbeatScheduler {
             .unwrap();
 
         return SingleThreadedHeartbeatScheduler {
-            interval: heartbeat_interval,
+            interval,
             keep_running: Arc::new(AtomicBool::new(true)),
             thread_pool,
         };
@@ -51,7 +51,7 @@ impl SingleThreadedHeartbeatScheduler {
         );
     }
 
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         self.keep_running.store(false, Ordering::SeqCst);
     }
 
@@ -96,7 +96,7 @@ mod tests {
         let heartbeat_counter = Arc::new(heartbeat_counter);
         let readonly_counter = heartbeat_counter.clone();
 
-        let mut heartbeat_scheduler = SingleThreadedHeartbeatScheduler::new(Duration::from_millis(2));
+        let heartbeat_scheduler = SingleThreadedHeartbeatScheduler::new(Duration::from_millis(2));
         heartbeat_scheduler.start_with(move || get_future(heartbeat_counter.clone()));
 
         thread::sleep(Duration::from_millis(5));
