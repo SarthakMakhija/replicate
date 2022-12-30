@@ -117,8 +117,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            let replica = Arc::new(replica);
-            return State::new(replica.clone(), Arc::new(SystemClock::new()));
+            return State::new(Arc::new(replica));
         });
 
         let inner_state = state.clone();
@@ -151,7 +150,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+            return State::new(Arc::new(replica));
         });
 
         let inner_state = state.clone();
@@ -187,7 +186,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+            return State::new(Arc::new(replica));
         });
 
         let inner_state = state.clone();
@@ -225,7 +224,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            let state = State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+            let state = State::new(Arc::new(replica));
             state.change_to_candidate();
             return state;
         });

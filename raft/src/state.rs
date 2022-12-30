@@ -36,7 +36,8 @@ pub enum ReplicaRole {
 }
 
 impl State {
-    pub fn new(replica: Arc<Replica>, clock: Arc<dyn Clock>) -> Arc<State> {
+    pub fn new(replica: Arc<Replica>) -> Arc<State> {
+        let clock = replica.get_clock();
         let state = State {
             consensus_state: RwLock::new(ConsensusState {
                 term: 0,
@@ -223,7 +224,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica));
         state.change_to_candidate();
 
         assert_eq!(1, state.get_term());
@@ -242,7 +243,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica));
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_leader();
@@ -263,7 +264,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica));
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_follower(2);
@@ -284,7 +285,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica));
         state.mark_heartbeat_received();
 
         let heartbeat_timeout = Duration::from_millis(0);
@@ -313,7 +314,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica));
         let heartbeat_timeout = Duration::from_millis(5);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
@@ -341,7 +342,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica));
         let heartbeat_timeout = Duration::from_millis(5);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
@@ -369,7 +370,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let state = State::new(Arc::new(some_replica));
         state.mark_heartbeat_received();
 
         let heartbeat_timeout = Duration::from_secs(100);
