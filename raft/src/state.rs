@@ -25,6 +25,7 @@ struct ConsensusState {
     role: ReplicaRole,
     voted_for: Option<u64>,
     heartbeat_received_time: Option<SystemTime>,
+    creation_time: SystemTime,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -42,6 +43,7 @@ impl State {
                 role: ReplicaRole::Follower,
                 voted_for: None,
                 heartbeat_received_time: None,
+                creation_time: clock.now(),
             }),
             replica,
             clock,
@@ -131,7 +133,7 @@ impl State {
         };
     }
 
-    pub(crate) fn get_heartbeat_checker<F>(self: Arc<State>, election_timeout: Duration, election_starter: F) -> impl Future<Output=Result<(), AnyError>>
+    pub(crate) fn get_heartbeat_checker<F>(self: Arc<State>, heartbeat_timeout: Duration, election_starter: F) -> impl Future<Output=Result<(), AnyError>>
         where F: FnOnce(Arc<State>) -> () {
         let inner_self = self.clone();
         let clock = self.clock.clone();
@@ -139,9 +141,16 @@ impl State {
         return async move {
             let write_guard = inner_self.consensus_state.write().unwrap();
             let consensus_state = &*write_guard;
-            if let Some(last_heartbeat_time) = consensus_state.heartbeat_received_time {
-                if clock.now().duration_since(last_heartbeat_time).unwrap().ge(&election_timeout) {
-                    election_starter(inner_self.clone());
+            match consensus_state.heartbeat_received_time {
+                Some(last_heartbeat_time) => {
+                    if clock.now().duration_since(last_heartbeat_time).unwrap().ge(&heartbeat_timeout) {
+                        election_starter(inner_self.clone());
+                    }
+                }
+                None => {
+                    if clock.now().duration_since(consensus_state.creation_time).unwrap().ge(&heartbeat_timeout) {
+                        election_starter(inner_self.clone());
+                    }
                 }
             }
             return Ok(());
@@ -194,6 +203,7 @@ impl Error for HeartbeatSendError {}
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
+    use std::thread;
     use std::time::Duration;
 
     use replicate::clock::clock::SystemClock;
@@ -277,7 +287,7 @@ mod tests {
         let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
         state.mark_heartbeat_received();
 
-        let election_timeout = Duration::from_millis(0);
+        let heartbeat_timeout = Duration::from_millis(0);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
 
@@ -286,10 +296,66 @@ mod tests {
             *write_guard = *write_guard + 1;
         };
 
-        let handle = tokio::spawn(state.get_heartbeat_checker(election_timeout, election_starter));
+        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
 
         let _ = handle.await;
         assert_eq!(1, *(count.read().unwrap()));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn never_received_heartbeat_times_out() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let heartbeat_timeout = Duration::from_millis(5);
+        let count = Arc::new(RwLock::new(0));
+        let cloned = count.clone();
+
+        let election_starter = move |_state| {
+            let mut write_guard = cloned.write().unwrap();
+            *write_guard = *write_guard + 1;
+        };
+
+        thread::sleep(Duration::from_millis(5));
+        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
+
+        let _ = handle.await;
+        assert_eq!(1, *(count.read().unwrap()));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn never_received_heartbeat_but_yet_to_time_out() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
+        let heartbeat_timeout = Duration::from_millis(5);
+        let count = Arc::new(RwLock::new(0));
+        let cloned = count.clone();
+
+        let election_starter = move |_state| {
+            let mut write_guard = cloned.write().unwrap();
+            *write_guard = *write_guard + 1;
+        };
+
+        thread::sleep(Duration::from_millis(2));
+        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
+
+        let _ = handle.await;
+        assert_eq!(0, *(count.read().unwrap()));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -306,7 +372,7 @@ mod tests {
         let state = State::new(Arc::new(some_replica), Arc::new(SystemClock::new()));
         state.mark_heartbeat_received();
 
-        let election_timeout = Duration::from_secs(100);
+        let heartbeat_timeout = Duration::from_secs(100);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
 
@@ -315,7 +381,7 @@ mod tests {
             *write_guard = *write_guard + 1;
         };
 
-        let handle = tokio::spawn(state.get_heartbeat_checker(election_timeout, election_starter));
+        let handle = tokio::spawn(state.get_heartbeat_checker(heartbeat_timeout, election_starter));
         let _ = handle.await;
 
         assert_eq!(0, *(count.read().unwrap()));
