@@ -48,7 +48,10 @@ impl State {
             heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler::new(Duration::from_millis(10)),
             heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler::new(Duration::from_millis(5)),
         };
-        return Arc::new(state);
+
+        let state = Arc::new(state);
+        state.clone().change_to_follower(0);
+        return state;
     }
 
     pub(crate) fn mark_heartbeat_received(&self) {
@@ -199,8 +202,8 @@ mod tests {
 
     use crate::state::{ReplicaRole, State};
 
-    #[test]
-    fn change_to_candidate() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn change_to_candidate() {
         let some_replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),

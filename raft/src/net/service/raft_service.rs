@@ -114,26 +114,28 @@ mod tests {
             peers,
             Arc::new(SystemClock::new()),
         );
-        let replica = Arc::new(replica);
-        let state = State::new(replica.clone(), Arc::new(SystemClock::new()));
-        let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let replica = Arc::new(replica);
+            return State::new(replica.clone(), Arc::new(SystemClock::new()));
+        });
 
+        let inner_state = state.clone();
         let _ = blocking_runtime.block_on(async move {
-            let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
+            let raft_service = RaftService::new(inner_state.clone());
+            let _ = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
                         term: 1,
-                        leader_id: replica.get_id(),
+                        leader_id: 10,
                         correlation_id: 20
                     }
                 )
             ).await;
-            return result.unwrap().into_inner();
-        });
 
-        assert!(state.get_heartbeat_received_time().is_some());
+            assert!(inner_state.get_heartbeat_received_time().is_some());
+        });
     }
 
     #[test]
@@ -146,28 +148,30 @@ mod tests {
             peers,
             Arc::new(SystemClock::new()),
         );
-        let replica = Arc::new(replica);
-        let state = State::new(replica.clone(), Arc::new(SystemClock::new()));
-        let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            return State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+        });
 
-        let response = blocking_runtime.block_on(async move {
+        let inner_state = state.clone();
+        let _ = blocking_runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
                         term: 1,
-                        leader_id: replica.get_id(),
+                        leader_id: 10,
                         correlation_id: 20
                     }
                 )
             ).await;
-            return result.unwrap().into_inner();
-        });
 
-        assert_eq!(true, response.success);
-        assert_eq!(1, response.term);
-        assert_eq!(1, state.get_term());
+            let response = result.unwrap().into_inner();
+            assert_eq!(true, response.success);
+            assert_eq!(1, response.term);
+            assert_eq!(1, inner_state.get_term());
+        });
     }
 
     #[test]
@@ -180,28 +184,32 @@ mod tests {
             peers,
             Arc::new(SystemClock::new()),
         );
-        let replica = Arc::new(replica);
-        let state = State::new(replica.clone(), Arc::new(SystemClock::new()));
-        let raft_service = RaftService::new(state.clone());
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            return State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+        });
 
-        let response = blocking_runtime.block_on(async move {
+        let inner_state = state.clone();
+        let _ = blocking_runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
                         term: 0,
-                        leader_id: replica.get_id(),
+                        leader_id: 10,
                         correlation_id: 20
                     }
                 )
             ).await;
-            return result.unwrap().into_inner();
-        });
 
-        assert_eq!(true, response.success);
-        assert_eq!(0, response.term);
-        assert_eq!(0, state.get_term());
+            let response = result.unwrap().into_inner();
+
+            assert_eq!(true, response.success);
+            assert_eq!(0, response.term);
+            assert_eq!(0, inner_state.get_term());
+        });
     }
 
     #[test]
@@ -214,28 +222,32 @@ mod tests {
             peers,
             Arc::new(SystemClock::new()),
         );
-        let replica = Arc::new(replica);
-        let state = State::new(replica.clone(), Arc::new(SystemClock::new()));
-        state.change_to_candidate();
 
-        let raft_service = RaftService::new(state.clone());
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+            state.change_to_candidate();
+            return state;
+        });
 
-        let response = blocking_runtime.block_on(async move {
+        let inner_state = state.clone();
+        let _ = blocking_runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
                         term: 0,
-                        leader_id: replica.get_id(),
+                        leader_id: 10,
                         correlation_id: 20
                     }
                 )
             ).await;
-            return result.unwrap().into_inner();
-        });
 
-        assert_eq!(false, response.success);
-        assert_eq!(1, response.term);
-        assert_eq!(1, state.get_term());
+            let response = result.unwrap().into_inner();
+
+            assert_eq!(false, response.success);
+            assert_eq!(1, response.term);
+            assert_eq!(1, inner_state.get_term());
+        });
     }
 }

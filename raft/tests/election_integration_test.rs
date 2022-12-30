@@ -59,7 +59,10 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         Arc::new(SystemClock::new()),
     );
 
-    let state = State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let state = blocking_runtime.block_on(async move {
+        return State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+    });
     let inner_state = state.clone();
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
@@ -79,7 +82,10 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         peers,
         Arc::new(SystemClock::new()),
     );
-    let state = State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let state = blocking_runtime.block_on(async move {
+        return State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+    });
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
@@ -99,7 +105,10 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
         Arc::new(SystemClock::new()),
     );
 
-    let state = State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let state = blocking_runtime.block_on(async move {
+        return State::new(Arc::new(replica), Arc::new(SystemClock::new()));
+    });
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
