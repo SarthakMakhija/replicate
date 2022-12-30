@@ -57,25 +57,20 @@ mod tests {
 
     use crate::heartbeat::heartbeat_scheduler::HeartbeatScheduler;
     use crate::heartbeat::heartbeat_scheduler::tests::setup::HeartbeatCounter;
-    use crate::heartbeat::heartbeat_sender::HeartbeatSender;
     use crate::net::connect::error::AnyError;
 
     mod setup {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicU16, Ordering};
 
-        use async_trait::async_trait;
-
-        use crate::heartbeat::heartbeat_sender::HeartbeatSender;
         use crate::net::connect::error::AnyError;
 
         pub struct HeartbeatCounter {
             pub counter: Arc<AtomicU16>,
         }
 
-        #[async_trait]
-        impl HeartbeatSender for HeartbeatCounter {
-            async fn send_heartbeat(&self) -> Result<(), AnyError> {
+        impl HeartbeatCounter {
+            pub async fn send_heartbeat(&self) -> Result<(), AnyError> {
                 self.counter.clone().fetch_add(1, Ordering::SeqCst);
                 return Ok(());
             }
