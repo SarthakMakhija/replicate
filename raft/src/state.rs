@@ -113,15 +113,21 @@ impl State {
         };
     }
 
-    pub(crate) fn maybe_start_election<F>(self: Arc<Self>, election_timeout: &Duration, election_starter: F)
+    pub(crate) fn get_heartbeat_checker<F>(self: Arc<Self>, election_timeout: Duration, election_starter: F) -> impl Future<Output=Result<(), AnyError>>
         where F: FnOnce(Arc<State>) -> () {
-        let write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &*write_guard;
-        if let Some(last_heartbeat_time) = consensus_state.heartbeat_received_time {
-            if self.clock.now().duration_since(last_heartbeat_time).unwrap().ge(election_timeout) {
-                election_starter(self.clone());
+        let inner_self = self.clone();
+        let clock = self.clock.clone();
+
+        return async move {
+            let write_guard = inner_self.consensus_state.write().unwrap();
+            let consensus_state = &*write_guard;
+            if let Some(last_heartbeat_time) = consensus_state.heartbeat_received_time {
+                if clock.now().duration_since(last_heartbeat_time).unwrap().ge(&election_timeout) {
+                    election_starter(inner_self.clone());
+                }
             }
-        }
+            return Ok(());
+        };
     }
 
     pub(crate) fn get_replica(&self) -> Arc<Replica> {
@@ -155,7 +161,7 @@ impl Error for HeartbeatSendError {}
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
-    use std::sync::Arc;
+    use std::sync::{Arc, RwLock};
     use std::time::Duration;
 
     use replicate::clock::clock::SystemClock;
@@ -223,8 +229,8 @@ mod tests {
         assert_eq!(None, state.get_voted_for());
     }
 
-    #[test]
-    fn maybe_start_election() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn heartbeat_timeout() {
         let some_replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
@@ -238,15 +244,22 @@ mod tests {
         state.mark_heartbeat_received();
 
         let election_timeout = Duration::from_millis(0);
-        let mut count = 0;
-        let election_starter = |_state| { count = count + 1; };
+        let count = Arc::new(RwLock::new(0));
+        let cloned = count.clone();
 
-        state.maybe_start_election(&election_timeout, election_starter);
-        assert_eq!(1, count);
+        let election_starter = move |_state| {
+            let mut write_guard = cloned.write().unwrap();
+            *write_guard = *write_guard + 1;
+        };
+
+        let handle = tokio::spawn(state.get_heartbeat_checker(election_timeout, election_starter));
+
+        let _ = handle.await;
+        assert_eq!(1, *(count.read().unwrap()));
     }
 
-    #[test]
-    fn maybe_not_start_election() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn heartbeat_does_not_timeout() {
         let some_replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
@@ -260,11 +273,17 @@ mod tests {
         state.mark_heartbeat_received();
 
         let election_timeout = Duration::from_secs(100);
-        let mut count = 0;
-        let election_starter = |_state| { count = count + 1; };
+        let count = Arc::new(RwLock::new(0));
+        let cloned = count.clone();
 
-        state.maybe_start_election(&election_timeout, election_starter);
+        let election_starter = move |_state| {
+            let mut write_guard = cloned.write().unwrap();
+            *write_guard = *write_guard + 1;
+        };
 
-        assert_eq!(0, count);
+        let handle = tokio::spawn(state.get_heartbeat_checker(election_timeout, election_starter));
+        let _ = handle.await;
+
+        assert_eq!(0, *(count.read().unwrap()));
     }
 }
