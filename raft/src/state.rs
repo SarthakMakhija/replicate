@@ -144,12 +144,12 @@ impl State {
             let consensus_state = &*write_guard;
             match consensus_state.heartbeat_received_time {
                 Some(last_heartbeat_time) => {
-                    if clock.now().duration_since(last_heartbeat_time).unwrap().ge(&heartbeat_timeout) {
+                    if clock.duration_since(last_heartbeat_time).ge(&heartbeat_timeout) {
                         election_starter(inner_self.clone());
                     }
                 }
                 None => {
-                    if clock.now().duration_since(consensus_state.creation_time).unwrap().ge(&heartbeat_timeout) {
+                    if clock.duration_since(consensus_state.creation_time).ge(&heartbeat_timeout) {
                         election_starter(inner_self.clone());
                     }
                 }

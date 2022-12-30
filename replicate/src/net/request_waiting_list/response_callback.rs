@@ -45,7 +45,7 @@ impl TimestampedCallback {
     }
 
     pub(crate) fn has_expired(&self, clock: &Arc<dyn Clock>, expiry_after: &Duration) -> bool {
-        return clock.now().duration_since(self.creation_time).unwrap().ge(expiry_after);
+        return clock.duration_since(self.creation_time).ge(expiry_after);
     }
 }
 
