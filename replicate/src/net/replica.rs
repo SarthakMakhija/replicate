@@ -8,9 +8,9 @@ use tokio::task::JoinHandle;
 use crate::clock::clock::Clock;
 use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::correlation_id::CorrelationId;
+use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::ServiceRequest;
-use crate::net::connect::error::ServiceResponseError;
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType};
 use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
@@ -24,7 +24,7 @@ pub struct Replica {
     self_address: HostAndPort,
     peer_addresses: Vec<HostAndPort>,
     request_waiting_list: RequestWaitingList,
-    singular_update_queue: SingularUpdateQueue,
+    singular_update_queue: Arc<SingularUpdateQueue>,
     clock: Arc<dyn Clock>,
 }
 
@@ -43,8 +43,8 @@ impl Replica {
             self_address,
             peer_addresses,
             request_waiting_list,
-            singular_update_queue: SingularUpdateQueue::new(),
-            clock
+            singular_update_queue: Arc::new(SingularUpdateQueue::new()),
+            clock,
         };
     }
 
@@ -187,6 +187,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
 
+    use tokio::runtime::Builder;
     use tokio::sync::mpsc;
 
     use crate::clock::clock::SystemClock;
@@ -206,9 +207,9 @@ mod tests {
         use tonic::{Request, Response};
 
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
-        use crate::net::connect::host_and_port::HostAndPort;
-        use crate::net::connect::service_client::{ServiceClientProvider};
         use crate::net::connect::error::ServiceResponseError;
+        use crate::net::connect::host_and_port::HostAndPort;
+        use crate::net::connect::service_client::ServiceClientProvider;
 
         #[derive(Debug)]
         pub struct GetValueRequest {}
@@ -266,20 +267,23 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn send_one_way_to_replicas_successfully() {
+    #[test]
+    fn send_one_way_to_replicas_successfully() {
         let any_replica_port = 8988;
         let any_other_replica_port = 8989;
 
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-            ],
-            Arc::new(SystemClock::new()),
-        );
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+                vec![
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+                ],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
@@ -291,26 +295,30 @@ mod tests {
             )
         };
 
-        let total_failed_sends =
-            replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+        blocking_runtime.block_on(async {
+            let total_failed_sends =
+                replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
-        assert_eq!(0, total_failed_sends);
-        replica.singular_update_queue.shutdown();
+            assert_eq!(0, total_failed_sends);
+        })
     }
 
-    #[tokio::test]
-    async fn send_one_way_to_the_hosts_successfully() {
+    #[test]
+    fn send_one_way_to_the_hosts_successfully() {
         let any_replica_port = 9988;
         let any_other_replica_port = 9989;
 
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-            ],
-            Arc::new(SystemClock::new()),
-        );
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2080),
+                vec![
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+                ],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
@@ -322,31 +330,35 @@ mod tests {
             )
         };
 
-        let total_failed_sends =
-            replica.send_to(
-                &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
-                service_request_constructor,
-                async_quorum_callback.clone(),
-            ).await;
+        blocking_runtime.block_on(async {
+            let total_failed_sends =
+                replica.send_to(
+                    &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
+                    service_request_constructor,
+                    async_quorum_callback.clone(),
+                ).await;
 
-        assert_eq!(0, total_failed_sends);
-        replica.singular_update_queue.shutdown();
+            assert_eq!(0, total_failed_sends);
+        });
     }
 
-    #[tokio::test]
-    async fn send_one_way_to_replicas_with_failure() {
+    #[test]
+    fn send_one_way_to_replicas_with_failure() {
         let any_replica_port = 8988;
         let any_other_replica_port = 8988;
 
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-            ],
-            Arc::new(SystemClock::new()),
-        );
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+                vec![
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+                ],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
@@ -358,26 +370,31 @@ mod tests {
             )
         };
 
-        let total_failed_sends =
-            replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+        blocking_runtime.block_on(async {
+            let total_failed_sends =
+                replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
-        assert_eq!(2, total_failed_sends);
-        replica.singular_update_queue.shutdown();
+            assert_eq!(2, total_failed_sends);
+        })
     }
 
-    #[tokio::test]
-    async fn submit_to_queue() {
+    #[test]
+    fn submit_to_queue() {
         let any_replica_port = 8988;
         let storage = Arc::new(RwLock::new(HashMap::new()));
         let readable_storage = storage.clone();
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
-            ],
-            Arc::new(SystemClock::new()),
-        );
+
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+                vec![
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                ],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let (sender, mut receiver) = mpsc::channel(1);
         replica.submit_to_queue(async move {
@@ -385,48 +402,57 @@ mod tests {
             sender.send(()).await.unwrap();
         });
 
-        let _ = receiver.recv().await.unwrap();
-        let read_storage = readable_storage.read().unwrap();
+        blocking_runtime.block_on(async {
+            let _ = receiver.recv().await.unwrap();
+            let read_storage = readable_storage.read().unwrap();
 
-        assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
-        replica.singular_update_queue.shutdown();
+            assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
+        });
     }
 
-    #[tokio::test]
-    async fn add_to_queue() {
+    #[test]
+    fn add_to_queue() {
         let any_replica_port = 8988;
         let storage = Arc::new(RwLock::new(HashMap::new()));
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
-            Arc::new(SystemClock::new()),
-        );
+
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+                vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let handle = replica.add_to_queue(async move {
             storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
             return ("WAL".to_string(), "write-ahead log".to_string());
         });
-        let (key, value) = handle.await.unwrap();
 
-        assert_eq!("WAL".to_string(), key);
-        assert_eq!("write-ahead log".to_string(), value);
+        blocking_runtime.block_on(async {
+            let (key, value) = handle.await.unwrap();
 
-        replica.singular_update_queue.shutdown();
+            assert_eq!("WAL".to_string(), key);
+            assert_eq!("write-ahead log".to_string(), value);
+        });
     }
 
-    #[tokio::test]
-    async fn await_for_completion_of_callback() {
+    #[test]
+    fn await_for_completion_of_callback() {
         let any_other_replica_port = 8989;
 
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-            ],
-            Arc::new(SystemClock::new()),
-        );
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+                vec![
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+                ],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let correlation_id_generator = FixedCorrelationIdGenerator::new(100);
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(1);
@@ -438,22 +464,22 @@ mod tests {
             )
         };
 
-        let total_failed_sends =
-            replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+        blocking_runtime.block_on(async {
+            let total_failed_sends =
+                replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
-        assert_eq!(0, total_failed_sends);
+            assert_eq!(0, total_failed_sends);
 
-        let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port);
-        let _ = replica.register_response(
-            correlation_id_generator.generate(),
-            from.clone(),
-            Ok(Box::new(GetValueResponse { value: "some value".to_string() })),
-        );
+            let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port);
+            let _ = replica.register_response(
+                correlation_id_generator.generate(),
+                from.clone(),
+                Ok(Box::new(GetValueResponse { value: "some value".to_string() })),
+            );
 
-        let quorum_completion_response = async_quorum_callback.handle().await;
-        assert_eq!("some value".to_string(), quorum_completion_response.success_response().unwrap().get(&from).unwrap().value);
-
-        replica.singular_update_queue.shutdown();
+            let quorum_completion_response = async_quorum_callback.handle().await;
+            assert_eq!("some value".to_string(), quorum_completion_response.success_response().unwrap().get(&from).unwrap().value);
+        });
     }
 
     #[test]
@@ -490,18 +516,21 @@ mod tests {
         assert_eq!(3, total_peer_count);
     }
 
-    #[tokio::test]
-    async fn send_one_way_to_the_replicas_without_callback_successfully() {
+    #[test]
+    fn send_one_way_to_the_replicas_without_callback_successfully() {
         let any_other_replica_port = 1989;
 
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-            ],
-            Arc::new(SystemClock::new()),
-        );
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
+                vec![
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+                ],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
@@ -512,27 +541,31 @@ mod tests {
             )
         };
 
-        let total_failed_sends =
-            replica.send_to_replicas_without_callback(service_request_constructor).await;
+        blocking_runtime.block_on(async {
+            let total_failed_sends =
+                replica.send_to_replicas_without_callback(service_request_constructor).await;
 
-        assert_eq!(0, total_failed_sends);
-        replica.singular_update_queue.shutdown();
+            assert_eq!(0, total_failed_sends);
+        });
     }
 
-    #[tokio::test]
-    async fn send_one_way_to_replicas_without_callback_with_failure() {
+    #[test]
+    fn send_one_way_to_replicas_without_callback_with_failure() {
         let any_replica_port = 8988;
         let any_other_replica_port = 8988;
 
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-            ],
-            Arc::new(SystemClock::new()),
-        );
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let replica = blocking_runtime.block_on(async {
+            return Replica::new(
+                10,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+                vec![
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+                ],
+                Arc::new(SystemClock::new()),
+            );
+        });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let service_request_constructor = || {
@@ -543,10 +576,11 @@ mod tests {
             )
         };
 
-        let total_failed_sends =
-            replica.send_to_replicas_without_callback(service_request_constructor).await;
+        blocking_runtime.block_on(async {
+            let total_failed_sends =
+                replica.send_to_replicas_without_callback(service_request_constructor).await;
 
-        assert_eq!(2, total_failed_sends);
-        replica.singular_update_queue.shutdown();
+            assert_eq!(2, total_failed_sends);
+        });
     }
 }
