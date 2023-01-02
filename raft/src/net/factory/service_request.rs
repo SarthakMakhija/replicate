@@ -3,16 +3,14 @@ use replicate::net::connect::random_correlation_id_generator::RandomCorrelationI
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::ReplicaId;
 
-use crate::net::rpc::grpc::RequestVote;
-use crate::net::rpc::grpc::RequestVoteResponse;
+use crate::net::factory::client_provider::{RaftHeartbeatServiceClient, RequestVoteClient, RequestVoteResponseClient};
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::AppendEntriesResponse;
-use crate::net::factory::client_provider::{RaftHeartbeatServiceClient, RequestVoteClient, RequestVoteResponseClient};
+use crate::net::rpc::grpc::RequestVote;
+use crate::net::rpc::grpc::RequestVoteResponse;
 
-pub(crate) struct ServiceRequestFactory {}
-
-impl ServiceRequestFactory {
-    pub(crate) fn request_vote(replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, ()> {
+pub(crate) trait ServiceRequestFactory: Send + Sync {
+    fn request_vote(&self, replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, ()> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(
@@ -26,7 +24,7 @@ impl ServiceRequestFactory {
         );
     }
 
-    pub(crate) fn request_vote_response(term: u64, voted: bool, correlation_id: CorrelationId) -> ServiceRequest<RequestVoteResponse, ()> {
+    fn request_vote_response(&self, term: u64, voted: bool, correlation_id: CorrelationId) -> ServiceRequest<RequestVoteResponse, ()> {
         return ServiceRequest::new(
             RequestVoteResponse {
                 term,
@@ -38,7 +36,7 @@ impl ServiceRequestFactory {
         );
     }
 
-    pub(crate) fn heartbeat(term: u64, leader_id: ReplicaId) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
+    fn heartbeat(&self, term: u64, leader_id: ReplicaId) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
 
@@ -51,5 +49,15 @@ impl ServiceRequestFactory {
             Box::new(RaftHeartbeatServiceClient {}),
             correlation_id,
         );
+    }
+}
+
+pub(crate) struct BuiltInServiceRequestFactory {}
+
+impl ServiceRequestFactory for BuiltInServiceRequestFactory {}
+
+impl BuiltInServiceRequestFactory {
+    pub(crate) fn new() -> Self {
+        return BuiltInServiceRequestFactory {};
     }
 }

@@ -11,7 +11,7 @@ use replicate::net::replica::{Replica, ReplicaId};
 
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
-use crate::net::factory::service_request::ServiceRequestFactory;
+use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
@@ -20,6 +20,7 @@ pub struct State {
     heartbeat_config: HeartbeatConfig,
     heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler,
     heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler,
+    service_request_factory: Arc<dyn ServiceRequestFactory>,
 }
 
 struct ConsensusState {
@@ -57,6 +58,7 @@ impl State {
             heartbeat_config,
             heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_interval),
             heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_timeout),
+            service_request_factory: Arc::new(BuiltInServiceRequestFactory::new()),
         };
 
         let state = Arc::new(state);
@@ -122,10 +124,11 @@ impl State {
         let term = self.get_term();
         let leader_id = self.replica.get_id();
         let replica = self.replica.clone();
+        let service_request_factory = self.service_request_factory.clone();
 
         return async move {
             let service_request_constructor = || {
-                ServiceRequestFactory::heartbeat(term, leader_id)
+                service_request_factory.heartbeat(term, leader_id)
             };
             let total_failed_sends =
                 replica.send_to_replicas_without_callback(service_request_constructor).await;
@@ -312,7 +315,7 @@ mod tests {
 
         let handle = tokio::spawn(state.get_heartbeat_checker(
             heartbeat_timeout,
-            election_starter
+            election_starter,
         ));
 
         let _ = handle.await;
@@ -343,7 +346,7 @@ mod tests {
         thread::sleep(Duration::from_millis(5));
         let handle = tokio::spawn(state.get_heartbeat_checker(
             heartbeat_timeout,
-            election_starter
+            election_starter,
         ));
 
         let _ = handle.await;
@@ -374,7 +377,7 @@ mod tests {
         thread::sleep(Duration::from_millis(2));
         let handle = tokio::spawn(state.get_heartbeat_checker(
             heartbeat_timeout,
-            election_starter
+            election_starter,
         ));
 
         let _ = handle.await;
@@ -406,7 +409,7 @@ mod tests {
 
         let handle = tokio::spawn(state.get_heartbeat_checker(
             heartbeat_timeout,
-            election_starter
+            election_starter,
         ));
         let _ = handle.await;
 

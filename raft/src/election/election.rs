@@ -4,30 +4,32 @@ use replicate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::correlation_id::RESERVED_CORRELATION_ID;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
 
-use crate::net::factory::service_request::ServiceRequestFactory;
+use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::RequestVoteResponse;
 use crate::state::State;
 
 pub struct Election {
     state: Arc<State>,
+    service_request_factory: Arc<dyn ServiceRequestFactory>,
 }
 
 impl Election {
     pub fn new(state: Arc<State>) -> Self {
-        return Election { state };
+        return Election { state, service_request_factory: Arc::new(BuiltInServiceRequestFactory::new()) };
     }
 
     pub fn start(&self) {
         let replica = self.state.get_replica();
         let inner_replica = replica.clone();
         let state = self.state.clone();
+        let service_request_factory = self.service_request_factory.clone();
 
         replica.submit_to_queue(async move {
             let term = state.change_to_candidate();
             println!("starting election with term {}", term);
 
             let service_request_constructor = || {
-                ServiceRequestFactory::request_vote(
+                service_request_factory.request_vote(
                     inner_replica.get_id(),
                     term,
                 )

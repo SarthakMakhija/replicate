@@ -5,18 +5,19 @@ use tonic::{Request, Response};
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 
-use crate::net::factory::service_request::ServiceRequestFactory;
+use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::State;
 
 pub struct RaftService {
     state: Arc<State>,
+    service_request_factory: Arc<dyn ServiceRequestFactory>,
 }
 
 impl RaftService {
     pub fn new(state: Arc<State>) -> Self {
-        return RaftService { state };
+        return RaftService { state, service_request_factory: Arc::new(BuiltInServiceRequestFactory::new()) };
     }
 }
 
@@ -30,6 +31,7 @@ impl Raft for RaftService {
         let correlation_id = request.correlation_id;
         let replica = self.state.get_replica();
         let source_address = replica.get_self_address();
+        let service_request_factory = self.service_request_factory.clone();
 
         println!("received RequestVote with term {}", request.term);
         let handler = async move {
@@ -40,7 +42,7 @@ impl Raft for RaftService {
                 false
             };
             let send_result = AsyncNetwork::send_with_source_footprint(
-                ServiceRequestFactory::request_vote_response(term, voted, correlation_id),
+                service_request_factory.request_vote_response(term, voted, correlation_id),
                 source_address,
                 originating_host_port,
             ).await;
@@ -94,16 +96,19 @@ impl Raft for RaftService {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
+
+    use tokio::runtime::Builder;
     use tonic::{Request, Response};
+
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::replica::Replica;
+
+    use crate::heartbeat_config::HeartbeatConfig;
+    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse};
+    use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::service::raft_service::RaftService;
     use crate::state::State;
-    use crate::net::rpc::grpc::raft_server::Raft;
-    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse};
-    use tokio::runtime::Builder;
-    use crate::heartbeat_config::HeartbeatConfig;
 
     #[test]
     fn acknowledge_heartbeat_mark_heartbeat_received() {
@@ -129,7 +134,7 @@ mod tests {
                     AppendEntries {
                         term: 1,
                         leader_id: 10,
-                        correlation_id: 20
+                        correlation_id: 20,
                     }
                 )
             ).await;
@@ -162,7 +167,7 @@ mod tests {
                     AppendEntries {
                         term: 1,
                         leader_id: 10,
-                        correlation_id: 20
+                        correlation_id: 20,
                     }
                 )
             ).await;
@@ -199,7 +204,7 @@ mod tests {
                     AppendEntries {
                         term: 0,
                         leader_id: 10,
-                        correlation_id: 20
+                        correlation_id: 20,
                     }
                 )
             ).await;
@@ -238,7 +243,7 @@ mod tests {
                     AppendEntries {
                         term: 0,
                         leader_id: 10,
-                        correlation_id: 20
+                        correlation_id: 20,
                     }
                 )
             ).await;
