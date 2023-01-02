@@ -1,17 +1,16 @@
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 use replicate::clock::clock::Clock;
 use replicate::heartbeat::heartbeat_scheduler::SingleThreadedHeartbeatScheduler;
-use replicate::net::connect::error::AnyError;
+use replicate::net::connect::error::{AnyError, ServiceResponseError};
 use replicate::net::replica::{Replica, ReplicaId};
 
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
+use crate::net::rpc::grpc::AppendEntriesResponse;
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
@@ -124,7 +123,7 @@ impl State {
         return (*guard).heartbeat_received_time;
     }
 
-    pub fn get_heartbeat_sender(&self) -> impl Future<Output=Result<(), AnyError>> {
+    pub fn get_heartbeat_sender(self: Arc<State>) -> impl Future<Output=Result<(), AnyError>> {
         let term = self.get_term();
         let leader_id = self.replica.get_id();
         let replica = self.replica.clone();
@@ -134,17 +133,26 @@ impl State {
             let service_request_constructor = || {
                 service_request_factory.heartbeat(term, leader_id)
             };
-            let total_failed_sends =
-                replica.send_to_replicas_without_callback(service_request_constructor).await;
 
-            println!("total failures {}", total_failed_sends);
-            return match total_failed_sends {
-                0 => Ok(()),
-                _ => {
-                    let any_error: AnyError = Box::new(HeartbeatSendError { total_failed_sends });
-                    Err(any_error)
-                }
-            };
+            let response_handler_generator =
+                move |response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                    match response {
+                        Ok(response) => Some(self.clone().get_heartbeat_response_handler(response)),
+                        Err(_) => None
+                    }
+                };
+
+            replica.send_to_replicas_without_callback(service_request_constructor, Arc::new(response_handler_generator)).await;
+            return Ok(());
+        };
+    }
+
+    pub(crate) fn get_heartbeat_response_handler(self: Arc<State>, append_entry_response: AppendEntriesResponse) -> impl Future<Output=()> {
+        let inner_state = self.clone();
+        return async move {
+            if !append_entry_response.success {
+                inner_state.change_to_follower(append_entry_response.term);
+            }
         };
     }
 
@@ -199,25 +207,12 @@ impl State {
 
     fn restart_heartbeat_sender(state: Arc<State>, heartbeat_send_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_send_scheduler.stop();
-        heartbeat_send_scheduler.start_with(move ||
-            state.get_heartbeat_sender()
-        );
+        heartbeat_send_scheduler.start_with(move || {
+            let inner_state = state.clone();
+            inner_state.get_heartbeat_sender()
+        });
     }
 }
-
-#[derive(Debug)]
-pub struct HeartbeatSendError {
-    pub total_failed_sends: usize,
-}
-
-impl Display for HeartbeatSendError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let message = format!("Total failures in sending heartbeat {}", self.total_failed_sends);
-        write!(formatter, "{}", message)
-    }
-}
-
-impl Error for HeartbeatSendError {}
 
 #[cfg(test)]
 mod tests {
@@ -226,6 +221,7 @@ mod tests {
     use std::sync::atomic::AtomicU64;
     use std::thread;
     use std::time::Duration;
+
     use tokio::runtime::Builder;
 
     use replicate::clock::clock::SystemClock;
@@ -234,7 +230,7 @@ mod tests {
 
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::state::{ReplicaRole, State};
-    use crate::state::tests::setup::IncrementingCorrelationIdServiceRequestFactory;
+    use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn change_to_candidate() {
@@ -444,6 +440,7 @@ mod tests {
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Success,
                 }),
             );
         });
@@ -452,6 +449,83 @@ mod tests {
         blocking_runtime.block_on(async move {
             let result = inner_state.get_heartbeat_sender().await;
             assert!(result.is_ok());
+        });
+    }
+
+    #[test]
+    fn do_not_switch_to_follower_on_heartbeat_response() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Success,
+                }),
+            );
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let cloned = inner_state.clone();
+            let _ = inner_state.get_heartbeat_sender().await;
+
+            thread::sleep(Duration::from_secs(1));
+            assert_eq!(ReplicaRole::Leader, cloned.get_role());
+        });
+    }
+
+    #[test]
+    fn switch_to_follower_on_heartbeat_response() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let cloned = inner_state.clone();
+            let _ = inner_state.get_heartbeat_sender().await;
+            thread::sleep(Duration::from_secs(1));
+
+            assert_eq!(ReplicaRole::Follower, cloned.get_role());
+            assert_eq!(5, cloned.get_term());
         });
     }
 
@@ -472,8 +546,15 @@ mod tests {
         use crate::net::rpc::grpc::AppendEntries;
         use crate::net::rpc::grpc::AppendEntriesResponse;
 
+        #[derive(PartialEq)]
+        pub(crate) enum HeartbeatResponseClientType {
+            Success,
+            Failure,
+        }
+
         pub(crate) struct IncrementingCorrelationIdServiceRequestFactory {
             pub(crate) base_correlation_id: RwLock<AtomicU64>,
+            pub(crate) heartbeat_response_client_type: HeartbeatResponseClientType,
         }
 
         impl ServiceRequestFactory for IncrementingCorrelationIdServiceRequestFactory {
@@ -486,25 +567,42 @@ mod tests {
                 let guard = self.base_correlation_id.read().unwrap();
                 let correlation_id: CorrelationId = guard.load(Ordering::SeqCst);
 
+                let client: Box<dyn ServiceClientProvider<AppendEntries, AppendEntriesResponse>> = if self.heartbeat_response_client_type == HeartbeatResponseClientType::Success {
+                    Box::new(TestHeartbeatSuccessClient {})
+                } else {
+                    Box::new(TestHeartbeatFailureClient {})
+                };
+
                 return ServiceRequest::new(
                     AppendEntries {
                         term,
                         leader_id,
                         correlation_id,
                     },
-                    Box::new(TestHeartbeatClient {}),
+                    client,
                     correlation_id,
                 );
             }
         }
 
-        struct TestHeartbeatClient {}
+        struct TestHeartbeatSuccessClient {}
 
         #[async_trait]
-        impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatClient {
+        impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatSuccessClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(AppendEntriesResponse { term: 1, success: true })
+                );
+            }
+        }
+
+        struct TestHeartbeatFailureClient {}
+
+        #[async_trait]
+        impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatFailureClient {
+            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
+                return Ok(
+                    Response::new(AppendEntriesResponse { term: 5, success: false })
                 );
             }
         }

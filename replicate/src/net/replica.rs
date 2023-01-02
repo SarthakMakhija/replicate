@@ -90,35 +90,37 @@ impl Replica {
         return total_failed_sends;
     }
 
-    pub async fn send_to_replicas_without_callback<Payload, S, Response>(&self,
-                                                                         service_request_constructor: S) -> TotalFailedSends
+    pub async fn send_to_replicas_without_callback<Payload, S, Response, F, T>(&self,
+                                                                               service_request_constructor: S,
+                                                                               response_handler_generator: Arc<F>)
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
-              S: Fn() -> ServiceRequest<Payload, Response> {
-        let mut send_task_handles = Vec::new();
+              S: Fn() -> ServiceRequest<Payload, Response>,
+              F: Fn(Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
+              T: Future + Send + 'static,
+              T::Output: Send + 'static {
         let peer_addresses = self.peer_addresses.clone();
+
         for address in peer_addresses {
             if address.eq(&self.self_address) {
                 continue;
             }
 
+            let singular_update_queue = self.singular_update_queue.clone();
             let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
-            send_task_handles.push(tokio::spawn(async move {
-                return AsyncNetwork::send_without_source_footprint(
+            let peer_handler_generator = response_handler_generator.clone();
+
+            tokio::spawn(async move {
+                let response = AsyncNetwork::send_without_source_footprint(
                     service_request,
                     address,
                 ).await;
-            }));
-        }
 
-        let mut total_failed_sends: TotalFailedSends = 0;
-        for handle in send_task_handles {
-            let result = handle.await.unwrap();
-            if result.is_err() {
-                total_failed_sends = total_failed_sends + 1;
-            }
+                if let Some(handler) = peer_handler_generator(response) {
+                    singular_update_queue.submit(handler);
+                }
+            });
         }
-        return total_failed_sends;
     }
 
     pub fn submit_to_queue<F>(&self, handler: F)
@@ -184,24 +186,29 @@ impl Replica {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::future::Future;
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
+    use std::sync::atomic::{AtomicI8, Ordering};
 
     use tokio::runtime::Builder;
     use tokio::sync::mpsc;
+    use tokio::sync::mpsc::Sender;
 
     use crate::clock::clock::SystemClock;
     use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
     use crate::net::connect::correlation_id::CorrelationIdGenerator;
+    use crate::net::connect::error::ServiceResponseError;
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::replica::Replica;
-    use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse};
+    use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse, ResponseCounter};
 
     mod setup {
         use std::error::Error;
         use std::fmt::{Display, Formatter};
+        use std::sync::atomic::AtomicI8;
 
         use async_trait::async_trait;
         use tonic::{Request, Response};
@@ -264,6 +271,10 @@ mod tests {
             fn generate(&self) -> CorrelationId {
                 return self.value;
             }
+        }
+
+        pub struct ResponseCounter {
+            pub counter: AtomicI8,
         }
     }
 
@@ -518,69 +529,94 @@ mod tests {
 
     #[test]
     fn send_one_way_to_the_replicas_without_callback_successfully() {
-        let any_other_replica_port = 1989;
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let inner_replica = replica.clone();
 
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let replica = blocking_runtime.block_on(async {
-            return Replica::new(
-                10,
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
-                vec![
-                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-                ],
-                Arc::new(SystemClock::new()),
-            );
-        });
+        blocking_runtime.block_on(async move {
+            let (sender, mut receiver) = mpsc::channel(1);
 
-        let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let service_request_constructor = || {
-            ServiceRequest::new(
-                GetValueRequest {},
-                Box::new(GetValueRequestSuccessClient {}),
-                correlation_id_generator.generate(),
-            )
-        };
+            let correlation_id_generator = RandomCorrelationIdGenerator::new();
+            let service_request_constructor = move || {
+                ServiceRequest::new(
+                    GetValueRequest {},
+                    Box::new(GetValueRequestSuccessClient {}),
+                    correlation_id_generator.generate(),
+                )
+            };
 
-        blocking_runtime.block_on(async {
-            let total_failed_sends =
-                replica.send_to_replicas_without_callback(service_request_constructor).await;
+            let response_counter = Arc::new(ResponseCounter { counter: AtomicI8::new(0) });
+            let inner_response_counter = response_counter.clone();
+            let response_handler_generator = move |response: Result<(), ServiceResponseError>| {
+                if response.is_ok() {
+                    return Some(handler(&response_counter, 1, sender.clone()));
+                }
+                return Some(handler(&response_counter, -1, sender.clone()));
+            };
+            let response_handler_generator = Arc::new(response_handler_generator);
 
-            assert_eq!(0, total_failed_sends);
+            inner_replica.send_to_replicas_without_callback(service_request_constructor, response_handler_generator.clone()).await;
+
+            receiver.recv().await.unwrap();
+            assert_eq!(1, inner_response_counter.counter.load(Ordering::SeqCst));
         });
     }
 
     #[test]
     fn send_one_way_to_replicas_without_callback_with_failure() {
-        let any_replica_port = 8988;
-        let any_other_replica_port = 8988;
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let inner_replica = replica.clone();
 
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let replica = blocking_runtime.block_on(async {
-            return Replica::new(
-                10,
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-                vec![
-                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
-                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-                ],
-                Arc::new(SystemClock::new()),
-            );
+        blocking_runtime.block_on(async move {
+            let (sender, mut receiver) = mpsc::channel(1);
+
+            let correlation_id_generator = RandomCorrelationIdGenerator::new();
+            let service_request_constructor = move || {
+                ServiceRequest::new(
+                    GetValueRequest {},
+                    Box::new(GetValueRequestFailureClient {}),
+                    correlation_id_generator.generate(),
+                )
+            };
+
+            let response_counter = Arc::new(ResponseCounter { counter: AtomicI8::new(0) });
+            let inner_response_counter = response_counter.clone();
+            let response_handler_generator = Arc::new(move |response: Result<(), ServiceResponseError>| {
+                if response.is_ok() {
+                    return Some(handler(&response_counter, 1, sender.clone()));
+                }
+                return Some(handler(&response_counter, -1, sender.clone()));
+            });
+
+            inner_replica.send_to_replicas_without_callback(service_request_constructor, response_handler_generator.clone()).await;
+
+            receiver.recv().await.unwrap();
+            assert_eq!(-1, inner_response_counter.counter.load(Ordering::SeqCst));
         });
+    }
 
-        let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let service_request_constructor = || {
-            ServiceRequest::new(
-                GetValueRequest {},
-                Box::new(GetValueRequestFailureClient {}),
-                correlation_id_generator.generate(),
-            )
+    fn handler(response_counter: &Arc<ResponseCounter>, value_add: i8, sender: Sender<()>) -> impl Future<Output=()> {
+        let response_counter = response_counter.clone();
+        return async move {
+            response_counter.counter.fetch_add(value_add, Ordering::SeqCst);
+            let _ = sender.send(()).await;
         };
-
-        blocking_runtime.block_on(async {
-            let total_failed_sends =
-                replica.send_to_replicas_without_callback(service_request_constructor).await;
-
-            assert_eq!(2, total_failed_sends);
-        });
     }
 }
