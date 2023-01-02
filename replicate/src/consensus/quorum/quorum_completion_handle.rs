@@ -74,7 +74,7 @@ impl<Response: Any + Send + Sync + Debug> Future for &QuorumCompletionHandle<Res
         }
 
         let error_response_count = self.error_response_count(&write_guard);
-        if total_non_error_responses + error_response_count == self.expected_total_responses {
+        if total_non_error_responses + error_response_count >= self.expected_total_responses {
             let all_error_responses = self.all_error_responses(&mut write_guard);
             if !all_error_responses.is_empty() {
                 return Poll::Ready(QuorumCompletionResponse::Error(all_error_responses));

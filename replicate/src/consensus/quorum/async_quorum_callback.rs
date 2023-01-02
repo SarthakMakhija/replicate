@@ -260,4 +260,33 @@ mod tests {
         let test_error_two = error_responses.get(&response_from_2).unwrap().downcast_ref::<TestError>().unwrap();
         assert_eq!("test error two", test_error_two.message);
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn total_response_count_greater_than_expected_responses_because_of_self_response() {
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
+            2,
+            success_condition
+        );
+
+        let self_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+        let peer_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
+        let peer_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50053);
+
+        async_quorum_callback.on_response(self_host.clone(), Err(Box::new(TestError { message: "test error one".to_string() })));
+        async_quorum_callback.on_response(peer_1.clone(), Err(Box::new(TestError { message: "test error two".to_string() })));
+        async_quorum_callback.on_response(peer_2.clone(), Ok(Box::new(GetValueResponse { value: "not ok".to_string() })));
+
+        let handle = async_quorum_callback.handle();
+
+        let completion_response = handle.await;
+
+        assert_eq!(2, completion_response.response_len());
+        let error_responses = completion_response.error_response().unwrap();
+        let test_error_one = error_responses.get(&self_host).unwrap().downcast_ref::<TestError>().unwrap();
+        assert_eq!("test error one", test_error_one.message);
+
+        let test_error_two = error_responses.get(&peer_1).unwrap().downcast_ref::<TestError>().unwrap();
+        assert_eq!("test error two", test_error_two.message);
+    }
 }
