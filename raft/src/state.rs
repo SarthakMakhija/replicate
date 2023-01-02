@@ -40,6 +40,10 @@ pub enum ReplicaRole {
 
 impl State {
     pub fn new(replica: Arc<Replica>, heartbeat_config: HeartbeatConfig) -> Arc<State> {
+        return Self::new_with(replica, heartbeat_config, Arc::new(BuiltInServiceRequestFactory::new()));
+    }
+
+    fn new_with(replica: Arc<Replica>, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
         let heartbeat_config = heartbeat_config;
         let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
@@ -58,7 +62,7 @@ impl State {
             heartbeat_config,
             heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_interval),
             heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_timeout),
-            service_request_factory: Arc::new(BuiltInServiceRequestFactory::new()),
+            service_request_factory,
         };
 
         let state = Arc::new(state);
@@ -219,8 +223,10 @@ impl Error for HeartbeatSendError {}
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
+    use std::sync::atomic::AtomicU64;
     use std::thread;
     use std::time::Duration;
+    use tokio::runtime::Builder;
 
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
@@ -228,6 +234,7 @@ mod tests {
 
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::state::{ReplicaRole, State};
+    use crate::state::tests::setup::IncrementingCorrelationIdServiceRequestFactory;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn change_to_candidate() {
@@ -414,5 +421,92 @@ mod tests {
         let _ = handle.await;
 
         assert_eq!(0, *(count.read().unwrap()));
+    }
+
+    #[test]
+    fn send_heartbeat() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            return State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                }),
+            );
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let result = inner_state.get_heartbeat_sender().await;
+            assert!(result.is_ok());
+        });
+    }
+
+    mod setup {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::RwLock;
+
+        use async_trait::async_trait;
+        use tonic::{Request, Response};
+
+        use replicate::net::connect::correlation_id::CorrelationId;
+        use replicate::net::connect::error::ServiceResponseError;
+        use replicate::net::connect::host_and_port::HostAndPort;
+        use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
+        use replicate::net::replica::ReplicaId;
+
+        use crate::net::factory::service_request::ServiceRequestFactory;
+        use crate::net::rpc::grpc::AppendEntries;
+        use crate::net::rpc::grpc::AppendEntriesResponse;
+
+        pub(crate) struct IncrementingCorrelationIdServiceRequestFactory {
+            pub(crate) base_correlation_id: RwLock<AtomicU64>,
+        }
+
+        impl ServiceRequestFactory for IncrementingCorrelationIdServiceRequestFactory {
+            fn heartbeat(&self, term: u64, leader_id: ReplicaId) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
+                {
+                    let write_guard = self.base_correlation_id.write().unwrap();
+                    write_guard.fetch_add(1, Ordering::SeqCst);
+                }
+
+                let guard = self.base_correlation_id.read().unwrap();
+                let correlation_id: CorrelationId = guard.load(Ordering::SeqCst);
+
+                return ServiceRequest::new(
+                    AppendEntries {
+                        term,
+                        leader_id,
+                        correlation_id,
+                    },
+                    Box::new(TestHeartbeatClient {}),
+                    correlation_id,
+                );
+            }
+        }
+
+        struct TestHeartbeatClient {}
+
+        #[async_trait]
+        impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatClient {
+            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
+                return Ok(
+                    Response::new(AppendEntriesResponse { term: 1, success: true })
+                );
+            }
+        }
     }
 }
