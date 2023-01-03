@@ -52,6 +52,16 @@ impl SingleThreadedHeartbeatScheduler {
         );
     }
 
+    pub fn restart_with<F, T>(&self, future_generator: F)
+        where
+            F: Fn() -> T + Send + 'static,
+            T: Future + Send + 'static,
+            T: Future<Output=Result<(), AnyError>> + Send + 'static {
+
+        self.stop();
+        self.start_with(future_generator);
+    }
+
     pub fn stop(&self) {
         self.keep_running.store(false, Ordering::SeqCst);
     }
@@ -108,7 +118,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn restart() {
+    async fn restart_by_stopping_and_starting() {
         let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
         let heartbeat_counter = Arc::new(heartbeat_counter);
         let readonly_counter = heartbeat_counter.clone();
@@ -116,6 +126,22 @@ mod tests {
         let heartbeat_scheduler = SingleThreadedHeartbeatScheduler::new(Duration::from_millis(2));
         heartbeat_scheduler.stop();
         heartbeat_scheduler.start_with(move || get_future(heartbeat_counter.clone()));
+
+        thread::sleep(Duration::from_millis(5));
+        heartbeat_scheduler.stop();
+
+        assert!(readonly_counter.counter.load(Ordering::SeqCst) >= 2);
+        heartbeat_scheduler.shutdown();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn restart() {
+        let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
+        let heartbeat_counter = Arc::new(heartbeat_counter);
+        let readonly_counter = heartbeat_counter.clone();
+
+        let heartbeat_scheduler = SingleThreadedHeartbeatScheduler::new(Duration::from_millis(2));
+        heartbeat_scheduler.restart_with(move || get_future(heartbeat_counter.clone()));
 
         thread::sleep(Duration::from_millis(5));
         heartbeat_scheduler.stop();
