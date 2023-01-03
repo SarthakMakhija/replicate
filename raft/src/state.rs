@@ -166,11 +166,13 @@ impl State {
             let consensus_state = &*write_guard;
             match consensus_state.heartbeat_received_time {
                 Some(last_heartbeat_time) => {
+                    println!("last heartbeat time = {:?}", last_heartbeat_time);
                     if clock.duration_since(last_heartbeat_time).ge(&heartbeat_timeout) {
                         election_starter(inner_self.clone());
                     }
                 }
                 None => {
+                    println!("creation_time = {:?}", consensus_state.creation_time);
                     if clock.duration_since(consensus_state.creation_time).ge(&heartbeat_timeout) {
                         election_starter(inner_self.clone());
                     }
@@ -188,6 +190,22 @@ impl State {
         return &self.replica;
     }
 
+    pub(crate) fn voted_for(&self, replica_id: ReplicaId) {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let mut consensus_state = &mut *write_guard;
+        consensus_state.voted_for = Some(replica_id);
+    }
+
+    pub(crate) fn has_not_voted_for_or_matches(&self, replica_id: ReplicaId) -> bool {
+        if let Some(voted_for) = self.get_voted_for() {
+            if voted_for == replica_id {
+                return true;
+            }
+            return false;
+        }
+        return true;
+    }
+
     fn get_voted_for(&self) -> Option<ReplicaId> {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).voted_for;
@@ -195,9 +213,11 @@ impl State {
 
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_check_scheduler.stop();
+        println!("restart_heartbeat_checker");
         heartbeat_check_scheduler.start_with(move || {
             let inner_state = state.clone();
             let heartbeat_timeout = inner_state.heartbeat_config.get_heartbeat_timeout();
+            println!("heartbeattimeout = {:?}", heartbeat_timeout);
             inner_state.get_heartbeat_checker(
                 heartbeat_timeout,
                 |state| Election::new(state).start(),
@@ -291,6 +311,72 @@ mod tests {
         assert_eq!(2, state.get_term());
         assert_eq!(ReplicaRole::Follower, state.get_role());
         assert_eq!(None, state.get_voted_for());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_voted_for_none() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+
+        assert_eq!(None, state.get_voted_for());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn has_not_voted() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+
+        assert_eq!(true, state.has_not_voted_for_or_matches(10));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn has_voted_for_the_replica_id() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        state.voted_for(15);
+
+        assert_eq!(true, state.has_not_voted_for_or_matches(15));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn does_not_match_the_replica_id_voted_for() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        state.voted_for(10);
+
+        assert_eq!(false, state.has_not_voted_for_or_matches(15));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -522,7 +608,7 @@ mod tests {
         blocking_runtime.block_on(async move {
             let cloned = inner_state.clone();
             let _ = inner_state.get_heartbeat_sender().await;
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_millis(3));
 
             assert_eq!(ReplicaRole::Follower, cloned.get_role());
             assert_eq!(5, cloned.get_term());
