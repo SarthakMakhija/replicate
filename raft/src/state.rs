@@ -206,7 +206,7 @@ impl State {
         return true;
     }
 
-    fn get_voted_for(&self) -> Option<ReplicaId> {
+    pub(crate) fn get_voted_for(&self) -> Option<ReplicaId> {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).voted_for;
     }

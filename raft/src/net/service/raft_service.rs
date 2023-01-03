@@ -8,7 +8,7 @@ use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
-use crate::state::State;
+use crate::state::{ReplicaRole, State};
 
 pub struct RaftService {
     state: Arc<State>,
@@ -36,11 +36,16 @@ impl Raft for RaftService {
         println!("received RequestVote with term {}", request.term);
         let handler = async move {
             let term = state.get_term();
-            let voted: bool = if request.term > term {
+            let role = state.get_role();
+            let voted: bool = if request.term > term && role != ReplicaRole::Leader && state.has_not_voted_for_or_matches(request.replica_id) {
                 true
             } else {
                 false
             };
+            if voted {
+                state.voted_for(request.replica_id);
+            }
+
             let send_result = AsyncNetwork::send_with_source_footprint(
                 service_request_factory.request_vote_response(term, voted, correlation_id),
                 source_address,
@@ -96,19 +101,154 @@ impl Raft for RaftService {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
 
     use tokio::runtime::Builder;
     use tonic::{Request, Response};
 
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
+    use replicate::net::connect::host_port_extractor::HostAndPortHeaderAdder;
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
-    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse};
+    use crate::net::rpc::grpc::{RequestVote, AppendEntries, AppendEntriesResponse};
     use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::service::raft_service::RaftService;
     use crate::state::State;
+
+    #[test]
+    fn acknowledge_request_vote_successfully_voted() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = blocking_runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let inner_state = state.clone();
+        let _ = blocking_runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+
+            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.acknowledge_request_vote(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(Some(30), state.get_voted_for());
+    }
+
+    #[test]
+    fn acknowledge_request_vote_do_not_vote_given_replica_is_the_leader() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let state_clone = state.clone();
+
+            state_clone.change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = blocking_runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+
+            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.acknowledge_request_vote(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(None, state.get_voted_for());
+    }
+
+    #[test]
+    fn acknowledge_request_vote_do_not_vote_given_replica_has_already_voted() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let state_clone = state.clone();
+
+            state_clone.voted_for(20);
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = blocking_runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+
+            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.acknowledge_request_vote(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(Some(20), state.get_voted_for());
+    }
+
+    #[test]
+    fn acknowledge_request_vote_do_not_vote_given_the_request_term_not_higher() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = blocking_runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let inner_state = state.clone();
+        let _ = blocking_runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+
+            let mut request = Request::new(RequestVote { term: 0, replica_id: 30, correlation_id: 20});
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.acknowledge_request_vote(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(None, state.get_voted_for());
+    }
 
     #[test]
     fn acknowledge_heartbeat_mark_heartbeat_received() {
