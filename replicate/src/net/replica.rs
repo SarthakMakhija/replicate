@@ -196,7 +196,7 @@ mod tests {
     use tokio::sync::mpsc::Sender;
 
     use crate::clock::clock::SystemClock;
-    use crate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
+    use crate::callback::async_quorum_callback::AsyncQuorumCallback;
     use crate::net::connect::correlation_id::CorrelationIdGenerator;
     use crate::net::connect::error::ServiceResponseError;
     use crate::net::connect::host_and_port::HostAndPort;

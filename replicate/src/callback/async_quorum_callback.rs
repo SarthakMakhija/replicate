@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::consensus::quorum::quorum_completion_handle::{QuorumCompletionHandle, WakerState};
+use crate::callback::quorum_completion_handle::{QuorumCompletionHandle, WakerState};
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
@@ -63,8 +63,8 @@ mod tests {
     use std::sync::{Arc, RwLock};
     use std::time::Duration;
 
-    use crate::consensus::quorum::async_quorum_callback::{AsyncQuorumCallback, UnexpectedQuorumCallbackResponseError};
-    use crate::consensus::quorum::async_quorum_callback::tests::setup::{GetValueResponse, PutValueResponse, TestError};
+    use crate::callback::async_quorum_callback::{AsyncQuorumCallback, UnexpectedQuorumCallbackResponseError};
+    use crate::callback::async_quorum_callback::tests::setup::{GetValueResponse, PutValueResponse, TestError};
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::request_waiting_list::response_callback::ResponseCallback;
 

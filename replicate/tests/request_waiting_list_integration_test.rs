@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use replicate::clock::clock::SystemClock;
 
-use replicate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
+use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 

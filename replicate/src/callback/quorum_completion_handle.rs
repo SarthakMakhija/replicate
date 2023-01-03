@@ -6,8 +6,8 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use std::task::{Context, Poll, Waker};
 
-use crate::consensus::quorum::async_quorum_callback::{UnexpectedQuorumCallbackResponseError, SuccessCondition};
-use crate::consensus::quorum::quorum_completion_response::QuorumCompletionResponse;
+use crate::callback::async_quorum_callback::{UnexpectedQuorumCallbackResponseError, SuccessCondition};
+use crate::callback::quorum_completion_response::QuorumCompletionResponse;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseErrorType};
 

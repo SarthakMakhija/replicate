@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
 use replicate::clock::clock::{Clock, SystemClock};
-use replicate::consensus::quorum::async_quorum_callback::AsyncQuorumCallback;
+use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::replica::Replica;
 
 use crate::quorum::factory::client_response::ClientResponse;
