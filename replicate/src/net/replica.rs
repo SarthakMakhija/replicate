@@ -12,6 +12,7 @@ use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::ServiceRequest;
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
+use crate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType};
 use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
@@ -33,11 +34,25 @@ impl Replica {
                self_address: HostAndPort,
                peer_addresses: Vec<HostAndPort>,
                clock: Arc<dyn Clock>) -> Self {
+        return Self::new_with_waiting_list_config(
+            id,
+            self_address,
+            peer_addresses,
+            clock,
+            RequestWaitingListConfig::default(),
+        );
+    }
+
+    pub fn new_with_waiting_list_config(id: ReplicaId,
+                                        self_address: HostAndPort,
+                                        peer_addresses: Vec<HostAndPort>,
+                                        clock: Arc<dyn Clock>,
+                                        request_waiting_list_config: RequestWaitingListConfig) -> Self {
         let request_waiting_list = RequestWaitingList::new(
             clock.clone(),
-            Duration::from_secs(3),
-            Duration::from_secs(2),
+            request_waiting_list_config,
         );
+
         return Replica {
             id,
             self_address,
@@ -195,8 +210,8 @@ mod tests {
     use tokio::sync::mpsc;
     use tokio::sync::mpsc::Sender;
 
-    use crate::clock::clock::SystemClock;
     use crate::callback::async_quorum_callback::AsyncQuorumCallback;
+    use crate::clock::clock::SystemClock;
     use crate::net::connect::correlation_id::CorrelationIdGenerator;
     use crate::net::connect::error::ServiceResponseError;
     use crate::net::connect::host_and_port::HostAndPort;

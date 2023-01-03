@@ -6,6 +6,7 @@ use dashmap::DashMap;
 
 use crate::clock::clock::Clock;
 use crate::net::connect::correlation_id::CorrelationId;
+use crate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
 pub(crate) struct ExpiredCallbackRemover {
@@ -17,14 +18,15 @@ pub(crate) struct ExpiredCallbackRemover {
 impl ExpiredCallbackRemover {
     pub(crate) fn start(pending_requests: Arc<DashMap<CorrelationId, TimestampedCallback>>,
                         clock: Arc<dyn Clock>,
-                        expiry_after: Duration,
-                        pause_expired_callbacks_remover_every: Duration) {
+                        config: RequestWaitingListConfig) {
 
-        let remover = ExpiredCallbackRemover { pending_requests, expiry_after, clock };
+        let remover = ExpiredCallbackRemover { pending_requests, expiry_after: config.get_request_expiry_after(), clock };
+        let pause_request_expiry_checker = config.get_pause_request_expiry_checker();
+
         thread::spawn(move || {
             loop {
                 remover.remove();
-                thread::sleep(pause_expired_callbacks_remover_every);
+                thread::sleep(pause_request_expiry_checker);
             }
         });
     }
@@ -54,6 +56,7 @@ mod tests {
 
     use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
     use crate::net::request_waiting_list::expired_callback_remover::tests::setup::{FutureClock, RequestTimeoutErrorResponseCallback};
+    use crate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
     use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 
     mod setup {
@@ -111,8 +114,7 @@ mod tests {
         ExpiredCallbackRemover::start(
             pending_requests,
             clock,
-            Duration::from_secs(2),
-            Duration::from_millis(0)
+            RequestWaitingListConfig::new(Duration::from_secs(2), Duration::from_millis(0))
         );
         thread::sleep(Duration::from_millis(5));
 

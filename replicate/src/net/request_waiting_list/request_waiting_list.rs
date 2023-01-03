@@ -7,6 +7,7 @@ use crate::clock::clock::Clock;
 use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::expired_callback_remover::ExpiredCallbackRemover;
+use crate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType, TimestampedCallback};
 
 pub struct RequestWaitingList {
@@ -15,19 +16,18 @@ pub struct RequestWaitingList {
 }
 
 impl RequestWaitingList {
-    pub fn new(clock: Arc<dyn Clock>, expire_requests_after: Duration, pause_expired_callbacks_remover_every: Duration) -> Self <> {
-        return Self::new_with_capacity(0, clock, expire_requests_after, pause_expired_callbacks_remover_every);
+    pub fn new(clock: Arc<dyn Clock>, config: RequestWaitingListConfig) -> Self <> {
+        return Self::new_with_capacity(0, clock, config);
     }
 
     pub fn new_with_capacity(
         capacity: usize,
         clock: Arc<dyn Clock>,
-        expire_requests_after: Duration,
-        pause_expired_callbacks_remover_every: Duration) -> Self <> {
+        config: RequestWaitingListConfig) -> Self <> {
         let pending_requests = Arc::new(DashMap::with_capacity(capacity));
         let request_waiting_list = RequestWaitingList { pending_requests, clock: clock.clone() };
 
-        request_waiting_list.spin_expired_callbacks_remover(expire_requests_after, pause_expired_callbacks_remover_every);
+        request_waiting_list.spin_expired_callbacks_remover(config);
         return request_waiting_list;
     }
 
@@ -44,12 +44,11 @@ impl RequestWaitingList {
         }
     }
 
-    fn spin_expired_callbacks_remover(&self, expire_requests_after: Duration, pause_expired_callbacks_remover_every: Duration) {
+    fn spin_expired_callbacks_remover(&self, config: RequestWaitingListConfig) {
         ExpiredCallbackRemover::start(
             self.pending_requests.clone(),
             self.clock.clone(),
-            expire_requests_after,
-            pause_expired_callbacks_remover_every,
+            config,
         );
     }
 }
@@ -136,8 +135,10 @@ mod tests {
         let clock = Arc::new(SystemClock::new());
         let request_waiting_list = RequestWaitingList::new(
             clock.clone(),
-            Duration::from_secs(100),
-            Duration::from_secs(10),
+            RequestWaitingListConfig::new(
+                Duration::from_secs(100),
+                Duration::from_secs(10),
+            ),
         );
 
         let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
@@ -158,8 +159,10 @@ mod tests {
         let request_waiting_list = RequestWaitingList::new_with_capacity(
             1,
             clock.clone(),
-            Duration::from_secs(100),
-            Duration::from_secs(10),
+            RequestWaitingListConfig::new(
+                Duration::from_secs(100),
+                Duration::from_secs(10),
+            ),
         );
 
         let success_response_callback = Arc::new(SuccessResponseCallback { response: RwLock::new(HashMap::new()) });
@@ -179,8 +182,10 @@ mod tests {
         let clock = Arc::new(SystemClock::new());
         let request_waiting_list = RequestWaitingList::new(
             clock.clone(),
-            Duration::from_secs(100),
-            Duration::from_secs(10),
+            RequestWaitingListConfig::new(
+                Duration::from_secs(100),
+                Duration::from_secs(10),
+            ),
         );
 
         let error_response_callback = Arc::new(ErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
@@ -200,8 +205,10 @@ mod tests {
         let clock = Arc::new(SystemClock::new());
         let request_waiting_list = RequestWaitingList::new(
             clock.clone(),
-            Duration::from_millis(3),
-            Duration::from_millis(2),
+            RequestWaitingListConfig::new(
+                Duration::from_millis(3),
+                Duration::from_millis(2),
+            ),
         );
 
         let error_response_callback = Arc::new(RequestTimeoutErrorResponseCallback { error_response: RwLock::new(HashMap::new()) });
