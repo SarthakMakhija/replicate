@@ -72,11 +72,13 @@ mod tests {
     use std::sync::atomic::AtomicU64;
     use std::thread;
     use std::time::Duration;
+
     use tokio::runtime::Builder;
 
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::replica::Replica;
+    use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 
     use crate::election::election::Election;
     use crate::election::election::tests::setup::IncrementingCorrelationIdServiceRequestFactory;
@@ -88,6 +90,7 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         use std::sync::RwLock;
 
+        use async_trait::async_trait;
         use tonic::{Request, Response};
 
         use replicate::net::connect::correlation_id::CorrelationId;
@@ -96,9 +99,8 @@ mod tests {
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
         use replicate::net::replica::ReplicaId;
 
-        use crate::net::rpc::grpc::RequestVote;
         use crate::net::factory::service_request::ServiceRequestFactory;
-        use async_trait::async_trait;
+        use crate::net::rpc::grpc::RequestVote;
 
         pub(crate) struct IncrementingCorrelationIdServiceRequestFactory {
             pub(crate) base_correlation_id: RwLock<AtomicU64>,
@@ -228,6 +230,49 @@ mod tests {
         thread::sleep(Duration::from_millis(20));
         some_replica.register_response(1, peer_host, Ok(Box::new(response_with_higher_term_one)));
         some_replica.register_response(2, peer_other_host, Ok(Box::new(response_with_higher_term_two)));
+
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        blocking_runtime.block_on(async move {
+            thread::sleep(Duration::from_millis(100));
+
+            assert_eq!(ReplicaRole::Follower, state.get_role());
+        });
+    }
+
+    #[test]
+    fn lose_the_election_with_request_timeout() {
+        let self_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971);
+        let peer_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297);
+        let peer_other_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1298);
+
+        let some_replica = Replica::new_with_waiting_list_config(
+            10,
+            self_host,
+            vec![peer_host, peer_other_host],
+            Arc::new(SystemClock::new()),
+            RequestWaitingListConfig::new(
+                Duration::from_millis(50),
+                Duration::from_millis(30),
+            ),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+        let inner_replica = some_replica.clone();
+        let state = blocking_runtime.block_on(async move {
+            return State::new(inner_replica, HeartbeatConfig::default());
+        });
+
+        let election = Election::new_with(
+            state.clone(),
+            Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                base_correlation_id: RwLock::new(AtomicU64::new(0)),
+            }),
+        );
+        election.start();
+
+        thread::sleep(Duration::from_millis(20));
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         blocking_runtime.block_on(async move {
