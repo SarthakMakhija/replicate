@@ -210,8 +210,7 @@ impl State {
     }
 
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
-        heartbeat_check_scheduler.stop();
-        heartbeat_check_scheduler.start_with(move || {
+        heartbeat_check_scheduler.restart_with(move || {
             let inner_state = state.clone();
             let heartbeat_timeout = inner_state.heartbeat_config.get_heartbeat_timeout();
 
@@ -223,8 +222,7 @@ impl State {
     }
 
     fn restart_heartbeat_sender(state: Arc<State>, heartbeat_send_scheduler: &SingleThreadedHeartbeatScheduler) {
-        heartbeat_send_scheduler.stop();
-        heartbeat_send_scheduler.start_with(move || {
+        heartbeat_send_scheduler.restart_with(move || {
             let inner_state = state.clone();
             inner_state.get_heartbeat_sender()
         });
