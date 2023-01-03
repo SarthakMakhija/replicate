@@ -166,13 +166,11 @@ impl State {
             let consensus_state = &*write_guard;
             match consensus_state.heartbeat_received_time {
                 Some(last_heartbeat_time) => {
-                    println!("last heartbeat time = {:?}", last_heartbeat_time);
                     if clock.duration_since(last_heartbeat_time).ge(&heartbeat_timeout) {
                         election_starter(inner_self.clone());
                     }
                 }
                 None => {
-                    println!("creation_time = {:?}", consensus_state.creation_time);
                     if clock.duration_since(consensus_state.creation_time).ge(&heartbeat_timeout) {
                         election_starter(inner_self.clone());
                     }
@@ -213,11 +211,10 @@ impl State {
 
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_check_scheduler.stop();
-        println!("restart_heartbeat_checker");
         heartbeat_check_scheduler.start_with(move || {
             let inner_state = state.clone();
             let heartbeat_timeout = inner_state.heartbeat_config.get_heartbeat_timeout();
-            println!("heartbeattimeout = {:?}", heartbeat_timeout);
+
             inner_state.get_heartbeat_checker(
                 heartbeat_timeout,
                 |state| Election::new(state).start(),

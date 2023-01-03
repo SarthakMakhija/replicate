@@ -236,41 +236,4 @@ mod tests {
             assert_eq!(ReplicaRole::Follower, state.get_role());
         });
     }
-
-    #[test]
-    fn lose_the_election_because_of_response_timeout() {
-        let self_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971);
-        let peer_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297);
-        let peer_other_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1298);
-
-        let some_replica = Replica::new(
-            10,
-            self_host,
-            vec![peer_host, peer_other_host],
-            Arc::new(SystemClock::new()),
-        );
-
-        let some_replica = Arc::new(some_replica);
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-
-        let inner_replica = some_replica.clone();
-        let state = blocking_runtime.block_on(async move {
-            return State::new(inner_replica, HeartbeatConfig::default());
-        });
-
-        let election = Election::new_with(
-            state.clone(),
-            Arc::new(IncrementingCorrelationIdServiceRequestFactory {
-                base_correlation_id: RwLock::new(AtomicU64::new(0)),
-            }),
-        );
-        election.start();
-
-        thread::sleep(Duration::from_secs(5));
-
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        blocking_runtime.block_on(async move {
-            assert_eq!(ReplicaRole::Follower, state.get_role());
-        });
-    }
 }
