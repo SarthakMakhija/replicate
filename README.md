@@ -9,13 +9,13 @@
 - [X] Heartbeat scheduler
 - [X] Quorum (as example using the building blocks)
 - [ ] Raft
-  - [ ] Election 
-  - [ ] Election timer 
+  - [X] Election 
+  - [X] Election timer 
   - [ ] State transition (leader/follower/candidate) 
   - [ ] Log
   - [ ] Log replication 
   - [ ] Retries
-  - [ ] Heartbeat sender
+  - [X] Heartbeat sender
 - [ ] Viewstamped replication
 
 ## Libraries that might come in
