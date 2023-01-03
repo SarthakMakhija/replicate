@@ -35,11 +35,11 @@ fn start_elections_with_new_term() {
     let election = Election::new(state.clone());
     election.start();
 
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_millis(10));
     assert_eq!(1, state.get_term());
 
     election.start();
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_millis(10));
     assert_eq!(2, state.get_term());
     assert_eq!(ReplicaRole::Leader, state.get_role());
 
