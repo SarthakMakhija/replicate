@@ -61,6 +61,9 @@ pub trait HostAndPortExtractor {
     fn get_referral_port(&self) -> Option<u16>;
 }
 
+pub trait HostAndPortHeaderAdder {
+    fn add_host_port(&mut self, address: HostAndPort);
+}
 
 #[cfg(test)]
 mod tests {

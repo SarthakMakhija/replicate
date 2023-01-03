@@ -1,10 +1,9 @@
-use tonic::metadata::MetadataValue;
 use tonic::Request;
 
-use crate::net::connect::host_port_extractor::{REFERRAL_HOST, REFERRAL_PORT};
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::ServiceRequest;
 use crate::net::connect::error::ServiceResponseError;
+use crate::net::connect::host_port_extractor::HostAndPortHeaderAdder;
 
 pub struct AsyncNetwork {}
 
@@ -33,9 +32,7 @@ impl AsyncNetwork {
         let mut request = Request::new(payload);
 
         if let Some(address) = source_address {
-            let headers = request.metadata_mut();
-            headers.insert(REFERRAL_HOST, address.host_as_string().parse().unwrap());
-            headers.insert(REFERRAL_PORT, MetadataValue::from(address.port()));
+            request.add_host_port(address);
         }
 
         let result = client.call(request, target_address).await;

@@ -1,6 +1,8 @@
 use std::str::FromStr;
+use tonic::metadata::MetadataValue;
 use tonic::Request;
-use crate::net::connect::host_port_extractor::{HostAndPortExtractor, REFERRAL_HOST, REFERRAL_PORT};
+use crate::net::connect::host_and_port::HostAndPort;
+use crate::net::connect::host_port_extractor::{HostAndPortExtractor, HostAndPortHeaderAdder, REFERRAL_HOST, REFERRAL_PORT};
 
 impl<Payload> HostAndPortExtractor for Request<Payload> {
     fn get_referral_host(&self) -> Option<String> {
@@ -23,11 +25,21 @@ impl<Payload> HostAndPortExtractor for Request<Payload> {
     }
 }
 
+impl<Payload> HostAndPortHeaderAdder for Request<Payload>  {
+    fn add_host_port(&mut self, address: HostAndPort) {
+        let headers = self.metadata_mut();
+        headers.insert(REFERRAL_HOST, address.host_as_string().parse().unwrap());
+        headers.insert(REFERRAL_PORT, MetadataValue::from(address.port()));
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
     use tonic::metadata::MetadataValue;
     use tonic::Request;
-    use crate::net::connect::host_port_extractor::{HostAndPortExtractor, REFERRAL_HOST, REFERRAL_PORT};
+    use crate::net::connect::host_and_port::HostAndPort;
+    use crate::net::connect::host_port_extractor::{HostAndPortExtractor, HostAndPortHeaderAdder, REFERRAL_HOST, REFERRAL_PORT};
 
     #[test]
     fn get_host() {
@@ -63,5 +75,23 @@ mod tests {
 
         let port = request.get_referral_port();
         assert_eq!(None, port);
+    }
+
+    #[test]
+    fn add_host() {
+        let mut request = Request::new(());
+        let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+
+        request.add_host_port(address);
+        assert_eq!(Some("127.0.0.1".to_string()), request.get_referral_host());
+    }
+
+    #[test]
+    fn add_port() {
+        let mut request = Request::new(());
+        let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
+
+        request.add_host_port(address);
+        assert_eq!(Some(50051), request.get_referral_port());
     }
 }
