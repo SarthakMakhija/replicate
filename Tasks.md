@@ -31,16 +31,19 @@
     1. Support `put` in Quorum
        - done
     2. Support `read repair` in Quorum
+       - done
     3. Refactor `quorum integration test`
        - done
     4. Instantiate multiple replicas corresponding to each node in the integration test
        - done
     5. Build configuration to handle `request waiting list expiry`
+       - done
     6. Decide on the data type of port in `HostAndPort` because `proto` files do not support `u16`
        - done 
     7. Decide on `threadpool` implementation in `SingularUpdateQueue`
-    8. Support vector of services in ServiceRegistration
 13. Change `package raft.election` in raft.proto
 14. Check wherever `Arc` is used, if it can be replaced by `Rc` or `Box`
 15. Add an election test that checks the election result if the responses timeout
 16. Once we introduce request timeout config in replica, revisit the tests to look at thread::sleep
+17. [Important] Should singular update queue use `runtime.spawn`? 
+18. Support vector of services in ServiceRegistration
