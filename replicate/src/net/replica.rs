@@ -529,7 +529,7 @@ mod tests {
 
     #[test]
     fn send_one_way_to_the_replicas_without_callback_successfully() {
-        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
@@ -541,7 +541,7 @@ mod tests {
         let replica = Arc::new(replica);
         let inner_replica = replica.clone();
 
-        blocking_runtime.block_on(async move {
+        runtime.block_on(async move {
             let (sender, mut receiver) = mpsc::channel(1);
 
             let correlation_id_generator = RandomCorrelationIdGenerator::new();
@@ -572,7 +572,7 @@ mod tests {
 
     #[test]
     fn send_one_way_to_replicas_without_callback_with_failure() {
-        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
@@ -584,7 +584,7 @@ mod tests {
         let replica = Arc::new(replica);
         let inner_replica = replica.clone();
 
-        blocking_runtime.block_on(async move {
+        runtime.block_on(async move {
             let (sender, mut receiver) = mpsc::channel(1);
 
             let correlation_id_generator = RandomCorrelationIdGenerator::new();
