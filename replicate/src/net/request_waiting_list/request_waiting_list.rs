@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use dashmap::DashMap;
 
@@ -59,6 +58,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
     use std::thread;
+    use std::time::Duration;
 
     use crate::clock::clock::SystemClock;
     use crate::net::request_waiting_list::request_waiting_list::tests::setup_callbacks::{ErrorResponseCallback, RequestTimeoutErrorResponseCallback, SuccessResponseCallback};
