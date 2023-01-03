@@ -37,6 +37,7 @@ impl SingleThreadedHeartbeatScheduler {
         let keep_running = self.keep_running.clone();
         let mut interval = time::interval(self.interval);
 
+        self.keep_running.store(true, Ordering::SeqCst);
         self.thread_pool.spawn(async move {
                 loop {
                     if !keep_running.load(Ordering::SeqCst) {
@@ -97,6 +98,23 @@ mod tests {
         let readonly_counter = heartbeat_counter.clone();
 
         let heartbeat_scheduler = SingleThreadedHeartbeatScheduler::new(Duration::from_millis(2));
+        heartbeat_scheduler.start_with(move || get_future(heartbeat_counter.clone()));
+
+        thread::sleep(Duration::from_millis(5));
+        heartbeat_scheduler.stop();
+
+        assert!(readonly_counter.counter.load(Ordering::SeqCst) >= 2);
+        heartbeat_scheduler.shutdown();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn restart() {
+        let heartbeat_counter = HeartbeatCounter { counter: Arc::new(AtomicU16::new(0)) };
+        let heartbeat_counter = Arc::new(heartbeat_counter);
+        let readonly_counter = heartbeat_counter.clone();
+
+        let heartbeat_scheduler = SingleThreadedHeartbeatScheduler::new(Duration::from_millis(2));
+        heartbeat_scheduler.stop();
         heartbeat_scheduler.start_with(move || get_future(heartbeat_counter.clone()));
 
         thread::sleep(Duration::from_millis(5));
