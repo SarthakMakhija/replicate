@@ -123,7 +123,7 @@ mod tests {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
         let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
 
-        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
             30,
             self_host_and_port.clone(),
@@ -131,12 +131,12 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = blocking_runtime.block_on(async move {
+        let state = runtime.block_on(async move {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
             let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
@@ -154,7 +154,7 @@ mod tests {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
         let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
 
-        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
             30,
             self_host_and_port.clone(),
@@ -162,7 +162,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = blocking_runtime.block_on(async move {
+        let state = runtime.block_on(async move {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let state_clone = state.clone();
 
@@ -171,7 +171,7 @@ mod tests {
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
             let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
@@ -189,7 +189,7 @@ mod tests {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
         let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
 
-        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
             30,
             self_host_and_port.clone(),
@@ -197,7 +197,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = blocking_runtime.block_on(async move {
+        let state = runtime.block_on(async move {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let state_clone = state.clone();
 
@@ -206,7 +206,7 @@ mod tests {
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
             let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
@@ -224,7 +224,7 @@ mod tests {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
         let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
 
-        let blocking_runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
             30,
             self_host_and_port.clone(),
@@ -232,12 +232,12 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = blocking_runtime.block_on(async move {
+        let state = runtime.block_on(async move {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
             let mut request = Request::new(RequestVote { term: 0, replica_id: 30, correlation_id: 20});
@@ -261,13 +261,13 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let state = blocking_runtime.block_on(async move {
+        let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = runtime.block_on(async move {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let _ = raft_service.acknowledge_heartbeat(
                 Request::new(
@@ -294,13 +294,13 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let state = blocking_runtime.block_on(async move {
+        let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = runtime.block_on(async move {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
@@ -330,13 +330,13 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let state = blocking_runtime.block_on(async move {
+        let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = runtime.block_on(async move {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
@@ -368,15 +368,15 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let state = blocking_runtime.block_on(async move {
+        let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+        let state = runtime.block_on(async move {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             state.change_to_candidate();
             return state;
         });
 
         let inner_state = state.clone();
-        let _ = blocking_runtime.block_on(async move {
+        let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
