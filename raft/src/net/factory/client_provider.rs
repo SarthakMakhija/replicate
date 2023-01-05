@@ -15,7 +15,7 @@ pub struct RequestVoteClient {}
 
 pub struct RequestVoteResponseClient {}
 
-pub struct RaftHeartbeatServiceClient {}
+pub struct HeartbeatServiceClient {}
 
 #[async_trait]
 impl ServiceClientProvider<RequestVote, ()> for RequestVoteClient {
@@ -36,7 +36,7 @@ impl ServiceClientProvider<RequestVoteResponse, ()> for RequestVoteResponseClien
 }
 
 #[async_trait]
-impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for RaftHeartbeatServiceClient {
+impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for HeartbeatServiceClient {
     async fn call(&self, request: Request<AppendEntries>, address: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_heartbeat(request).await?;
@@ -50,7 +50,7 @@ mod tests {
     use tonic::Request;
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceClientProvider;
-    use crate::net::factory::client_provider::{RaftHeartbeatServiceClient, RequestVoteClient, RequestVoteResponseClient};
+    use crate::net::factory::client_provider::{HeartbeatServiceClient, RequestVoteClient, RequestVoteResponseClient};
     use crate::net::rpc::grpc::RequestVote;
     use crate::net::rpc::grpc::RequestVoteResponse;
     use crate::net::rpc::grpc::AppendEntries;
@@ -95,7 +95,7 @@ mod tests {
 
     #[tokio::test]
     async fn append_entries_client_with_connection_error() {
-        let client = RaftHeartbeatServiceClient{};
+        let client = HeartbeatServiceClient {};
         let request = Request::new(
             AppendEntries {
                 term: 1,
