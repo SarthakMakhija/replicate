@@ -452,9 +452,9 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert!(state.match_log_entry_term_at(0, state.get_term()));
+        assert!(state.matches_log_entry_term_at(0, state.get_term()));
 
         let expected_command = Command { command: String::from("Content").as_bytes().to_vec() };
-        assert!(state.match_log_entry_command_at(0, &expected_command));
+        assert!(state.matches_log_entry_command_at(0, &expected_command));
     }
 }

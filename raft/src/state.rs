@@ -34,7 +34,7 @@ struct ConsensusState {
 struct LogEntry {
     command: Command,
     term: u64,
-    index: usize,
+    index: u64,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -225,12 +225,12 @@ impl State {
         let log_entry = LogEntry {
             command,
             term: consensus_state.term,
-            index: log_entries_size,
+            index: log_entries_size as u64,
         };
         consensus_state.log_entries.push(log_entry);
     }
 
-    pub(crate) fn match_log_entry_term_at(&self, index: usize, term: u64) -> bool {
+    pub(crate) fn matches_log_entry_term_at(&self, index: usize, term: u64) -> bool {
         let mut write_guard = self.consensus_state.write().unwrap();
         let consensus_state = &mut *write_guard;
 
@@ -240,7 +240,7 @@ impl State {
         };
     }
 
-    pub(crate) fn match_log_entry_index_at(&self, index: usize, match_index: usize) -> bool {
+    pub(crate) fn matches_log_entry_index_at(&self, index: usize, match_index: u64) -> bool {
         let mut write_guard = self.consensus_state.write().unwrap();
         let consensus_state = &mut *write_guard;
 
@@ -250,7 +250,7 @@ impl State {
         };
     }
 
-    pub(crate) fn match_log_entry_command_at(&self, index: usize, command: &Command) -> bool {
+    pub(crate) fn matches_log_entry_command_at(&self, index: usize, command: &Command) -> bool {
         let mut write_guard = self.consensus_state.write().unwrap();
         let consensus_state = &mut *write_guard;
 
@@ -679,11 +679,11 @@ mod tests {
 
         state.append_command(command);
 
-        assert!(state.match_log_entry_term_at(0, state.get_term()));
-        assert!(state.match_log_entry_index_at(0, 0));
+        assert!(state.matches_log_entry_term_at(0, state.get_term()));
+        assert!(state.matches_log_entry_index_at(0, 0));
 
         let expected_command = Command { command: content.as_bytes().to_vec() };
-        assert!(state.match_log_entry_command_at(0, &expected_command));
+        assert!(state.matches_log_entry_command_at(0, &expected_command));
     }
 
     mod setup {
