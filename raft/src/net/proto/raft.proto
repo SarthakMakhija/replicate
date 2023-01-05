@@ -9,6 +9,7 @@ service Raft {
   rpc finish_request_vote (RequestVoteResponse) returns (google.protobuf.Empty) {}
 
   rpc acknowledge_heartbeat (AppendEntries) returns (AppendEntriesResponse) {}
+  rpc execute (Command) returns (google.protobuf.Empty) {}
 }
 
 message RequestVote {
@@ -32,4 +33,8 @@ message AppendEntries {
 message AppendEntriesResponse {
   uint64 term = 2;
   bool success = 3;
+}
+
+message Command {
+  bytes command = 1;
 }

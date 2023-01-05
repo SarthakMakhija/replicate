@@ -10,7 +10,7 @@ use replicate::net::replica::{Replica, ReplicaId};
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::AppendEntriesResponse;
+use crate::net::rpc::grpc::{AppendEntriesResponse, Command};
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
@@ -28,6 +28,13 @@ struct ConsensusState {
     voted_for: Option<u64>,
     heartbeat_received_time: Option<SystemTime>,
     creation_time: SystemTime,
+    log_entries: Vec<LogEntry>,
+}
+
+struct LogEntry {
+    command: Command,
+    term: u64,
+    index: usize,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -55,6 +62,7 @@ impl State {
                 voted_for: None,
                 heartbeat_received_time: None,
                 creation_time: clock.now(),
+                log_entries: Vec::new(),
             }),
             replica,
             clock,
@@ -209,6 +217,49 @@ impl State {
         return (*guard).voted_for;
     }
 
+    pub(crate) fn append_command(&self, command: Command) {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &mut *write_guard;
+        let log_entries_size = consensus_state.log_entries.len();
+
+        let log_entry = LogEntry {
+            command,
+            term: consensus_state.term,
+            index: log_entries_size,
+        };
+        consensus_state.log_entries.push(log_entry);
+    }
+
+    pub(crate) fn match_log_entry_term_at(&self, index: usize, term: u64) -> bool {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &mut *write_guard;
+
+        return match consensus_state.log_entries.get(index) {
+            None => false,
+            Some(log_entry) => log_entry.term == term
+        };
+    }
+
+    pub(crate) fn match_log_entry_index_at(&self, index: usize, match_index: usize) -> bool {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &mut *write_guard;
+
+        return match consensus_state.log_entries.get(index) {
+            None => false,
+            Some(log_entry) => log_entry.index == match_index
+        };
+    }
+
+    pub(crate) fn match_log_entry_command_at(&self, index: usize, command: &Command) -> bool {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &mut *write_guard;
+
+        return match consensus_state.log_entries.get(index) {
+            None => false,
+            Some(log_entry) => log_entry.command.command == command.command
+        };
+    }
+
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_check_scheduler.restart_with(move || {
             let inner_state = state.clone();
@@ -244,6 +295,7 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
+    use crate::net::rpc::grpc::Command;
     use crate::state::{ReplicaRole, State};
     use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
 
@@ -608,6 +660,30 @@ mod tests {
             assert_eq!(ReplicaRole::Follower, cloned.get_role());
             assert_eq!(5, cloned.get_term());
         });
+    }
+
+    #[tokio::test]
+    async fn append_command() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+
+        state.append_command(command);
+
+        assert!(state.match_log_entry_term_at(0, state.get_term()));
+        assert!(state.match_log_entry_index_at(0, 0));
+
+        let expected_command = Command { command: content.as_bytes().to_vec() };
+        assert!(state.match_log_entry_command_at(0, &expected_command));
     }
 
     mod setup {

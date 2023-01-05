@@ -6,7 +6,7 @@ use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse};
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Command};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::{ReplicaRole, State};
 
@@ -95,6 +95,20 @@ impl Raft for RaftService {
                 Err(tonic::Status::unknown(err.to_string()))
         };
     }
+
+    async fn execute(&self, request: Request<Command>) -> Result<Response<()>, tonic::Status> {
+        println!("received command on {:?}", self.state.get_replica_reference().get_self_address());
+        let state = self.state.clone();
+        let replica = self.state.get_replica_reference();
+        let request = request.into_inner();
+
+        let handler = async move {
+            state.append_command(request);
+        };
+
+        let _ = replica.submit_to_queue(handler);
+        return Ok(Response::new(()));
+    }
 }
 
 #[cfg(test)]
@@ -113,7 +127,7 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
-    use crate::net::rpc::grpc::{RequestVote, AppendEntries, AppendEntriesResponse};
+    use crate::net::rpc::grpc::{RequestVote, AppendEntries, AppendEntriesResponse, Command};
     use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::service::raft_service::RaftService;
     use crate::state::State;
@@ -394,5 +408,41 @@ mod tests {
             assert_eq!(1, response.term);
             assert_eq!(1, inner_state.get_term());
         });
+    }
+
+    #[test]
+    fn execute_command() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+
+            let mut request = Request::new(command);
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.execute(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert!(state.match_log_entry_term_at(0, state.get_term()));
+
+        let expected_command = Command { command: String::from("Content").as_bytes().to_vec() };
+        assert!(state.match_log_entry_command_at(0, &expected_command));
     }
 }
