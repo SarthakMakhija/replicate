@@ -96,10 +96,6 @@ impl Raft for RaftService {
         };
     }
 
-    async fn replicate_log(&self, request: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
-        return Ok(Response::new(()));
-    }
-
     async fn execute(&self, request: Request<Command>) -> Result<Response<()>, tonic::Status> {
         println!("received command on {:?}", self.state.get_replica_reference().get_self_address());
         let state = self.state.clone();
@@ -294,8 +290,8 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
+                        previous_log_index: 0,
+                        previous_log_term: 0,
                     }
                 )
             ).await;
@@ -330,8 +326,8 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
+                        previous_log_index: 0,
+                        previous_log_term: 0,
                     }
                 )
             ).await;
@@ -370,8 +366,8 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
+                        previous_log_index: 0,
+                        previous_log_term: 0,
                     }
                 )
             ).await;
@@ -412,8 +408,8 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
+                        previous_log_index: 0,
+                        previous_log_term: 0,
                     }
                 )
             ).await;

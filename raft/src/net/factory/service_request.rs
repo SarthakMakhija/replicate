@@ -46,8 +46,8 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 leader_id,
                 correlation_id,
                 entry: None,
-                previous_log_index: None,
-                previous_log_term: None
+                previous_log_index: 0,
+                previous_log_term: 0
             },
             Box::new(RaftHeartbeatServiceClient {}),
             correlation_id,
