@@ -9,6 +9,10 @@ service Raft {
   rpc finish_request_vote (RequestVoteResponse) returns (google.protobuf.Empty) {}
 
   rpc acknowledge_heartbeat (AppendEntries) returns (AppendEntriesResponse) {}
+
+  rpc replicate_log (AppendEntries) returns (google.protobuf.Empty) {}
+  rpc replicate_log_response (AppendEntriesResponse) returns (google.protobuf.Empty) {}
+
   rpc execute (Command) returns (google.protobuf.Empty) {}
 }
 

@@ -96,6 +96,53 @@ impl Raft for RaftService {
         };
     }
 
+    async fn replicate_log(&self, request: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
+        println!("received replicate_log on {:?}", self.state.get_replica_reference().get_self_address());
+
+        let originating_host_port = request.try_referral_host_port()?;
+        let state = self.state.clone();
+        let replica = self.state.get_replica_reference();
+
+        let inner_replica = self.state.get_replica();
+        let service_request_factory = self.service_request_factory.clone();
+        let request = request.into_inner();
+
+        let handler = async move {
+            state.mark_heartbeat_received();
+
+            let term = state.get_term();
+            if request.term > term {
+                state.clone().change_to_follower(request.term);
+            }
+            let success: bool = if term > request.term {
+                false
+            } else if !state.matches_log_entry_term_at(request.previous_log_index as usize, request.previous_log_term) {
+                false
+            } else {
+                state.append_command(request.entry.unwrap().command.unwrap());
+                true
+            };
+
+            let correlation_id = 0;
+            let send_result = AsyncNetwork::send_with_source_footprint(
+                service_request_factory.replicate_log_response(term, success, correlation_id),
+                inner_replica.get_self_address(),
+                originating_host_port,
+            ).await;
+
+            if send_result.is_err() {
+                eprintln!("failed to send append_entries_response to {:?}", originating_host_port);
+            }
+        };
+
+        let _ = replica.submit_to_queue(handler);
+        return Ok(Response::new(()));
+    }
+
+    async fn replicate_log_response(&self, _request: Request<AppendEntriesResponse>) -> Result<Response<()>, tonic::Status> {
+        return Ok(Response::new(()));
+    }
+
     async fn execute(&self, request: Request<Command>) -> Result<Response<()>, tonic::Status> {
         println!("received command on {:?}", self.state.get_replica_reference().get_self_address());
         let state = self.state.clone();
@@ -127,10 +174,10 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
-    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote};
+    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry, RequestVote};
     use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::service::raft_service::RaftService;
-    use crate::state::State;
+    use crate::state::{ReplicaRole, State};
 
     #[test]
     fn acknowledge_request_vote_successfully_voted() {
@@ -456,5 +503,197 @@ mod tests {
 
         let expected_command = Command { command: String::from("Content").as_bytes().to_vec() };
         assert!(state.matches_log_entry_command_at(0, &expected_command));
+    }
+
+    #[test]
+    fn do_not_replicate_log_given_the_request_term_not_higher() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.change_to_candidate();
+
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+
+            let mut request = Request::new(AppendEntries {
+                term: 0,
+                leader_id: 30,
+                correlation_id: 10,
+                entry: Some(Entry {
+                   term: 0,
+                   index: 1,
+                   command: Some(command),
+                }),
+                previous_log_index: 0,
+                previous_log_term: 0,
+            });
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.replicate_log(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(0, state.total_log_entries());
+    }
+
+    #[test]
+    fn become_follower_on_replicate_log_given_request_term_is_higher() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.change_to_candidate();
+
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+
+            let mut request = Request::new(AppendEntries {
+                term: 3,
+                leader_id: 30,
+                correlation_id: 10,
+                entry: Some(Entry {
+                    term: 3,
+                    index: 1,
+                    command: Some(command),
+                }),
+                previous_log_index: 0,
+                previous_log_term: 0,
+            });
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.replicate_log(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(ReplicaRole::Follower, state.get_role());
+    }
+
+    #[test]
+    fn do_not_replicate_log_given_the_previous_entry_terms_do_not_match() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+
+            let mut request = Request::new(AppendEntries {
+                term: 1,
+                leader_id: 30,
+                correlation_id: 10,
+                entry: Some(Entry {
+                    term: 1,
+                    index: 1,
+                    command: Some(command),
+                }),
+                previous_log_index: 0,
+                previous_log_term: 0,
+            });
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.replicate_log(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(0, state.total_log_entries());
+    }
+
+    #[test]
+    fn replicate_log() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("anything");
+            let command = Command { command: content.as_bytes().to_vec() };
+
+            state.append_command(command);
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+
+            let mut request = Request::new(AppendEntries {
+                term: 1,
+                leader_id: 30,
+                correlation_id: 10,
+                entry: Some(Entry {
+                    term: 1,
+                    index: 1,
+                    command: Some(command),
+                }),
+                previous_log_index: 0,
+                previous_log_term: 0,
+            });
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.replicate_log(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(2, state.total_log_entries());
+        assert!(state.matches_log_entry_term_at(1, 1));
+        assert!(state.matches_log_entry_index_at(1, 1));
+
+        let expected_command = Command { command: String::from("Content").as_bytes().to_vec() };
+        assert!(state.matches_log_entry_command_at(1, &expected_command));
     }
 }

@@ -17,6 +17,8 @@ pub struct RequestVoteResponseClient {}
 
 pub struct HeartbeatServiceClient {}
 
+pub struct ReplicateLogResponseClient {}
+
 #[async_trait]
 impl ServiceClientProvider<RequestVote, ()> for RequestVoteClient {
     async fn call(&self, request: Request<RequestVote>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
@@ -44,16 +46,27 @@ impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for HeartbeatSe
     }
 }
 
+#[async_trait]
+impl ServiceClientProvider<AppendEntriesResponse, ()> for ReplicateLogResponseClient {
+    async fn call(&self, request: Request<AppendEntriesResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
+        let response = client.replicate_log_response(request).await?;
+        return Ok(response);
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use tonic::Request;
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceClientProvider;
-    use crate::net::factory::client_provider::{HeartbeatServiceClient, RequestVoteClient, RequestVoteResponseClient};
+    use crate::net::factory::client_provider::{HeartbeatServiceClient, ReplicateLogResponseClient, RequestVoteClient, RequestVoteResponseClient};
     use crate::net::rpc::grpc::RequestVote;
     use crate::net::rpc::grpc::RequestVoteResponse;
     use crate::net::rpc::grpc::AppendEntries;
+    use crate::net::rpc::grpc::AppendEntriesResponse;
 
     #[tokio::test]
     async fn request_vote_client_with_connection_error() {
@@ -104,6 +117,24 @@ mod tests {
                 entry: None,
                 previous_log_index: 0,
                 previous_log_term: 0
+            }
+        );
+        let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
+
+        let result = client.call(request, address).await;
+        assert!(result.is_err());
+
+        let result = result.unwrap_err().downcast::<tonic::transport::Error>();
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn replicate_log_response_client_with_connection_error() {
+        let client = ReplicateLogResponseClient {};
+        let request = Request::new(
+            AppendEntriesResponse {
+                term: 1,
+                success: true
             }
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);

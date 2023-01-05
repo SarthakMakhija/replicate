@@ -260,6 +260,13 @@ impl State {
         };
     }
 
+    pub(crate) fn total_log_entries(&self) -> usize {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &mut *write_guard;
+
+        return consensus_state.log_entries.len();
+    }
+
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_check_scheduler.restart_with(move || {
             let inner_state = state.clone();
@@ -737,7 +744,7 @@ mod tests {
                         correlation_id,
                         entry: None,
                         previous_log_index: 0,
-                        previous_log_term: 0
+                        previous_log_term: 0,
                     },
                     client,
                     correlation_id,
