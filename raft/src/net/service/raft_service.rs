@@ -6,7 +6,7 @@ use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Command};
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::{ReplicaRole, State};
 
@@ -96,6 +96,10 @@ impl Raft for RaftService {
         };
     }
 
+    async fn replicate_log(&self, request: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
+        return Ok(Response::new(()));
+    }
+
     async fn execute(&self, request: Request<Command>) -> Result<Response<()>, tonic::Status> {
         println!("received command on {:?}", self.state.get_replica_reference().get_self_address());
         let state = self.state.clone();
@@ -127,7 +131,7 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
-    use crate::net::rpc::grpc::{RequestVote, AppendEntries, AppendEntriesResponse, Command};
+    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote};
     use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::service::raft_service::RaftService;
     use crate::state::State;
@@ -153,7 +157,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
-            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
+            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -188,7 +192,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
-            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
+            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -223,7 +227,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
-            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20});
+            let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -254,7 +258,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
-            let mut request = Request::new(RequestVote { term: 0, replica_id: 30, correlation_id: 20});
+            let mut request = Request::new(RequestVote { term: 0, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -291,7 +295,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: None
+                        previous_log_term: None,
                     }
                 )
             ).await;
@@ -327,7 +331,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: None
+                        previous_log_term: None,
                     }
                 )
             ).await;
@@ -367,7 +371,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: None
+                        previous_log_term: None,
                     }
                 )
             ).await;
@@ -409,7 +413,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: None
+                        previous_log_term: None,
                     }
                 )
             ).await;
