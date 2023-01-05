@@ -289,6 +289,9 @@ mod tests {
                         term: 1,
                         leader_id: 10,
                         correlation_id: 20,
+                        entry: None,
+                        previous_log_index: None,
+                        previous_log_term: None
                     }
                 )
             ).await;
@@ -322,6 +325,9 @@ mod tests {
                         term: 1,
                         leader_id: 10,
                         correlation_id: 20,
+                        entry: None,
+                        previous_log_index: None,
+                        previous_log_term: None
                     }
                 )
             ).await;
@@ -359,6 +365,9 @@ mod tests {
                         term: 0,
                         leader_id: 10,
                         correlation_id: 20,
+                        entry: None,
+                        previous_log_index: None,
+                        previous_log_term: None
                     }
                 )
             ).await;
@@ -398,6 +407,9 @@ mod tests {
                         term: 0,
                         leader_id: 10,
                         correlation_id: 20,
+                        entry: None,
+                        previous_log_index: None,
+                        previous_log_term: None
                     }
                 )
             ).await;

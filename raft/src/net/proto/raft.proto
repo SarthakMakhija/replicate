@@ -28,11 +28,20 @@ message AppendEntries {
   //tag id 1 is reserved for correlation_id generated using procedural macro
   uint64 term = 2;
   uint64 leader_id = 3;
+  optional Entry entry = 4;
+  optional uint64 previous_log_index = 5;
+  optional uint64 previous_log_term = 6;
 }
 
 message AppendEntriesResponse {
   uint64 term = 2;
   bool success = 3;
+}
+
+message Entry {
+  Command command = 1;
+  uint64 term = 2;
+  uint64 index = 3;
 }
 
 message Command {

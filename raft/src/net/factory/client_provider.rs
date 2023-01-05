@@ -101,6 +101,9 @@ mod tests {
                 term: 1,
                 leader_id: 10,
                 correlation_id: 10,
+                entry: None,
+                previous_log_index: None,
+                previous_log_term: None
             }
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
