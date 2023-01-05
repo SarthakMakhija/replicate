@@ -96,7 +96,7 @@ impl Raft for RaftService {
         };
     }
 
-    async fn replicate_log(&self, request: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
+    async fn acknowledge_replicate_log(&self, request: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
         println!("received replicate_log on {:?}", self.state.get_replica_reference().get_self_address());
 
         let originating_host_port = request.try_referral_host_port()?;
@@ -139,7 +139,7 @@ impl Raft for RaftService {
         return Ok(Response::new(()));
     }
 
-    async fn replicate_log_response(&self, _request: Request<AppendEntriesResponse>) -> Result<Response<()>, tonic::Status> {
+    async fn finish_replicate_log(&self, _request: Request<AppendEntriesResponse>) -> Result<Response<()>, tonic::Status> {
         return Ok(Response::new(()));
     }
 
@@ -545,7 +545,7 @@ mod tests {
             });
             request.add_host_port(self_host_and_port);
 
-            let _ = raft_service.replicate_log(request).await;
+            let _ = raft_service.acknowledge_replicate_log(request).await;
         });
 
         thread::sleep(Duration::from_millis(5));
@@ -592,7 +592,7 @@ mod tests {
             });
             request.add_host_port(self_host_and_port);
 
-            let _ = raft_service.replicate_log(request).await;
+            let _ = raft_service.acknowledge_replicate_log(request).await;
         });
 
         thread::sleep(Duration::from_millis(5));
@@ -636,7 +636,7 @@ mod tests {
             });
             request.add_host_port(self_host_and_port);
 
-            let _ = raft_service.replicate_log(request).await;
+            let _ = raft_service.acknowledge_replicate_log(request).await;
         });
 
         thread::sleep(Duration::from_millis(5));
@@ -685,7 +685,7 @@ mod tests {
             });
             request.add_host_port(self_host_and_port);
 
-            let _ = raft_service.replicate_log(request).await;
+            let _ = raft_service.acknowledge_replicate_log(request).await;
         });
 
         thread::sleep(Duration::from_millis(5));

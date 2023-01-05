@@ -50,7 +50,7 @@ impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for HeartbeatSe
 impl ServiceClientProvider<AppendEntriesResponse, ()> for ReplicateLogResponseClient {
     async fn call(&self, request: Request<AppendEntriesResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
-        let response = client.replicate_log_response(request).await?;
+        let response = client.finish_replicate_log(request).await?;
         return Ok(response);
     }
 }
