@@ -261,11 +261,24 @@ impl State {
         return None;
     }
 
+    pub(crate) fn get_next_log_index(&self) -> u64 {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).next_index;
+    }
+
     pub(crate) fn get_log_term_at(&self, index: usize) -> Option<u64> {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
             None => None,
             Some(log_entry) => Some(log_entry.get_term())
+        };
+    }
+
+    pub(crate) fn get_log_entry_at(&self, index: usize) -> Option<LogEntry> {
+        let guard = self.consensus_state.read().unwrap();
+        return match (*guard).log_entries.get(index) {
+            None => None,
+            Some(entry) => Some(LogEntry::from(entry))
         };
     }
 

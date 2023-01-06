@@ -14,12 +14,20 @@ pub(crate) struct LogCommand {
 
 impl LogEntry {
     pub(crate) fn new(term: u64,
-           index: u64,
-           command: &Command) -> Self {
+                      index: u64,
+                      command: &Command) -> Self {
         return LogEntry {
             term,
             index,
             command: LogCommand::from(command),
+        };
+    }
+
+    pub(crate) fn from(entry: &LogEntry) -> Self {
+        return LogEntry {
+            term: entry.term,
+            index: entry.index,
+            command: LogCommand { bytes: entry.command.bytes.clone() },
         };
     }
 
@@ -37,6 +45,14 @@ impl LogEntry {
 
     pub(crate) fn get_term(&self) -> u64 {
         return self.term;
+    }
+
+    pub(crate) fn get_index(&self) -> u64 {
+        return self.index;
+    }
+
+    pub(crate) fn get_bytes_as_vec(&self) -> Vec<u8> {
+        return self.command.bytes.to_vec();
     }
 }
 

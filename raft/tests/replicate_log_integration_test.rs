@@ -20,7 +20,7 @@ use replicate::net::connect::service_registration::{AllServicesShutdownHandle, S
 use replicate::net::replica::Replica;
 
 #[test]
-fn replicate_log_successfully() {
+fn do_not_replicate_log_as_previous_entries_do_not_match() {
     let runtime = Builder::new_multi_thread()
         .thread_name("replicate_log_successfully".to_string())
         .worker_threads(2)
@@ -42,13 +42,10 @@ fn replicate_log_successfully() {
     thread::sleep(Duration::from_millis(20));
 
     assert_eq!(ReplicaRole::Leader, state.get_role());
-    let content = String::from("replicated..");
+    let content = String::from("replicate");
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
     blocking_runtime.block_on(async {
-        state_peer_one.append_command(&Command { command: "dummy".as_bytes().to_vec() });
-        state_peer_other.append_command(&Command { command: "dummy".as_bytes().to_vec() });
-
         send_a_command(self_host_and_port, Command {
             command: content.as_bytes().to_vec()
         }).await.unwrap();
@@ -57,8 +54,9 @@ fn replicate_log_successfully() {
     thread::sleep(Duration::from_millis(40));
 
     blocking_runtime.block_on(async move {
-        assert_eq!(2, state_peer_one.total_log_entries());
-        assert_eq!(2, state_peer_other.total_log_entries());
+        assert_eq!(1, state.total_log_entries());
+        assert_eq!(0, state_peer_one.total_log_entries());
+        assert_eq!(0, state_peer_other.total_log_entries());
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();

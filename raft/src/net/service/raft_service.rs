@@ -7,6 +7,7 @@ use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
+use crate::log::LogEntry;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry, RequestVote, RequestVoteResponse};
@@ -177,23 +178,27 @@ impl Raft for RaftService {
                 Some(index) => state.get_log_term_at(index as usize)
             };
 
-            //TODO: remove hardcoded entry
             let service_request_constructor = || {
                 let term = state.get_term();
-                let content = String::from("Log");
+                let entry = match state.get_log_entry_at(state.get_next_log_index() as usize) {
+                    None => None,
+                    Some(entry) => {
+                        Some(
+                            Entry {
+                                command: Some(Command{command: entry.get_bytes_as_vec()}),
+                                term: entry.get_term(),
+                                index: entry.get_index(),
+                            }
+                        )
+                    }
+                };
 
                 service_request_factory.replicate_log(
                     term,
                     inner_replica.get_id(),
                     previous_log_index,
                     previous_log_term,
-                    Some(
-                        Entry {
-                            command: Some(Command { command: content.as_bytes().to_vec() }),
-                            term,
-                            index: 1,
-                        }
-                    ),
+                    entry
                 )
             };
 
