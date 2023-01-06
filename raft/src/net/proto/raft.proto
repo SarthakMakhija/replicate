@@ -34,7 +34,7 @@ message AppendEntries {
   uint64 leader_id = 3;
   optional Entry entry = 4;
   optional uint64 previous_log_index = 5;
-  uint64 previous_log_term = 6;
+  optional uint64 previous_log_term = 6;
 }
 
 message AppendEntriesResponse {

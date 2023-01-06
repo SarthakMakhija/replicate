@@ -120,7 +120,7 @@ impl Raft for RaftService {
                 success = false;
             } else if request.previous_log_index.is_none() {
                 success = true;
-            } else if !state.matches_log_entry_term_at(request.previous_log_index.unwrap() as usize, request.previous_log_term) {
+            } else if !state.matches_log_entry_term_at(request.previous_log_index.unwrap() as usize, request.previous_log_term.unwrap()) {
                 success = false;
             } else {
                 success = true;
@@ -344,7 +344,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: 0,
+                        previous_log_term: None,
                     }
                 )
             ).await;
@@ -380,7 +380,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: 0,
+                        previous_log_term: None,
                     }
                 )
             ).await;
@@ -420,7 +420,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: 0,
+                        previous_log_term: None,
                     }
                 )
             ).await;
@@ -462,7 +462,7 @@ mod tests {
                         correlation_id: 20,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: 0,
+                        previous_log_term: None,
                     }
                 )
             ).await;
@@ -547,7 +547,7 @@ mod tests {
                     command: Some(command),
                 }),
                 previous_log_index: None,
-                previous_log_term: 0,
+                previous_log_term: None,
             });
             request.add_host_port(self_host_and_port);
 
@@ -594,7 +594,7 @@ mod tests {
                     command: Some(command),
                 }),
                 previous_log_index: None,
-                previous_log_term: 0,
+                previous_log_term: None,
             });
             request.add_host_port(self_host_and_port);
 
@@ -638,7 +638,7 @@ mod tests {
                     command: Some(command),
                 }),
                 previous_log_index: Some(0),
-                previous_log_term: 0,
+                previous_log_term: Some(0),
             });
             request.add_host_port(self_host_and_port);
 
@@ -687,7 +687,7 @@ mod tests {
                     command: Some(command),
                 }),
                 previous_log_index: Some(0),
-                previous_log_term: 0,
+                previous_log_term: Some(0),
             });
             request.add_host_port(self_host_and_port);
 

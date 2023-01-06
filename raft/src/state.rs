@@ -744,7 +744,7 @@ mod tests {
                         correlation_id,
                         entry: None,
                         previous_log_index: None,
-                        previous_log_term: 0,
+                        previous_log_term: None,
                     },
                     client,
                     correlation_id,
