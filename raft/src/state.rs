@@ -59,7 +59,7 @@ impl State {
                 heartbeat_received_time: None,
                 creation_time: clock.now(),
                 log_entries: Vec::new(),
-                next_index: 1
+                next_index: 1,
             }),
             replica,
             clock,
@@ -317,6 +317,7 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
+    use crate::log::LogEntry;
     use crate::net::rpc::grpc::Command;
     use crate::state::{ReplicaRole, State};
     use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
@@ -776,6 +777,43 @@ mod tests {
 
         state.append_command(&command);
         assert_eq!(Some(0), state.get_log_term_at(0));
+    }
+
+    #[tokio::test]
+    async fn get_log_entry_at_non_existing_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        assert_eq!(None, state.get_log_entry_at(99));
+    }
+
+    #[tokio::test]
+    async fn get_log_entry_at_an_existing_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+        state.append_command(&command);
+
+        assert_eq!(
+            Some(LogEntry::new(0, 0, &command)),
+            state.get_log_entry_at(0)
+        );
     }
 
     mod setup {

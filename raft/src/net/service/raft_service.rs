@@ -7,7 +7,6 @@ use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
-use crate::log::LogEntry;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry, RequestVote, RequestVoteResponse};
