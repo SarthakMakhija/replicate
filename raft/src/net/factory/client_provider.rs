@@ -115,7 +115,7 @@ mod tests {
                 leader_id: 10,
                 correlation_id: 10,
                 entry: None,
-                previous_log_index: 0,
+                previous_log_index: None,
                 previous_log_term: 0
             }
         );

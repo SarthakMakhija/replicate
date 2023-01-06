@@ -114,14 +114,20 @@ impl Raft for RaftService {
             if request.term > term {
                 state.clone().change_to_follower(request.term);
             }
-            let success: bool = if term > request.term {
-                false
-            } else if !state.matches_log_entry_term_at(request.previous_log_index as usize, request.previous_log_term) {
-                false
+
+            let success;
+            if term > request.term {
+                success = false;
+            } else if request.previous_log_index.is_none() {
+                success = true;
+            } else if !state.matches_log_entry_term_at(request.previous_log_index.unwrap() as usize, request.previous_log_term) {
+                success = false;
             } else {
-                state.append_command(request.entry.unwrap().command.unwrap());
-                true
+                success = true;
             };
+            if success {
+                state.append_command(request.entry.unwrap().command.unwrap());
+            }
 
             let correlation_id = 0;
             let send_result = AsyncNetwork::send_with_source_footprint(
@@ -337,7 +343,7 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: 0,
+                        previous_log_index: None,
                         previous_log_term: 0,
                     }
                 )
@@ -373,7 +379,7 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: 0,
+                        previous_log_index: None,
                         previous_log_term: 0,
                     }
                 )
@@ -413,7 +419,7 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: 0,
+                        previous_log_index: None,
                         previous_log_term: 0,
                     }
                 )
@@ -455,7 +461,7 @@ mod tests {
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
-                        previous_log_index: 0,
+                        previous_log_index: None,
                         previous_log_term: 0,
                     }
                 )
@@ -536,11 +542,11 @@ mod tests {
                 leader_id: 30,
                 correlation_id: 10,
                 entry: Some(Entry {
-                   term: 0,
-                   index: 1,
-                   command: Some(command),
+                    term: 0,
+                    index: 1,
+                    command: Some(command),
                 }),
-                previous_log_index: 0,
+                previous_log_index: None,
                 previous_log_term: 0,
             });
             request.add_host_port(self_host_and_port);
@@ -587,7 +593,7 @@ mod tests {
                     index: 1,
                     command: Some(command),
                 }),
-                previous_log_index: 0,
+                previous_log_index: None,
                 previous_log_term: 0,
             });
             request.add_host_port(self_host_and_port);
@@ -631,7 +637,7 @@ mod tests {
                     index: 1,
                     command: Some(command),
                 }),
-                previous_log_index: 0,
+                previous_log_index: Some(0),
                 previous_log_term: 0,
             });
             request.add_host_port(self_host_and_port);
@@ -680,7 +686,7 @@ mod tests {
                     index: 1,
                     command: Some(command),
                 }),
-                previous_log_index: 0,
+                previous_log_index: Some(0),
                 previous_log_term: 0,
             });
             request.add_host_port(self_host_and_port);

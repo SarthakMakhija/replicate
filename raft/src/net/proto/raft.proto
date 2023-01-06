@@ -33,7 +33,7 @@ message AppendEntries {
   uint64 term = 2;
   uint64 leader_id = 3;
   optional Entry entry = 4;
-  uint64 previous_log_index = 5;
+  optional uint64 previous_log_index = 5;
   uint64 previous_log_term = 6;
 }
 

@@ -743,7 +743,7 @@ mod tests {
                         leader_id,
                         correlation_id,
                         entry: None,
-                        previous_log_index: 0,
+                        previous_log_index: None,
                         previous_log_term: 0,
                     },
                     client,
