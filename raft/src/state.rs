@@ -9,6 +9,7 @@ use replicate::net::replica::{Replica, ReplicaId};
 
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
+use crate::log::LogEntry;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::{AppendEntriesResponse, Command};
 
@@ -30,12 +31,6 @@ struct ConsensusState {
     creation_time: SystemTime,
     log_entries: Vec<LogEntry>,
     next_index: u64,
-}
-
-struct LogEntry {
-    command: Command,
-    term: u64,
-    index: u64,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -219,16 +214,12 @@ impl State {
         return (*guard).voted_for;
     }
 
-    pub fn append_command(&self, command: Command) {
+    pub fn append_command(&self, command: &Command) {
         let mut write_guard = self.consensus_state.write().unwrap();
         let consensus_state = &mut *write_guard;
         let log_entries_size = consensus_state.log_entries.len();
 
-        let log_entry = LogEntry {
-            command,
-            term: consensus_state.term,
-            index: log_entries_size as u64,
-        };
+        let log_entry = LogEntry::new(consensus_state.term, log_entries_size as u64, command);
         consensus_state.log_entries.push(log_entry);
     }
 
@@ -236,7 +227,7 @@ impl State {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
             None => false,
-            Some(log_entry) => log_entry.term == term
+            Some(log_entry) => log_entry.matches_term(term)
         };
     }
 
@@ -244,7 +235,7 @@ impl State {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
             None => false,
-            Some(log_entry) => log_entry.index == match_index
+            Some(log_entry) => log_entry.matches_index(match_index)
         };
     }
 
@@ -252,7 +243,7 @@ impl State {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
             None => false,
-            Some(log_entry) => log_entry.command.command == command.command
+            Some(log_entry) => log_entry.matches_command(command)
         };
     }
 
@@ -274,7 +265,7 @@ impl State {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
             None => None,
-            Some(log_entry) => Some(log_entry.term)
+            Some(log_entry) => Some(log_entry.get_term())
         };
     }
 
@@ -695,7 +686,7 @@ mod tests {
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
 
-        state.append_command(command);
+        state.append_command(&command);
 
         assert!(state.matches_log_entry_term_at(0, state.get_term()));
         assert!(state.matches_log_entry_index_at(0, 0));
@@ -770,8 +761,7 @@ mod tests {
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
 
-        state.append_command(command);
-
+        state.append_command(&command);
         assert_eq!(Some(0), state.get_log_term_at(0));
     }
 

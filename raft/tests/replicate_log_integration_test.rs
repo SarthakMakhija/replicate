@@ -46,8 +46,8 @@ fn replicate_log_successfully() {
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
     blocking_runtime.block_on(async {
-        state_peer_one.append_command(Command { command: "dummy".as_bytes().to_vec() });
-        state_peer_other.append_command(Command { command: "dummy".as_bytes().to_vec() });
+        state_peer_one.append_command(&Command { command: "dummy".as_bytes().to_vec() });
+        state_peer_other.append_command(&Command { command: "dummy".as_bytes().to_vec() });
 
         send_a_command(self_host_and_port, Command {
             command: content.as_bytes().to_vec()

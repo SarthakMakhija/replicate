@@ -129,7 +129,8 @@ impl Raft for RaftService {
                 success = true;
             };
             if success {
-                state.append_command(append_entries.entry.unwrap().command.unwrap());
+                let command = append_entries.entry.unwrap().command.unwrap();
+                state.append_command(&command);
             }
 
             let correlation_id_generator = RandomCorrelationIdGenerator::new();
@@ -168,7 +169,7 @@ impl Raft for RaftService {
         let command = request.into_inner();
 
         let handler = async move {
-            state.append_command(command);
+            state.append_command(&command);
 
             let previous_log_index = state.get_previous_log_index();
             let previous_log_term = match previous_log_index {
@@ -711,7 +712,7 @@ mod tests {
             let content = String::from("anything");
             let command = Command { command: content.as_bytes().to_vec() };
 
-            state.append_command(command);
+            state.append_command(&command);
             return state;
         });
 
