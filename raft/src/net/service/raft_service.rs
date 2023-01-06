@@ -191,17 +191,20 @@ impl Raft for RaftService {
                         )
                     }
                 };
-
-                service_request_factory.replicate_log(
+                return service_request_factory.replicate_log(
                     term,
                     inner_replica.get_id(),
                     previous_log_index,
                     previous_log_term,
                     entry
-                )
+                );
             };
 
-            let callback = AsyncQuorumCallback::<AppendEntriesResponse>::new(inner_replica.total_peer_count());
+            let success_condition = Box::new(|response: &AppendEntriesResponse| response.success);
+            let callback = AsyncQuorumCallback::<AppendEntriesResponse>::new_with_success_condition(
+                inner_replica.total_peer_count(),
+                success_condition
+            );
             let total_failed_sends = inner_replica.send_to_replicas(service_request_constructor, callback.clone()).await;
             println!("total_failed_sends while replicating log {}", total_failed_sends);
 
