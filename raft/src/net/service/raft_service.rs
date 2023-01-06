@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use tonic::{Request, Response};
 
+use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::async_network::AsyncNetwork;
+use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
+use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::{ReplicaRole, State};
 
@@ -74,18 +77,18 @@ impl Raft for RaftService {
         let state = self.state.clone();
         let replica = self.state.get_replica_reference();
 
-        let request = request.into_inner();
+        let append_entries = request.into_inner();
         let handler = async move {
             state.mark_heartbeat_received();
             let term = state.get_term();
-            if request.term > term {
-                state.change_to_follower(request.term);
-                return AppendEntriesResponse { success: true, term: request.term };
+            if append_entries.term > term {
+                state.change_to_follower(append_entries.term);
+                return AppendEntriesResponse { success: true, term: append_entries.term, correlation_id: append_entries.correlation_id };
             }
-            if request.term == term {
-                return AppendEntriesResponse { success: true, term };
+            if append_entries.term == term {
+                return AppendEntriesResponse { success: true, term, correlation_id: append_entries.correlation_id };
             }
-            return AppendEntriesResponse { success: false, term };
+            return AppendEntriesResponse { success: false, term, correlation_id: append_entries.correlation_id };
         };
 
         return match replica.add_to_queue(handler).await {
@@ -105,31 +108,33 @@ impl Raft for RaftService {
 
         let inner_replica = self.state.get_replica();
         let service_request_factory = self.service_request_factory.clone();
-        let request = request.into_inner();
+        let append_entries = request.into_inner();
 
         let handler = async move {
             state.mark_heartbeat_received();
 
             let term = state.get_term();
-            if request.term > term {
-                state.clone().change_to_follower(request.term);
+            if append_entries.term > term {
+                state.clone().change_to_follower(append_entries.term);
             }
 
             let success;
-            if term > request.term {
+            if term > append_entries.term {
                 success = false;
-            } else if request.previous_log_index.is_none() {
+            } else if append_entries.previous_log_index.is_none() {
                 success = true;
-            } else if !state.matches_log_entry_term_at(request.previous_log_index.unwrap() as usize, request.previous_log_term.unwrap()) {
+            } else if !state.matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
                 success = false;
             } else {
                 success = true;
             };
             if success {
-                state.append_command(request.entry.unwrap().command.unwrap());
+                state.append_command(append_entries.entry.unwrap().command.unwrap());
             }
 
-            let correlation_id = 0;
+            let correlation_id_generator = RandomCorrelationIdGenerator::new();
+            let correlation_id = correlation_id_generator.generate();
+
             let send_result = AsyncNetwork::send_with_source_footprint(
                 service_request_factory.replicate_log_response(term, success, correlation_id),
                 inner_replica.get_self_address(),
@@ -145,7 +150,12 @@ impl Raft for RaftService {
         return Ok(Response::new(()));
     }
 
-    async fn finish_replicate_log(&self, _request: Request<AppendEntriesResponse>) -> Result<Response<()>, tonic::Status> {
+    async fn finish_replicate_log(&self, request: Request<AppendEntriesResponse>) -> Result<Response<()>, tonic::Status> {
+        let originating_host_port = request.try_referral_host_port()?;
+        let response = request.into_inner();
+        println!("received AppendEntriesResponse with success? {}", response.success);
+
+        let _ = &self.state.get_replica_reference().register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
         return Ok(Response::new(()));
     }
 
@@ -153,10 +163,44 @@ impl Raft for RaftService {
         println!("received command on {:?}", self.state.get_replica_reference().get_self_address());
         let state = self.state.clone();
         let replica = self.state.get_replica_reference();
-        let request = request.into_inner();
+        let inner_replica = self.state.get_replica();
+        let service_request_factory = self.service_request_factory.clone();
+        let command = request.into_inner();
 
         let handler = async move {
-            state.append_command(request);
+            state.append_command(command);
+
+            let previous_log_index = state.get_previous_log_index();
+            let previous_log_term = match previous_log_index {
+                None => None,
+                Some(index) => state.get_log_term_at(index as usize)
+            };
+
+            //TODO: remove hardcoded entry
+            let service_request_constructor = || {
+                let term = state.get_term();
+                let content = String::from("Log");
+
+                service_request_factory.replicate_log(
+                    term,
+                    inner_replica.get_id(),
+                    previous_log_index,
+                    previous_log_term,
+                    Some(
+                        Entry {
+                            command: Some(Command { command: content.as_bytes().to_vec() }),
+                            term,
+                            index: 1,
+                        }
+                    ),
+                )
+            };
+
+            let callback = AsyncQuorumCallback::<AppendEntriesResponse>::new(inner_replica.total_peer_count());
+            let total_failed_sends = inner_replica.send_to_replicas(service_request_constructor, callback.clone()).await;
+            println!("total_failed_sends while replicating log {}", total_failed_sends);
+
+            let _ = callback.handle().await;
         };
 
         let _ = replica.submit_to_queue(handler);

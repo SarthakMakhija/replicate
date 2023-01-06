@@ -29,6 +29,7 @@ struct ConsensusState {
     heartbeat_received_time: Option<SystemTime>,
     creation_time: SystemTime,
     log_entries: Vec<LogEntry>,
+    next_index: u64,
 }
 
 struct LogEntry {
@@ -63,6 +64,7 @@ impl State {
                 heartbeat_received_time: None,
                 creation_time: clock.now(),
                 log_entries: Vec::new(),
+                next_index: 1
             }),
             replica,
             clock,
@@ -217,7 +219,7 @@ impl State {
         return (*guard).voted_for;
     }
 
-    pub(crate) fn append_command(&self, command: Command) {
+    pub fn append_command(&self, command: Command) {
         let mut write_guard = self.consensus_state.write().unwrap();
         let consensus_state = &mut *write_guard;
         let log_entries_size = consensus_state.log_entries.len();
@@ -231,40 +233,49 @@ impl State {
     }
 
     pub(crate) fn matches_log_entry_term_at(&self, index: usize, term: u64) -> bool {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &mut *write_guard;
-
-        return match consensus_state.log_entries.get(index) {
+        let guard = self.consensus_state.read().unwrap();
+        return match (*guard).log_entries.get(index) {
             None => false,
             Some(log_entry) => log_entry.term == term
         };
     }
 
     pub(crate) fn matches_log_entry_index_at(&self, index: usize, match_index: u64) -> bool {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &mut *write_guard;
-
-        return match consensus_state.log_entries.get(index) {
+        let guard = self.consensus_state.read().unwrap();
+        return match (*guard).log_entries.get(index) {
             None => false,
             Some(log_entry) => log_entry.index == match_index
         };
     }
 
     pub(crate) fn matches_log_entry_command_at(&self, index: usize, command: &Command) -> bool {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &mut *write_guard;
-
-        return match consensus_state.log_entries.get(index) {
+        let guard = self.consensus_state.read().unwrap();
+        return match (*guard).log_entries.get(index) {
             None => false,
             Some(log_entry) => log_entry.command.command == command.command
         };
     }
 
-    pub(crate) fn total_log_entries(&self) -> usize {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &mut *write_guard;
+    pub fn total_log_entries(&self) -> usize {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).log_entries.len();
+    }
 
-        return consensus_state.log_entries.len();
+    pub(crate) fn get_previous_log_index(&self) -> Option<u64> {
+        let guard = self.consensus_state.read().unwrap();
+        let next_index = (*guard).next_index;
+        if next_index >= 1 {
+            return Some(next_index - 1);
+        }
+        return None;
+    }
+
+    pub(crate) fn get_log_term_at(&self, index: usize) -> Option<u64> {
+        let guard = self.consensus_state.read().unwrap();
+        return match (*guard).log_entries.get(index) {
+            None => None,
+            Some(log_entry) => Some(log_entry.term)
+        };
     }
 
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
@@ -693,6 +704,77 @@ mod tests {
         assert!(state.matches_log_entry_command_at(0, &expected_command));
     }
 
+    #[tokio::test]
+    async fn get_non_existing_previous_log_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        {
+            let mut guard = state.consensus_state.write().unwrap();
+            let consensus_state = &mut *guard;
+            consensus_state.next_index = consensus_state.next_index - 1;
+        }
+
+        assert_eq!(None, state.get_previous_log_index());
+    }
+
+    #[tokio::test]
+    async fn get_previous_log_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        assert_eq!(Some(0), state.get_previous_log_index());
+    }
+
+    #[tokio::test]
+    async fn get_log_term_at_non_existing_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        assert_eq!(None, state.get_log_term_at(99));
+    }
+
+    #[tokio::test]
+    async fn get_log_term_at_an_existing_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+
+        state.append_command(command);
+
+        assert_eq!(Some(0), state.get_log_term_at(0));
+    }
+
     mod setup {
         use std::sync::atomic::{AtomicU64, Ordering};
         use std::sync::RwLock;
@@ -758,7 +840,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatSuccessClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 1, success: true })
+                    Response::new(AppendEntriesResponse { term: 1, success: true, correlation_id: 10 })
                 );
             }
         }
@@ -769,7 +851,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatFailureClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 5, success: false })
+                    Response::new(AppendEntriesResponse { term: 5, success: false, correlation_id: 20 })
                 );
             }
         }

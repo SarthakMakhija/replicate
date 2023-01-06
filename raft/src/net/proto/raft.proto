@@ -38,6 +38,7 @@ message AppendEntries {
 }
 
 message AppendEntriesResponse {
+  //tag id 1 is reserved for correlation_id generated using procedural macro
   uint64 term = 2;
   bool success = 3;
 }
