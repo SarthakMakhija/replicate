@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn response_with_split_1() {
+    async fn response_with_success_condition_not_met() {
         let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(2, success_condition);
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
@@ -249,11 +249,11 @@ mod tests {
 
         let completion_response = handle.await;
 
-        assert!(completion_response.is_split())
+        assert!(completion_response.is_success_condition_not_met());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn response_with_split_2() {
+    async fn response_with_error() {
         let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(3, success_condition);
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
@@ -267,7 +267,7 @@ mod tests {
         let handle = async_quorum_callback.handle();
         let completion_response = handle.await;
 
-        assert!(completion_response.is_split())
+        assert!(completion_response.is_error())
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

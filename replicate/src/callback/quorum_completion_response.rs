@@ -8,7 +8,6 @@ pub enum QuorumCompletionResponse<Response: Any> {
     Success(HashMap<HostAndPort, Response>),
     Error(HashMap<HostAndPort, ResponseErrorType>),
     SuccessConditionNotMet(HashMap<HostAndPort, Response>),
-    Split(HashMap<HostAndPort, Result<Response, ResponseErrorType>>)
 }
 
 impl<Response: Any> QuorumCompletionResponse<Response> {
@@ -17,7 +16,6 @@ impl<Response: Any> QuorumCompletionResponse<Response> {
             QuorumCompletionResponse::Success(r) => r.len(),
             QuorumCompletionResponse::Error(e) => e.len(),
             QuorumCompletionResponse::SuccessConditionNotMet(r) => r.len(),
-            QuorumCompletionResponse::Split(r) => r.len(),
         };
     }
 
@@ -38,13 +36,6 @@ impl<Response: Any> QuorumCompletionResponse<Response> {
     pub fn success_condition_not_met_response(&self) -> Option<&HashMap<HostAndPort, Response>> {
         return match self {
             QuorumCompletionResponse::SuccessConditionNotMet(r) => Some(r),
-            _ => None
-        };
-    }
-
-    pub fn split_response(&self) -> Option<&HashMap<HostAndPort, Result<Response, ResponseErrorType>>> {
-        return match self {
-            QuorumCompletionResponse::Split(r) => Some(r),
             _ => None
         };
     }
@@ -70,10 +61,18 @@ impl<Response: Any> QuorumCompletionResponse<Response> {
         return false;
     }
 
-    pub fn is_split(&self) -> bool {
-        if let QuorumCompletionResponse::Split(_) = &self {
-            return true;
-        }
-        return false;
+    pub fn all_hosts(&self) -> Vec<HostAndPort> {
+        return match self {
+            QuorumCompletionResponse::Success(responses) =>
+                Self::all_hosts_from(responses),
+            QuorumCompletionResponse::Error(responses) =>
+                Self::all_hosts_from(responses),
+            QuorumCompletionResponse::SuccessConditionNotMet(responses) =>
+                Self::all_hosts_from(responses),
+        };
+    }
+
+    fn all_hosts_from<R: Any>(response_by_host: &HashMap<HostAndPort, R>) -> Vec<HostAndPort> {
+        return response_by_host.keys().map(|host_and_port| host_and_port.clone()).collect();
     }
 }

@@ -5,7 +5,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use std::task::{Context, Poll, Waker};
-use QuorumCompletionResponse::{Error, Split, Success, SuccessConditionNotMet};
+
+use QuorumCompletionResponse::{Error, Success, SuccessConditionNotMet};
 
 use crate::callback::async_quorum_callback::{SuccessCondition, UnexpectedQuorumCallbackResponseError};
 use crate::callback::quorum_completion_response::QuorumCompletionResponse;
@@ -81,7 +82,10 @@ impl<Response: Any + Send + Sync + Debug> Future for &QuorumCompletionHandle<Res
             return Poll::Ready(Error(self.all_error_responses(&mut write_guard)));
         }
         if total_non_error_responses + error_response_count >= self.expected_total_responses {
-            return Poll::Ready(Split(self.all_responses(&mut write_guard)));
+            if error_response_count >= 1 {
+                return Poll::Ready(Error(self.all_error_responses(&mut write_guard)));
+            }
+            return Poll::Ready(SuccessConditionNotMet(self.all_missing_success_condition_responses(&mut write_guard)));
         }
         return Poll::Pending;
     }
@@ -141,12 +145,6 @@ impl<Response: Any + Send + Sync + Debug> QuorumCompletionHandle<Response> {
             .drain()
             .filter(|response| response.1.is_err())
             .map(|response| (response.0, response.1.unwrap_err()))
-            .collect();
-    }
-
-    fn all_responses(&self, responses_guard: &mut RwLockWriteGuard<HashMap<HostAndPort, Result<Response, ResponseErrorType>>>) -> HashMap<HostAndPort, Result<Response, ResponseErrorType>> {
-        return responses_guard
-            .drain()
             .collect();
     }
 }
