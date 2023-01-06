@@ -231,22 +231,6 @@ impl State {
         };
     }
 
-    pub(crate) fn matches_log_entry_index_at(&self, index: usize, match_index: u64) -> bool {
-        let guard = self.consensus_state.read().unwrap();
-        return match (*guard).log_entries.get(index) {
-            None => false,
-            Some(log_entry) => log_entry.matches_index(match_index)
-        };
-    }
-
-    pub(crate) fn matches_log_entry_command_at(&self, index: usize, command: &Command) -> bool {
-        let guard = self.consensus_state.read().unwrap();
-        return match (*guard).log_entries.get(index) {
-            None => false,
-            Some(log_entry) => log_entry.matches_command(command)
-        };
-    }
-
     pub fn total_log_entries(&self) -> usize {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).log_entries.len();
@@ -702,11 +686,10 @@ mod tests {
 
         state.append_command(&command);
 
-        assert!(state.matches_log_entry_term_at(0, state.get_term()));
-        assert!(state.matches_log_entry_index_at(0, 0));
-
-        let expected_command = Command { command: content.as_bytes().to_vec() };
-        assert!(state.matches_log_entry_command_at(0, &expected_command));
+        let log_entry = state.get_log_entry_at(0).unwrap();
+        assert_eq!(0, log_entry.get_term());
+        assert_eq!(0, log_entry.get_index());
+        assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
     }
 
     #[tokio::test]

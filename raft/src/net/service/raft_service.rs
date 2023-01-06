@@ -554,10 +554,10 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert!(state.matches_log_entry_term_at(0, state.get_term()));
+        let log_entry = state.get_log_entry_at(0).unwrap();
 
-        let expected_command = Command { command: String::from("Content").as_bytes().to_vec() };
-        assert!(state.matches_log_entry_command_at(0, &expected_command));
+        assert_eq!(0, log_entry.get_term());
+        assert_eq!(String::from("Content").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
     }
 
     #[test]
@@ -744,11 +744,12 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert_eq!(2, state.total_log_entries());
-        assert!(state.matches_log_entry_term_at(1, 1));
-        assert!(state.matches_log_entry_index_at(1, 1));
 
-        let expected_command = Command { command: String::from("Content").as_bytes().to_vec() };
-        assert!(state.matches_log_entry_command_at(1, &expected_command));
+        assert_eq!(2, state.total_log_entries());
+        let log_entry = state.get_log_entry_at(1).unwrap();
+
+        assert_eq!(1, log_entry.get_term());
+        assert_eq!(1, log_entry.get_index());
+        assert_eq!(String::from("Content").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
     }
 }
