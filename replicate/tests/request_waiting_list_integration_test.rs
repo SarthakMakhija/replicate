@@ -76,7 +76,6 @@ async fn handle_multiple_response_types() {
         return get_async_quorum_callback.handle().await;
     });
 
-
     let set_async_quorum_callback = AsyncQuorumCallback::<SetValueResponse>::new(2);
     let set_async_quorum_callback_clone1 = set_async_quorum_callback.clone();
     let set_async_quorum_callback_clone2 = set_async_quorum_callback.clone();
@@ -168,10 +167,10 @@ async fn handle_multiple_response_types_with_error() {
     assert_eq!(&expected, all_gets);
 
     let set_response = set_handle.await.unwrap();
-    assert_eq!(1, set_response.response_len());
+    assert_eq!(2, set_response.response_len());
 
-    let error_responses = set_response.error_response().unwrap();
-    let test_error = error_responses.get(&response_from_other).unwrap().downcast_ref::<TestError>().unwrap();
+    let responses = set_response.split_response().unwrap();
+    let test_error = responses.get(&response_from_other).unwrap().as_ref().unwrap_err().downcast_ref::<TestError>().unwrap();
     assert_eq!("Test error", test_error.message);
 }
 
