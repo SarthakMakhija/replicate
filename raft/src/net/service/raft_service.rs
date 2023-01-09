@@ -171,7 +171,15 @@ impl Raft for RaftService {
         let response = request.into_inner();
         println!("received AppendEntriesResponse with success? {}", response.success);
 
-        let _ = &self.state.get_replica_reference().register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
+        let state = self.state.clone();
+        let handler = async move {
+            if response.success {
+                state.acknowledge_log_entry_at(response.log_entry_index.unwrap() as usize);
+            }
+            let _ = state.get_replica_reference().register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
+        };
+
+        let _ = &self.state.get_replica_reference().submit_to_queue(handler);
         return Ok(Response::new(()));
     }
 

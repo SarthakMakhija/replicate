@@ -60,12 +60,12 @@ impl LogEntry {
         return self.command.bytes.to_vec();
     }
 
-    pub(crate) fn get_index(&self) -> u64 {
-        return self.index;
+    pub fn get_acknowledgements(&self) -> u64 {
+        return self.acknowledgements;
     }
 
-    pub(crate) fn get_acknowledgements(&self) -> u64 {
-        return self.acknowledgements;
+    pub(crate) fn get_index(&self) -> u64 {
+        return self.index;
     }
 }
 
