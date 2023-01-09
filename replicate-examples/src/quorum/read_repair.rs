@@ -46,7 +46,10 @@ impl<'a> ReadRepair<'a> {
             )
         };
         let expected_responses = hosts_with_stale_values.len();
-        let async_quorum_callback = AsyncQuorumCallback::<PutKeyValueResponse>::new(expected_responses);
+        let async_quorum_callback = AsyncQuorumCallback::<PutKeyValueResponse>::new(
+            expected_responses,
+            expected_responses
+        );
 
         let _ = &self.replica
             .send_to(&hosts_with_stale_values, service_request_constructor, async_quorum_callback.clone())

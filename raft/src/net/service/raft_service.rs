@@ -202,6 +202,7 @@ impl Raft for RaftService {
 
                 let success_condition = Box::new(|response: &AppendEntriesResponse| response.success);
                 let callback = AsyncQuorumCallback::<AppendEntriesResponse>::new_with_success_condition(
+                    inner_replica.cluster_size(),
                     inner_replica.total_peer_count(),
                     success_condition
                 );

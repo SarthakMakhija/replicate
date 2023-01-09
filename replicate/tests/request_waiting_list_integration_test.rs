@@ -22,7 +22,7 @@ async fn handle_single_response_type() {
         ),
     );
 
-    let get_async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
+    let get_async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3, 2);
     let get_async_quorum_callback_clone1 = get_async_quorum_callback.clone();
     let get_async_quorum_callback_clone2 = get_async_quorum_callback.clone();
 
@@ -62,7 +62,7 @@ async fn handle_multiple_response_types() {
         ),
     );
 
-    let get_async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
+    let get_async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3, 2);
     let get_async_quorum_callback_clone1 = get_async_quorum_callback.clone();
     let get_async_quorum_callback_clone2 = get_async_quorum_callback.clone();
 
@@ -76,7 +76,7 @@ async fn handle_multiple_response_types() {
         return get_async_quorum_callback.handle().await;
     });
 
-    let set_async_quorum_callback = AsyncQuorumCallback::<SetValueResponse>::new(2);
+    let set_async_quorum_callback = AsyncQuorumCallback::<SetValueResponse>::new(3, 2);
     let set_async_quorum_callback_clone1 = set_async_quorum_callback.clone();
     let set_async_quorum_callback_clone2 = set_async_quorum_callback.clone();
 
@@ -125,7 +125,7 @@ async fn handle_multiple_response_types_with_error() {
         ),
     );
 
-    let get_async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
+    let get_async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3, 2);
     let get_async_quorum_callback_clone1 = get_async_quorum_callback.clone();
     let get_async_quorum_callback_clone2 = get_async_quorum_callback.clone();
 
@@ -139,7 +139,7 @@ async fn handle_multiple_response_types_with_error() {
         return get_async_quorum_callback.handle().await;
     });
 
-    let set_async_quorum_callback = AsyncQuorumCallback::<SetValueResponse>::new(2);
+    let set_async_quorum_callback = AsyncQuorumCallback::<SetValueResponse>::new(3, 2);
     let set_async_quorum_callback_clone1 = set_async_quorum_callback.clone();
     let set_async_quorum_callback_clone2 = set_async_quorum_callback.clone();
 

@@ -157,6 +157,10 @@ impl Replica {
         let _ = &self.request_waiting_list.handle_response(correlation_id, from, response);
     }
 
+    pub fn cluster_size(&self) -> usize {
+        return self.total_peer_count() + 1;
+    }
+
     pub fn total_peer_count(&self) -> usize {
         let self_address = self.self_address;
         return self.peer_addresses.iter().filter(|peer_address| peer_address.ne(&&self_address)).count();
@@ -316,7 +320,7 @@ mod tests {
         });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
+        let async_quorum_callback = AsyncQuorumCallback::<()>::new(3, 2);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},
@@ -351,7 +355,7 @@ mod tests {
         });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
+        let async_quorum_callback = AsyncQuorumCallback::<()>::new(2, 1);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},
@@ -391,7 +395,7 @@ mod tests {
         });
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let async_quorum_callback = AsyncQuorumCallback::<()>::new(2);
+        let async_quorum_callback = AsyncQuorumCallback::<()>::new(3, 2);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},
@@ -485,7 +489,7 @@ mod tests {
         });
 
         let correlation_id_generator = FixedCorrelationIdGenerator::new(100);
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(1);
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(1, 1);
         let service_request_constructor = || {
             ServiceRequest::new(
                 GetValueRequest {},

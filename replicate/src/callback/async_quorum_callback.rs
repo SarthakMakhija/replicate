@@ -12,7 +12,7 @@ pub type SuccessCondition<Response> = Box<dyn Fn(&Response) -> bool + Send + Syn
 
 #[derive(Debug)]
 pub struct UnexpectedQuorumCallbackResponseError {
-    pub response_type_id: TypeId
+    pub response_type_id: TypeId,
 }
 
 impl Display for UnexpectedQuorumCallbackResponseError {
@@ -34,16 +34,23 @@ impl<Response: Any + Send + Sync + Debug> ResponseCallback for AsyncQuorumCallba
 }
 
 impl<Response: Any + Send + Sync + Debug> AsyncQuorumCallback<Response> {
-    pub fn new<>(expected_responses: usize) -> Arc<AsyncQuorumCallback<Response>> {
-        return Self::new_with_success_condition(expected_responses, Box::new(|_: &Response| true));
+    pub fn new<>(
+        cluster_size: usize,
+        expected_responses: usize,
+    ) -> Arc<AsyncQuorumCallback<Response>> {
+        return Self::new_with_success_condition(cluster_size, expected_responses, Box::new(|_: &Response| true));
     }
 
-    pub fn new_with_success_condition<>(expected_total_responses: usize, success_condition: SuccessCondition<Response>) -> Arc<AsyncQuorumCallback<Response>> {
+    pub fn new_with_success_condition<>(
+        cluster_size: usize,
+        expected_total_responses: usize,
+        success_condition: SuccessCondition<Response>,
+    ) -> Arc<AsyncQuorumCallback<Response>> {
         return Arc::new(AsyncQuorumCallback {
             quorum_completion_handle: QuorumCompletionHandle {
                 responses: RwLock::new(HashMap::new()),
                 expected_total_responses,
-                majority_quorum: expected_total_responses / 2 + 1,
+                majority_quorum: (cluster_size / 2) + 1,
                 success_condition,
                 waker_state: Arc::new(Mutex::new(WakerState { waker: None })),
             },
@@ -99,7 +106,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn unexpected_response_error() {
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(2);
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3, 2);
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
@@ -120,7 +127,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn successful_responses() {
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3);
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3, 2);
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
@@ -140,8 +147,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn successful_responses_with_success_condition() {
-        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(2, success_condition);
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok");
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
+            3,
+            2,
+            success_condition
+        );
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
@@ -161,8 +172,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn responses_with_success_condition_not_met() {
-        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(2, success_condition);
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok");
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
+            3,
+            2,
+            success_condition
+        );
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
@@ -182,7 +197,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn successful_responses_after_delay() {
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3);
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3, 2);
         let async_quorum_callback_one = Arc::new(RwLock::new(async_quorum_callback));
         let async_quorum_callback_two = async_quorum_callback_one.clone();
         let async_quorum_callback_three = async_quorum_callback_two.clone();
@@ -213,7 +228,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn failed_responses() {
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3);
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new(3, 3);
 
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
@@ -238,8 +253,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn response_with_success_condition_not_met() {
-        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(2, success_condition);
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok");
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
+            3,
+            2,
+            success_condition
+        );
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
 
@@ -254,8 +273,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn response_with_error() {
-        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(3, success_condition);
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok");
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
+            3,
+            3,
+            success_condition
+        );
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
         let response_from_2 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50052);
         let response_from_3 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50053);
@@ -272,10 +295,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn failed_responses_with_one_success_condition_not_met() {
-        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok");
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
             3,
-            success_condition
+            3,
+            success_condition,
         );
 
         let response_from_1 = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
@@ -301,10 +325,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn total_response_count_greater_than_expected_responses_because_of_self_response() {
-        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok" );
+        let success_condition = Box::new(|response: &GetValueResponse| response.value == "ok");
         let async_quorum_callback = AsyncQuorumCallback::<GetValueResponse>::new_with_success_condition(
-            2,
-            success_condition
+            3,
+            3,
+            success_condition,
         );
 
         let self_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);

@@ -39,8 +39,9 @@ impl Election {
                 )
             };
             let success_condition = Box::new(|response: &RequestVoteResponse| response.voted);
-            let expected_responses = inner_replica.total_peer_count();
+            let expected_responses = inner_replica.cluster_size();
             let async_quorum_callback = AsyncQuorumCallback::<RequestVoteResponse>::new_with_success_condition(
+                inner_replica.cluster_size(),
                 expected_responses,
                 success_condition,
             );

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::response_callback::ResponseErrorType;
 
+#[derive(Debug)]
 pub enum QuorumCompletionResponse<Response: Any> {
     Success(HashMap<HostAndPort, Response>),
     Error(HashMap<HostAndPort, ResponseErrorType>),

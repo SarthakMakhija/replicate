@@ -34,8 +34,10 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
             ServiceRequestFactory::correlating_get_value_by_key_request(request.key.clone())
         };
 
-        let expected_responses = self.replica.total_peer_count();
-        let async_quorum_callback = AsyncQuorumCallback::<GetValueByKeyResponse>::new(expected_responses);
+        let async_quorum_callback = AsyncQuorumCallback::<GetValueByKeyResponse>::new(
+            self.replica.cluster_size(),
+            self.replica.total_peer_count()
+        );
         let _ = &self.replica
             .send_to_replicas(service_request_constructor, async_quorum_callback.clone())
             .await;
@@ -58,8 +60,10 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
             )
         };
 
-        let expected_responses = self.replica.total_peer_count();
-        let async_quorum_callback = AsyncQuorumCallback::<PutKeyValueResponse>::new(expected_responses);
+        let async_quorum_callback = AsyncQuorumCallback::<PutKeyValueResponse>::new(
+            self.replica.cluster_size(),
+            self.replica.total_peer_count()
+        );
         let _ = &self.replica
             .send_to_replicas(service_request_constructor, async_quorum_callback.clone())
             .await;
