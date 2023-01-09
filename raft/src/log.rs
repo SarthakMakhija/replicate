@@ -3,7 +3,7 @@ use bytes::Bytes;
 use crate::net::rpc::grpc::Command;
 
 #[derive(PartialEq, Debug)]
-pub(crate) struct LogEntry {
+pub struct LogEntry {
     term: u64,
     index: u64,
     command: LogCommand,
@@ -45,16 +45,16 @@ impl LogEntry {
         return command.command == self.command.bytes.to_vec();
     }
 
-    pub(crate) fn get_term(&self) -> u64 {
+    pub fn get_term(&self) -> u64 {
         return self.term;
+    }
+
+    pub fn get_bytes_as_vec(&self) -> Vec<u8> {
+        return self.command.bytes.to_vec();
     }
 
     pub(crate) fn get_index(&self) -> u64 {
         return self.index;
-    }
-
-    pub(crate) fn get_bytes_as_vec(&self) -> Vec<u8> {
-        return self.command.bytes.to_vec();
     }
 }
 

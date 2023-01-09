@@ -61,18 +61,27 @@ impl<Response: Any> QuorumCompletionResponse<Response> {
         return false;
     }
 
-    pub fn all_hosts(&self) -> Vec<HostAndPort> {
+    pub fn all_success_condition_not_met_hosts(&self, matching_condition: Box<dyn Fn(&Response) -> bool>) -> Vec<HostAndPort> {
         return match self {
-            QuorumCompletionResponse::Success(responses) =>
-                Self::all_hosts_from(responses),
-            QuorumCompletionResponse::Error(responses) =>
-                Self::all_hosts_from(responses),
             QuorumCompletionResponse::SuccessConditionNotMet(responses) =>
-                Self::all_hosts_from(responses),
+                responses
+                    .iter()
+                    .filter(|entry| (matching_condition)(entry.1))
+                    .map(|host_and_port| host_and_port.0.clone())
+                    .collect(),
+            _ =>
+                Vec::new()
         };
     }
 
-    fn all_hosts_from<R: Any>(response_by_host: &HashMap<HostAndPort, R>) -> Vec<HostAndPort> {
-        return response_by_host.keys().map(|host_and_port| host_and_port.clone()).collect();
+    fn all_hosts_from(&self,
+                      response_by_host: &HashMap<HostAndPort, Response>,
+                      matching_condition: Box<dyn Fn(&Response) -> bool>,
+    ) -> Vec<HostAndPort> {
+        return response_by_host
+            .iter()
+            .filter(|entry| (matching_condition)(entry.1))
+            .map(|host_and_port| host_and_port.0.clone())
+            .collect();
     }
 }

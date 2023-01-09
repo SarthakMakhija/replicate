@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
+use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
 use tonic::{Request, Response};
 
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::async_network::AsyncNetwork;
-use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
-use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry, RequestVote, RequestVoteResponse};
@@ -133,11 +132,8 @@ impl Raft for RaftService {
                 state.append_command(&command);
             }
 
-            let correlation_id_generator = RandomCorrelationIdGenerator::new();
-            let correlation_id = correlation_id_generator.generate();
-
             let send_result = AsyncNetwork::send_with_source_footprint(
-                service_request_factory.replicate_log_response(term, success, correlation_id),
+                service_request_factory.replicate_log_response(term, success, append_entries.correlation_id),
                 inner_replica.get_self_address(),
                 originating_host_port,
             ).await;
@@ -170,45 +166,58 @@ impl Raft for RaftService {
 
         let handler = async move {
             state.append_command(&command);
+            let mut peers = inner_replica.get_peers();
 
-            let previous_log_index = state.get_previous_log_index();
-            let previous_log_term = match previous_log_index {
-                None => None,
-                Some(index) => state.get_log_term_at(index as usize)
-            };
-
-            let service_request_constructor = || {
-                let term = state.get_term();
-                let entry = match state.get_log_entry_at(state.get_next_log_index() as usize) {
+            loop {
+                let previous_log_index = state.get_previous_log_index();
+                let previous_log_term = match previous_log_index {
                     None => None,
-                    Some(entry) => {
-                        Some(
-                            Entry {
-                                command: Some(Command{command: entry.get_bytes_as_vec()}),
-                                term: entry.get_term(),
-                                index: entry.get_index(),
-                            }
-                        )
-                    }
+                    Some(index) => state.get_log_term_at(index as usize)
                 };
-                return service_request_factory.replicate_log(
-                    term,
-                    inner_replica.get_id(),
-                    previous_log_index,
-                    previous_log_term,
-                    entry
+
+                let term: u64 = state.get_term();
+                let next_log_index = state.get_next_log_index();
+
+                let service_request_constructor = || {
+                    let entry = match state.get_log_entry_at(next_log_index as usize) {
+                        None => None,
+                        Some(entry) => {
+                            Some(
+                                Entry {
+                                    command: Some(Command { command: entry.get_bytes_as_vec() }),
+                                    term: entry.get_term(),
+                                    index: entry.get_index(),
+                                }
+                            )
+                        }
+                    };
+                    return service_request_factory.replicate_log(
+                        term,
+                        inner_replica.get_id(),
+                        previous_log_index,
+                        previous_log_term,
+                        entry
+                    );
+                };
+
+                let success_condition = Box::new(|response: &AppendEntriesResponse| response.success);
+                let callback = AsyncQuorumCallback::<AppendEntriesResponse>::new_with_success_condition(
+                    inner_replica.total_peer_count(),
+                    success_condition
                 );
-            };
+                let total_failed_sends = inner_replica.send_to(&peers, service_request_constructor, callback.clone()).await;
+                println!("total_failed_sends while replicating log {}", total_failed_sends);
 
-            let success_condition = Box::new(|response: &AppendEntriesResponse| response.success);
-            let callback = AsyncQuorumCallback::<AppendEntriesResponse>::new_with_success_condition(
-                inner_replica.total_peer_count(),
-                success_condition
-            );
-            let total_failed_sends = inner_replica.send_to_replicas(service_request_constructor, callback.clone()).await;
-            println!("total_failed_sends while replicating log {}", total_failed_sends);
-
-            let _ = callback.handle().await;
+                let quorum_completion_response: QuorumCompletionResponse<AppendEntriesResponse> = callback.handle().await;
+                if quorum_completion_response.is_success() {
+                    break;
+                } else if quorum_completion_response.is_success_condition_not_met() {
+                    peers = quorum_completion_response.all_success_condition_not_met_hosts(
+                        Box::new(|response| !response.success)
+                    );
+                    state.reduce_next_index()
+                }
+            }
         };
 
         let _ = replica.submit_to_queue(handler);

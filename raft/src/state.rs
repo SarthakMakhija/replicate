@@ -245,6 +245,12 @@ impl State {
         return None;
     }
 
+    pub(crate) fn reduce_next_index(&self) {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let mut consensus_state = &mut *write_guard;
+        consensus_state.next_index = consensus_state.next_index - 1;
+    }
+
     pub(crate) fn get_next_log_index(&self) -> u64 {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).next_index;
@@ -258,7 +264,7 @@ impl State {
         };
     }
 
-    pub(crate) fn get_log_entry_at(&self, index: usize) -> Option<LogEntry> {
+    pub fn get_log_entry_at(&self, index: usize) -> Option<LogEntry> {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
             None => None,

@@ -20,7 +20,7 @@ use replicate::net::connect::service_registration::{AllServicesShutdownHandle, S
 use replicate::net::replica::Replica;
 
 #[test]
-fn do_not_replicate_log_as_previous_entries_do_not_match() {
+fn replicate_log_successfully() {
     let runtime = Builder::new_multi_thread()
         .thread_name("replicate_log_successfully".to_string())
         .worker_threads(2)
@@ -51,12 +51,15 @@ fn do_not_replicate_log_as_previous_entries_do_not_match() {
         }).await.unwrap();
     });
 
-    thread::sleep(Duration::from_millis(40));
+    thread::sleep(Duration::from_millis(60));
 
     blocking_runtime.block_on(async move {
         assert_eq!(1, state.total_log_entries());
-        assert_eq!(0, state_peer_one.total_log_entries());
-        assert_eq!(0, state_peer_other.total_log_entries());
+        assert_eq!(1, state_peer_one.total_log_entries());
+        assert_eq!(1, state_peer_other.total_log_entries());
+
+        assert_eq!(content.as_bytes().to_vec(), state_peer_one.get_log_entry_at(0).unwrap().get_bytes_as_vec());
+        assert_eq!(content.as_bytes().to_vec(), state_peer_other.get_log_entry_at(0).unwrap().get_bytes_as_vec());
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();
