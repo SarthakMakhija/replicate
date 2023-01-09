@@ -113,45 +113,6 @@ impl State {
         Self::restart_heartbeat_sender(self.clone(), &self.heartbeat_send_scheduler);
     }
 
-    pub fn get_term(&self) -> u64 {
-        let guard = self.consensus_state.read().unwrap();
-        return (*guard).term;
-    }
-
-    pub fn get_role(&self) -> ReplicaRole {
-        let guard = self.consensus_state.read().unwrap();
-        return (*guard).role;
-    }
-
-    pub fn get_heartbeat_received_time(&self) -> Option<SystemTime> {
-        let guard = self.consensus_state.read().unwrap();
-        return (*guard).heartbeat_received_time;
-    }
-
-    pub fn get_heartbeat_sender(self: Arc<State>) -> impl Future<Output=Result<(), AnyError>> {
-        let term = self.get_term();
-        let leader_id = self.replica.get_id();
-        let replica = self.replica.clone();
-        let service_request_factory = self.service_request_factory.clone();
-
-        return async move {
-            let service_request_constructor = || {
-                service_request_factory.heartbeat(term, leader_id)
-            };
-
-            let response_handler_generator =
-                move |response: Result<AppendEntriesResponse, ServiceResponseError>| {
-                    match response {
-                        Ok(response) => Some(self.clone().get_heartbeat_response_handler(response)),
-                        Err(_) => None
-                    }
-                };
-
-            replica.send_to_replicas_without_callback(service_request_constructor, Arc::new(response_handler_generator)).await;
-            return Ok(());
-        };
-    }
-
     pub(crate) fn get_heartbeat_response_handler(self: Arc<State>, append_entry_response: AppendEntriesResponse) -> impl Future<Output=()> {
         let inner_state = self.clone();
         return async move {
@@ -214,15 +175,6 @@ impl State {
         return (*guard).voted_for;
     }
 
-    pub fn append_command(&self, command: &Command) {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &mut *write_guard;
-        let log_entries_size = consensus_state.log_entries.len();
-
-        let log_entry = LogEntry::new(consensus_state.term, log_entries_size as u64, command);
-        consensus_state.log_entries.push(log_entry);
-    }
-
     pub(crate) fn matches_log_entry_term_at(&self, index: usize, term: u64) -> bool {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
@@ -230,12 +182,6 @@ impl State {
             Some(log_entry) => log_entry.matches_term(term)
         };
     }
-
-    pub fn total_log_entries(&self) -> usize {
-        let guard = self.consensus_state.read().unwrap();
-        return (*guard).log_entries.len();
-    }
-
     pub(crate) fn get_previous_log_index(&self) -> Option<u64> {
         let guard = self.consensus_state.read().unwrap();
         let next_index = (*guard).next_index;
@@ -270,6 +216,60 @@ impl State {
 
         let mut log_entry = &mut consensus_state.log_entries[index];
         log_entry.acknowledge();
+    }
+
+
+    pub fn get_term(&self) -> u64 {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).term;
+    }
+
+    pub fn get_role(&self) -> ReplicaRole {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).role;
+    }
+
+    pub fn get_heartbeat_received_time(&self) -> Option<SystemTime> {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).heartbeat_received_time;
+    }
+
+    pub fn get_heartbeat_sender(self: Arc<State>) -> impl Future<Output=Result<(), AnyError>> {
+        let term = self.get_term();
+        let leader_id = self.replica.get_id();
+        let replica = self.replica.clone();
+        let service_request_factory = self.service_request_factory.clone();
+
+        return async move {
+            let service_request_constructor = || {
+                service_request_factory.heartbeat(term, leader_id)
+            };
+
+            let response_handler_generator =
+                move |response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                    match response {
+                        Ok(response) => Some(self.clone().get_heartbeat_response_handler(response)),
+                        Err(_) => None
+                    }
+                };
+
+            replica.send_to_replicas_without_callback(service_request_constructor, Arc::new(response_handler_generator)).await;
+            return Ok(());
+        };
+    }
+
+    pub fn append_command(&self, command: &Command) {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &mut *write_guard;
+        let log_entries_size = consensus_state.log_entries.len();
+
+        let log_entry = LogEntry::new(consensus_state.term, log_entries_size as u64, command);
+        consensus_state.log_entries.push(log_entry);
+    }
+
+    pub fn total_log_entries(&self) -> usize {
+        let guard = self.consensus_state.read().unwrap();
+        return (*guard).log_entries.len();
     }
 
     pub fn get_log_entry_at(&self, index: usize) -> Option<LogEntry> {
