@@ -264,6 +264,14 @@ impl State {
         };
     }
 
+    pub(crate) fn acknowledge_log_entry_at(&self, index: usize) {
+        let mut write_guard = self.consensus_state.write().unwrap();
+        let consensus_state = &mut *write_guard;
+
+        let mut log_entry = &mut consensus_state.log_entries[index];
+        log_entry.acknowledge();
+    }
+
     pub fn get_log_entry_at(&self, index: usize) -> Option<LogEntry> {
         let guard = self.consensus_state.read().unwrap();
         return match (*guard).log_entries.get(index) {
@@ -803,6 +811,50 @@ mod tests {
             Some(LogEntry::new(0, 0, &command)),
             state.get_log_entry_at(0)
         );
+    }
+
+    #[tokio::test]
+    async fn acknowledge_log_entry() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+        state.append_command(&command);
+
+        state.acknowledge_log_entry_at(0);
+        assert_eq!(1, state.get_log_entry_at(0).unwrap().get_acknowledgements());
+        assert_eq!(1, state.total_log_entries());
+    }
+
+    #[tokio::test]
+    async fn multiple_acknowledge_log_entry() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+        state.append_command(&command);
+
+        state.acknowledge_log_entry_at(0);
+        state.acknowledge_log_entry_at(0);
+
+        assert_eq!(2, state.get_log_entry_at(0).unwrap().get_acknowledgements());
+        assert_eq!(1, state.total_log_entries());
     }
 
     mod setup {

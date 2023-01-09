@@ -6,6 +6,7 @@ use crate::net::rpc::grpc::Command;
 pub struct LogEntry {
     term: u64,
     index: u64,
+    acknowledgements: u64,
     command: LogCommand,
 }
 
@@ -22,6 +23,7 @@ impl LogEntry {
             term,
             index,
             command: LogCommand::from(command),
+            acknowledgements: 0
         };
     }
 
@@ -30,6 +32,7 @@ impl LogEntry {
             term: entry.term,
             index: entry.index,
             command: LogCommand { bytes: entry.command.bytes.clone() },
+            acknowledgements: entry.acknowledgements
         };
     }
 
@@ -45,6 +48,10 @@ impl LogEntry {
         return command.command == self.command.bytes.to_vec();
     }
 
+    pub(crate) fn acknowledge(&mut self) {
+        self.acknowledgements = self.acknowledgements + 1;
+    }
+
     pub fn get_term(&self) -> u64 {
         return self.term;
     }
@@ -55,6 +62,10 @@ impl LogEntry {
 
     pub(crate) fn get_index(&self) -> u64 {
         return self.index;
+    }
+
+    pub(crate) fn get_acknowledgements(&self) -> u64 {
+        return self.acknowledgements;
     }
 }
 
