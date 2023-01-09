@@ -82,12 +82,27 @@ impl Raft for RaftService {
             let term = state.get_term();
             if append_entries.term > term {
                 state.change_to_follower(append_entries.term);
-                return AppendEntriesResponse { success: true, term: append_entries.term, correlation_id: append_entries.correlation_id };
+                return AppendEntriesResponse {
+                    success: true,
+                    term: append_entries.term,
+                    correlation_id: append_entries.correlation_id,
+                    log_entry_index: None,
+                };
             }
             if append_entries.term == term {
-                return AppendEntriesResponse { success: true, term, correlation_id: append_entries.correlation_id };
+                return AppendEntriesResponse {
+                    success: true,
+                    term,
+                    correlation_id: append_entries.correlation_id,
+                    log_entry_index: None,
+                };
             }
-            return AppendEntriesResponse { success: false, term, correlation_id: append_entries.correlation_id };
+            return AppendEntriesResponse {
+                success: false,
+                term,
+                correlation_id: append_entries.correlation_id,
+                log_entry_index: None,
+            };
         };
 
         return match replica.add_to_queue(handler).await {
@@ -127,13 +142,17 @@ impl Raft for RaftService {
             } else {
                 success = true;
             };
-            if success {
-                let command = append_entries.entry.unwrap().command.unwrap();
-                state.append_command(&command);
-            }
 
+            let log_entry_index = if success {
+                let entry = append_entries.entry.unwrap();
+                let command = entry.command.unwrap();
+                state.append_command(&command);
+                Some(entry.index)
+            } else {
+                None
+            };
             let send_result = AsyncNetwork::send_with_source_footprint(
-                service_request_factory.replicate_log_response(term, success, append_entries.correlation_id),
+                service_request_factory.replicate_log_response(term, success, log_entry_index, append_entries.correlation_id),
                 inner_replica.get_self_address(),
                 originating_host_port,
             ).await;

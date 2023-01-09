@@ -168,6 +168,7 @@ mod tests {
                 term: 1,
                 success: true,
                 correlation_id: 10,
+                log_entry_index: None,
             }
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);

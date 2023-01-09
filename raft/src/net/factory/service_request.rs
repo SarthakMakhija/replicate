@@ -79,11 +79,12 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
         );
     }
 
-    fn replicate_log_response(&self, term: u64, success: bool, correlation_id: CorrelationId) -> ServiceRequest<AppendEntriesResponse, ()> {
+    fn replicate_log_response(&self, term: u64, success: bool, log_entry_index: Option<u64>, correlation_id: CorrelationId) -> ServiceRequest<AppendEntriesResponse, ()> {
         return ServiceRequest::new(
             AppendEntriesResponse {
                 term,
                 success,
+                log_entry_index,
                 correlation_id
             },
             Box::new(ReplicateLogResponseClient {}),

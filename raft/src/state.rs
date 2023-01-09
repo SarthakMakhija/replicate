@@ -922,7 +922,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatSuccessClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 1, success: true, correlation_id: 10 })
+                    Response::new(AppendEntriesResponse { term: 1, success: true, correlation_id: 10, log_entry_index: None, })
                 );
             }
         }
@@ -933,7 +933,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatFailureClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 5, success: false, correlation_id: 20 })
+                    Response::new(AppendEntriesResponse { term: 5, success: false, correlation_id: 20, log_entry_index: None, })
                 );
             }
         }
