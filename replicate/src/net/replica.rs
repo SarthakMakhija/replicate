@@ -166,8 +166,13 @@ impl Replica {
         return self.self_address.clone();
     }
 
-    pub fn get_peers(&self) -> &Vec<HostAndPort> {
-        return &self.peer_addresses;
+    pub fn get_peers(&self) -> Vec<HostAndPort> {
+        let self_address = self.self_address;
+        return self.peer_addresses
+            .iter()
+            .filter(|peer_address| peer_address.ne(&&self_address))
+            .map(|peer_address| peer_address.clone())
+            .collect();
     }
 
     pub fn get_id(&self) -> ReplicaId {
@@ -539,6 +544,47 @@ mod tests {
 
         let total_peer_count = replica.total_peer_count();
         assert_eq!(3, total_peer_count);
+    }
+
+    #[test]
+    fn all_peers_excluding_self() {
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let all_peers = replica.get_peers();
+        assert_eq!(vec![
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
+        ], all_peers);
+    }
+
+    #[test]
+    fn all_peers() {
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let all_peers = replica.get_peers();
+        assert_eq!(vec![
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
+        ], all_peers);
     }
 
     #[test]
