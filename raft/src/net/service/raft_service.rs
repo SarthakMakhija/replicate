@@ -120,7 +120,6 @@ impl Raft for RaftService {
         let state = self.state.clone();
         let replica = self.state.get_replica_reference();
 
-        let inner_replica = self.state.get_replica();
         let service_request_factory = self.service_request_factory.clone();
         let append_entries = request.into_inner();
 
@@ -153,7 +152,7 @@ impl Raft for RaftService {
             };
             let send_result = AsyncNetwork::send_with_source_footprint(
                 service_request_factory.replicate_log_response(term, success, log_entry_index, append_entries.correlation_id),
-                inner_replica.get_self_address(),
+                state.get_replica_reference().get_self_address(),
                 originating_host_port,
             ).await;
 
@@ -187,13 +186,12 @@ impl Raft for RaftService {
         println!("received command on {:?}", self.state.get_replica_reference().get_self_address());
         let state = self.state.clone();
         let replica = self.state.get_replica_reference();
-        let inner_replica = self.state.get_replica();
         let service_request_factory = self.service_request_factory.clone();
         let command = request.into_inner();
 
         let handler = async move {
             state.append_command(&command);
-            let mut peers = inner_replica.get_peers();
+            let mut peers = state.get_replica_reference().get_peers();
 
             loop {
                 let previous_log_index = state.get_previous_log_index();
@@ -220,7 +218,7 @@ impl Raft for RaftService {
                     };
                     return service_request_factory.replicate_log(
                         term,
-                        inner_replica.get_id(),
+                        state.get_replica_reference().get_id(),
                         previous_log_index,
                         previous_log_term,
                         entry
@@ -229,11 +227,11 @@ impl Raft for RaftService {
 
                 let success_condition = Box::new(|response: &AppendEntriesResponse| response.success);
                 let callback = AsyncQuorumCallback::<AppendEntriesResponse>::new_with_success_condition(
-                    inner_replica.cluster_size(),
-                    inner_replica.total_peer_count(),
+                    state.get_replica_reference().cluster_size(),
+                    state.get_replica_reference().total_peer_count(),
                     success_condition
                 );
-                let total_failed_sends = inner_replica.send_to(&peers, service_request_constructor, callback.clone()).await;
+                let total_failed_sends = state.get_replica_reference().send_to(&peers, service_request_constructor, callback.clone()).await;
                 println!("total_failed_sends while replicating log {}", total_failed_sends);
 
                 let quorum_completion_response: QuorumCompletionResponse<AppendEntriesResponse> = callback.handle().await;
