@@ -214,7 +214,7 @@ impl State {
         let mut write_guard = self.consensus_state.write().unwrap();
         let consensus_state = &mut *write_guard;
 
-        let mut log_entry = &mut consensus_state.log_entries[index];
+        let log_entry = &mut consensus_state.log_entries[index];
         log_entry.acknowledge();
     }
 

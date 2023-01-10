@@ -3,3 +3,4 @@ pub mod state;
 pub mod net;
 pub mod heartbeat_config;
 pub mod log;
+mod replicated_log;
