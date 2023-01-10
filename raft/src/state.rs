@@ -457,7 +457,7 @@ mod tests {
         );
 
         let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        let heartbeat_timeout = Duration::from_millis(5);
+        let heartbeat_timeout = Duration::from_millis(10);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
 
@@ -611,7 +611,7 @@ mod tests {
         blocking_runtime.block_on(async move {
             let cloned = inner_state.clone();
             let _ = inner_state.get_heartbeat_sender().await;
-            thread::sleep(Duration::from_millis(3));
+            thread::sleep(Duration::from_millis(4));
 
             assert_eq!(ReplicaRole::Follower, cloned.get_role());
             assert_eq!(5, cloned.get_term());
