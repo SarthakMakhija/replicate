@@ -25,6 +25,10 @@ impl<Payload: Send, Response> ServiceRequest<Payload, Response>
             correlation_id,
         };
     }
+
+    pub fn get_payload(&self) -> &Payload {
+        return &self.payload;
+    }
 }
 
 #[async_trait]

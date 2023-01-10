@@ -14,6 +14,7 @@ tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
 async-trait = "0.1.58"
 rand = "0.8.5"
 bytes = "1"
+dashmap = "5.4.0"
 
 [build-dependencies]
 replicate-macro = { path = "../replicate-macro" }
