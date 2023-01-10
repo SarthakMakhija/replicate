@@ -54,13 +54,13 @@ fn replicate_log_successfully() {
     thread::sleep(Duration::from_millis(60));
 
     blocking_runtime.block_on(async move {
-        assert_eq!(1, state.total_log_entries());
-        assert_eq!(1, state_peer_one.total_log_entries());
-        assert_eq!(1, state_peer_other.total_log_entries());
+        assert_eq!(1, state.get_replicated_log().total_log_entries());
+        assert_eq!(1, state_peer_one.get_replicated_log().total_log_entries());
+        assert_eq!(1, state_peer_other.get_replicated_log().total_log_entries());
 
-        assert_eq!(content.as_bytes().to_vec(), state_peer_one.get_log_entry_at(0).unwrap().get_bytes_as_vec());
-        assert_eq!(content.as_bytes().to_vec(), state_peer_other.get_log_entry_at(0).unwrap().get_bytes_as_vec());
-        assert_eq!(2, state.get_log_entry_at(0).unwrap().get_acknowledgements());
+        assert_eq!(content.as_bytes().to_vec(), state_peer_one.get_replicated_log().get_log_entry_at(0).unwrap().get_bytes_as_vec());
+        assert_eq!(content.as_bytes().to_vec(), state_peer_other.get_replicated_log().get_log_entry_at(0).unwrap().get_bytes_as_vec());
+        assert_eq!(2, state.get_replicated_log().get_log_entry_at(0).unwrap().get_acknowledgements());
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();

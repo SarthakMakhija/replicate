@@ -136,7 +136,7 @@ impl Raft for RaftService {
                 success = false;
             } else if append_entries.previous_log_index.is_none() {
                 success = true;
-            } else if !state.matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
+            } else if !state.get_replicated_log().matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
                 success = false;
             } else {
                 success = true;
@@ -145,7 +145,7 @@ impl Raft for RaftService {
             let log_entry_index = if success {
                 let entry = append_entries.entry.unwrap();
                 let command = entry.command.unwrap();
-                state.append_command(&command);
+                state.get_replicated_log().append_command(&command, append_entries.term);
                 Some(entry.index)
             } else {
                 None
@@ -173,7 +173,7 @@ impl Raft for RaftService {
         let state = self.state.clone();
         let handler = async move {
             if response.success {
-                state.acknowledge_log_entry_at(response.log_entry_index.unwrap() as usize);
+                state.get_replicated_log().acknowledge_log_entry_at(response.log_entry_index.unwrap() as usize);
             }
             let _ = state.get_replica_reference().register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
         };
@@ -190,21 +190,22 @@ impl Raft for RaftService {
         let command = request.into_inner();
 
         let handler = async move {
-            state.append_command(&command);
+            let term: u64 = state.get_term();
+            state.get_replicated_log().append_command(&command, term);
+
             let mut peers = state.get_replica_reference().get_peers();
 
             loop {
-                let previous_log_index = state.get_previous_log_index();
+                let previous_log_index = state.get_replicated_log().get_previous_log_index();
                 let previous_log_term = match previous_log_index {
                     None => None,
-                    Some(index) => state.get_log_term_at(index as usize)
+                    Some(index) => state.get_replicated_log().get_log_term_at(index as usize)
                 };
 
-                let term: u64 = state.get_term();
-                let next_log_index = state.get_next_log_index();
+                let next_log_index = state.get_replicated_log().get_next_log_index();
 
                 let service_request_constructor = || {
-                    let entry = match state.get_log_entry_at(next_log_index as usize) {
+                    let entry = match state.get_replicated_log().get_log_entry_at(next_log_index as usize) {
                         None => None,
                         Some(entry) => {
                             Some(
@@ -241,7 +242,7 @@ impl Raft for RaftService {
                     peers = quorum_completion_response.all_success_condition_not_met_hosts(
                         Box::new(|response| !response.success)
                     );
-                    state.reduce_next_index()
+                    state.get_replicated_log().reduce_next_index()
                 }
             }
         };
@@ -592,7 +593,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        let log_entry = state.get_log_entry_at(0).unwrap();
+        let log_entry = state.get_replicated_log().get_log_entry_at(0).unwrap();
 
         assert_eq!(0, log_entry.get_term());
         assert_eq!(String::from("Content").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
@@ -642,7 +643,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert_eq!(0, state.total_log_entries());
+        assert_eq!(0, state.get_replicated_log().total_log_entries());
     }
 
     #[test]
@@ -733,7 +734,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert_eq!(0, state.total_log_entries());
+        assert_eq!(0, state.get_replicated_log().total_log_entries());
     }
 
     #[test]
@@ -753,8 +754,9 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("anything");
             let command = Command { command: content.as_bytes().to_vec() };
+            let term = state.get_term();
 
-            state.append_command(&command);
+            state.get_replicated_log().append_command(&command, term);
             return state;
         });
 
@@ -783,8 +785,8 @@ mod tests {
 
         thread::sleep(Duration::from_millis(5));
 
-        assert_eq!(2, state.total_log_entries());
-        let log_entry = state.get_log_entry_at(1).unwrap();
+        assert_eq!(2, state.get_replicated_log().total_log_entries());
+        let log_entry = state.get_replicated_log().get_log_entry_at(1).unwrap();
 
         assert_eq!(1, log_entry.get_term());
         assert_eq!(1, log_entry.get_index());

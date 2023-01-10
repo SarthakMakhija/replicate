@@ -3,7 +3,7 @@ use std::sync::RwLock;
 use crate::log::LogEntry;
 use crate::net::rpc::grpc::Command;
 
-pub(crate) struct ReplicatedLog {
+pub struct ReplicatedLog {
     majority_quorum: usize,
     replicated_log_state: RwLock<ReplicatedLogState>,
 }

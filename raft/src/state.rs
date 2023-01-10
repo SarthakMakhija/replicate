@@ -11,7 +11,8 @@ use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
 use crate::log::LogEntry;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::{AppendEntriesResponse, Command};
+use crate::net::rpc::grpc::AppendEntriesResponse;
+use crate::replicated_log::ReplicatedLog;
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
@@ -21,6 +22,7 @@ pub struct State {
     heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler,
     heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
+    replicated_log: ReplicatedLog,
 }
 
 struct ConsensusState {
@@ -29,8 +31,6 @@ struct ConsensusState {
     voted_for: Option<u64>,
     heartbeat_received_time: Option<SystemTime>,
     creation_time: SystemTime,
-    log_entries: Vec<LogEntry>,
-    next_index: u64,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -51,6 +51,7 @@ impl State {
         let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
         let heartbeat_timeout = heartbeat_config.get_heartbeat_timeout();
 
+        let majority_quorum = (replica.cluster_size() / 2) + 1;
         let state = State {
             consensus_state: RwLock::new(ConsensusState {
                 term: 0,
@@ -58,8 +59,6 @@ impl State {
                 voted_for: None,
                 heartbeat_received_time: None,
                 creation_time: clock.now(),
-                log_entries: Vec::new(),
-                next_index: 1,
             }),
             replica,
             clock,
@@ -67,6 +66,7 @@ impl State {
             heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_interval),
             heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_timeout),
             service_request_factory,
+            replicated_log: ReplicatedLog::new(majority_quorum),
         };
 
         let state = Arc::new(state);
@@ -175,49 +175,9 @@ impl State {
         return (*guard).voted_for;
     }
 
-    pub(crate) fn matches_log_entry_term_at(&self, index: usize, term: u64) -> bool {
-        let guard = self.consensus_state.read().unwrap();
-        return match (*guard).log_entries.get(index) {
-            None => false,
-            Some(log_entry) => log_entry.matches_term(term)
-        };
+    pub fn get_replicated_log(&self) -> &ReplicatedLog {
+        return &self.replicated_log;
     }
-    pub(crate) fn get_previous_log_index(&self) -> Option<u64> {
-        let guard = self.consensus_state.read().unwrap();
-        let next_index = (*guard).next_index;
-        if next_index >= 1 {
-            return Some(next_index - 1);
-        }
-        return None;
-    }
-
-    pub(crate) fn reduce_next_index(&self) {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let mut consensus_state = &mut *write_guard;
-        consensus_state.next_index = consensus_state.next_index - 1;
-    }
-
-    pub(crate) fn get_next_log_index(&self) -> u64 {
-        let guard = self.consensus_state.read().unwrap();
-        return (*guard).next_index;
-    }
-
-    pub(crate) fn get_log_term_at(&self, index: usize) -> Option<u64> {
-        let guard = self.consensus_state.read().unwrap();
-        return match (*guard).log_entries.get(index) {
-            None => None,
-            Some(log_entry) => Some(log_entry.get_term())
-        };
-    }
-
-    pub(crate) fn acknowledge_log_entry_at(&self, index: usize) {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &mut *write_guard;
-
-        let log_entry = &mut consensus_state.log_entries[index];
-        log_entry.acknowledge();
-    }
-
 
     pub fn get_term(&self) -> u64 {
         let guard = self.consensus_state.read().unwrap();
@@ -258,28 +218,6 @@ impl State {
         };
     }
 
-    pub fn append_command(&self, command: &Command) {
-        let mut write_guard = self.consensus_state.write().unwrap();
-        let consensus_state = &mut *write_guard;
-        let log_entries_size = consensus_state.log_entries.len();
-
-        let log_entry = LogEntry::new(consensus_state.term, log_entries_size as u64, command);
-        consensus_state.log_entries.push(log_entry);
-    }
-
-    pub fn total_log_entries(&self) -> usize {
-        let guard = self.consensus_state.read().unwrap();
-        return (*guard).log_entries.len();
-    }
-
-    pub fn get_log_entry_at(&self, index: usize) -> Option<LogEntry> {
-        let guard = self.consensus_state.read().unwrap();
-        return match (*guard).log_entries.get(index) {
-            None => None,
-            Some(entry) => Some(LogEntry::from(entry))
-        };
-    }
-
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_check_scheduler.restart_with(move || {
             let inner_state = state.clone();
@@ -315,8 +253,6 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
-    use crate::log::LogEntry;
-    use crate::net::rpc::grpc::Command;
     use crate::state::{ReplicaRole, State};
     use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
 
@@ -683,180 +619,6 @@ mod tests {
         });
     }
 
-    #[tokio::test]
-    async fn append_command() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        let content = String::from("Content");
-        let command = Command { command: content.as_bytes().to_vec() };
-
-        state.append_command(&command);
-
-        let log_entry = state.get_log_entry_at(0).unwrap();
-        assert_eq!(0, log_entry.get_term());
-        assert_eq!(0, log_entry.get_index());
-        assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
-    }
-
-    #[tokio::test]
-    async fn get_non_existing_previous_log_index() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        {
-            let mut guard = state.consensus_state.write().unwrap();
-            let consensus_state = &mut *guard;
-            consensus_state.next_index = consensus_state.next_index - 1;
-        }
-
-        assert_eq!(None, state.get_previous_log_index());
-    }
-
-    #[tokio::test]
-    async fn get_previous_log_index() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        assert_eq!(Some(0), state.get_previous_log_index());
-    }
-
-    #[tokio::test]
-    async fn get_log_term_at_non_existing_index() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        assert_eq!(None, state.get_log_term_at(99));
-    }
-
-    #[tokio::test]
-    async fn get_log_term_at_an_existing_index() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        let content = String::from("Content");
-        let command = Command { command: content.as_bytes().to_vec() };
-
-        state.append_command(&command);
-        assert_eq!(Some(0), state.get_log_term_at(0));
-    }
-
-    #[tokio::test]
-    async fn get_log_entry_at_non_existing_index() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        assert_eq!(None, state.get_log_entry_at(99));
-    }
-
-    #[tokio::test]
-    async fn get_log_entry_at_an_existing_index() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        let content = String::from("Content");
-        let command = Command { command: content.as_bytes().to_vec() };
-        state.append_command(&command);
-
-        assert_eq!(
-            Some(LogEntry::new(0, 0, &command)),
-            state.get_log_entry_at(0)
-        );
-    }
-
-    #[tokio::test]
-    async fn acknowledge_log_entry() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        let content = String::from("Content");
-        let command = Command { command: content.as_bytes().to_vec() };
-        state.append_command(&command);
-
-        state.acknowledge_log_entry_at(0);
-        assert_eq!(1, state.get_log_entry_at(0).unwrap().get_acknowledgements());
-        assert_eq!(1, state.total_log_entries());
-    }
-
-    #[tokio::test]
-    async fn multiple_acknowledge_log_entry() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Arc::new(SystemClock::new()),
-        );
-
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
-        let content = String::from("Content");
-        let command = Command { command: content.as_bytes().to_vec() };
-        state.append_command(&command);
-
-        state.acknowledge_log_entry_at(0);
-        state.acknowledge_log_entry_at(0);
-
-        assert_eq!(2, state.get_log_entry_at(0).unwrap().get_acknowledgements());
-        assert_eq!(1, state.total_log_entries());
-    }
-
     mod setup {
         use std::sync::atomic::{AtomicU64, Ordering};
         use std::sync::RwLock;
@@ -922,7 +684,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatSuccessClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 1, success: true, correlation_id: 10, log_entry_index: None, })
+                    Response::new(AppendEntriesResponse { term: 1, success: true, correlation_id: 10, log_entry_index: None })
                 );
             }
         }
@@ -933,7 +695,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatFailureClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 5, success: false, correlation_id: 20, log_entry_index: None, })
+                    Response::new(AppendEntriesResponse { term: 5, success: false, correlation_id: 20, log_entry_index: None })
                 );
             }
         }
