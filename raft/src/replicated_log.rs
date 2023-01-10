@@ -1,6 +1,6 @@
 use std::sync::RwLock;
 
-use crate::log::LogEntry;
+use crate::log_entry::LogEntry;
 use crate::net::rpc::grpc::Command;
 
 pub struct ReplicatedLog {
@@ -100,7 +100,7 @@ impl ReplicatedLog {
 
 #[cfg(test)]
 mod tests {
-    use crate::log::LogEntry;
+    use crate::log_entry::LogEntry;
     use crate::net::rpc::grpc::Command;
     use crate::replicated_log::ReplicatedLog;
 

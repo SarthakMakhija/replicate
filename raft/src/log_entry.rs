@@ -83,7 +83,7 @@ impl LogCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::log::LogEntry;
+    use crate::log_entry::LogEntry;
     use crate::net::rpc::grpc::Command;
 
     #[test]
