@@ -52,6 +52,14 @@ impl LogEntry {
         self.acknowledgements = self.acknowledgements + 1;
     }
 
+    pub(crate) fn get_index(&self) -> u64 {
+        return self.index;
+    }
+
+    pub(crate) fn is_replicated(&self, quorum: usize) -> bool {
+        return self.acknowledgements >= quorum as u64;
+    }
+
     pub fn get_term(&self) -> u64 {
         return self.term;
     }
@@ -62,10 +70,6 @@ impl LogEntry {
 
     pub fn get_acknowledgements(&self) -> u64 {
         return self.acknowledgements;
-    }
-
-    pub(crate) fn get_index(&self) -> u64 {
-        return self.index;
     }
 }
 

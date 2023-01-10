@@ -9,7 +9,6 @@ use replicate::net::replica::{Replica, ReplicaId};
 
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
-use crate::log::LogEntry;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::AppendEntriesResponse;
 use crate::replicated_log::ReplicatedLog;

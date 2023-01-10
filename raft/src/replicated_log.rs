@@ -68,6 +68,12 @@ impl ReplicatedLog {
         log_entry.acknowledge();
     }
 
+    pub(crate) fn is_entry_replicated(&self, index: usize) -> bool {
+        let guard = self.replicated_log_state.read().unwrap();
+        let entry = &(*guard).log_entries[index];
+        return entry.is_replicated(self.majority_quorum);
+    }
+
     pub fn append_command(&self, command: &Command, term: u64) {
         let mut write_guard = self.replicated_log_state.write().unwrap();
         let replicated_log_state = &mut *write_guard;
@@ -98,8 +104,8 @@ mod tests {
     use crate::net::rpc::grpc::Command;
     use crate::replicated_log::ReplicatedLog;
 
-    #[tokio::test]
-    async fn append_command() {
+    #[test]
+    fn append_command() {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
@@ -112,8 +118,8 @@ mod tests {
         assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
     }
 
-    #[tokio::test]
-    async fn get_non_existing_previous_log_index() {
+    #[test]
+    fn get_non_existing_previous_log_index() {
         let replicated_log = ReplicatedLog::new(2);
         {
             let mut guard = replicated_log.replicated_log_state.write().unwrap();
@@ -124,20 +130,20 @@ mod tests {
         assert_eq!(None, replicated_log.get_previous_log_index());
     }
 
-    #[tokio::test]
-    async fn get_previous_log_index() {
+    #[test]
+    fn get_previous_log_index() {
         let replicated_log = ReplicatedLog::new(2);
         assert_eq!(Some(0), replicated_log.get_previous_log_index());
     }
 
-    #[tokio::test]
-    async fn get_log_term_at_non_existing_index() {
+    #[test]
+    fn get_log_term_at_non_existing_index() {
         let replicated_log = ReplicatedLog::new(2);
         assert_eq!(None, replicated_log.get_log_term_at(99));
     }
 
-    #[tokio::test]
-    async fn get_log_term_at_an_existing_index() {
+    #[test]
+    fn get_log_term_at_an_existing_index() {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
@@ -146,14 +152,14 @@ mod tests {
         assert_eq!(Some(1), replicated_log.get_log_term_at(0));
     }
 
-    #[tokio::test]
-    async fn get_log_entry_at_non_existing_index() {
+    #[test]
+    fn get_log_entry_at_non_existing_index() {
         let replicated_log = ReplicatedLog::new(2);
         assert_eq!(None, replicated_log.get_log_entry_at(99));
     }
 
-    #[tokio::test]
-    async fn get_log_entry_at_an_existing_index() {
+    #[test]
+    fn get_log_entry_at_an_existing_index() {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
@@ -165,8 +171,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn acknowledge_log_entry() {
+    #[test]
+    fn acknowledge_log_entry() {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
@@ -177,8 +183,8 @@ mod tests {
         assert_eq!(1, replicated_log.total_log_entries());
     }
 
-    #[tokio::test]
-    async fn multiple_acknowledge_log_entry() {
+    #[test]
+    fn multiple_acknowledge_log_entry() {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
@@ -189,5 +195,30 @@ mod tests {
 
         assert_eq!(2, replicated_log.get_log_entry_at(0).unwrap().get_acknowledgements());
         assert_eq!(1, replicated_log.total_log_entries());
+    }
+
+    #[test]
+    fn is_entry_replicated() {
+        let replicated_log = ReplicatedLog::new(2);
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+        replicated_log.append_command(&command, 1);
+
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.acknowledge_log_entry_at(0);
+
+        assert!(replicated_log.is_entry_replicated(0));
+    }
+
+    #[test]
+    fn is_entry_not_replicated() {
+        let replicated_log = ReplicatedLog::new(2);
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+        replicated_log.append_command(&command, 1);
+
+        replicated_log.acknowledge_log_entry_at(0);
+
+        assert_eq!(false, replicated_log.is_entry_replicated(0));
     }
 }
