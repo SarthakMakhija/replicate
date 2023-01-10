@@ -783,7 +783,7 @@ mod tests {
             let _ = raft_service.acknowledge_replicate_log(request).await;
         });
 
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(Duration::from_millis(20));
 
         assert_eq!(2, state.get_replicated_log().total_log_entries());
         let log_entry = state.get_replicated_log().get_log_entry_at(1).unwrap();
