@@ -58,7 +58,7 @@ impl KeyValueStore {
                 eprintln!("failed to send get_value_by_key_response to {:?}", originating_host_port);
             }
         };
-        let _ = &self.replica.submit_to_queue(handler);
+        let _ = &self.replica.add_async_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 
@@ -96,7 +96,7 @@ impl KeyValueStore {
                 eprintln!("failed to send put_key_value_response to {:?}", originating_host_port);
             }
         };
-        let _ = &self.replica.submit_to_queue(handler);
+        let _ = &self.replica.add_async_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 

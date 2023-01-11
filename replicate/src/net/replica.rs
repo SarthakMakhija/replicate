@@ -111,7 +111,7 @@ impl Replica {
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response>,
               F: Fn(Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
-              T: Future<Output = ()> + Send + 'static{
+              T: Future<Output=()> + Send + 'static {
         let peer_addresses = self.peer_addresses.clone();
 
         for address in peer_addresses {
@@ -136,12 +136,18 @@ impl Replica {
         }
     }
 
-    pub fn submit_to_queue<F>(&self, handler: F)
+    pub async fn add_async_to_queue<F>(&self, handler: F)
         where
-            F: Future + Send + 'static,
-            F::Output: Send + 'static {
+            F: Future<Output=()> + Send + 'static {
         let singular_update_queue = &self.singular_update_queue;
-        singular_update_queue.submit(handler);
+        let _ = singular_update_queue.add_async(handler).await;
+    }
+
+    pub fn add_spawn_to_queue<F>(&self, handler: F)
+        where
+            F: Future<Output=()> + Send + 'static {
+        let singular_update_queue = &self.singular_update_queue;
+        let _ = singular_update_queue.add_spawn(handler);
     }
 
     pub fn add_to_queue<F>(&self, handler: F) -> JoinHandle<<F as Future>::Output>
@@ -412,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn submit_to_queue() {
+    fn add_async_to_queue() {
         let any_replica_port = 8988;
         let storage = Arc::new(RwLock::new(HashMap::new()));
         let readable_storage = storage.clone();
@@ -430,9 +436,11 @@ mod tests {
         });
 
         let (sender, mut receiver) = mpsc::channel(1);
-        replica.submit_to_queue(async move {
-            storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
-            sender.send(()).await.unwrap();
+        blocking_runtime.block_on( async {
+            let _ = replica.add_async_to_queue(async move {
+                storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
+                sender.send(()).await.unwrap();
+            }).await;
         });
 
         blocking_runtime.block_on(async {
@@ -458,13 +466,14 @@ mod tests {
             );
         });
 
-        let handle = replica.add_to_queue(async move {
+        let (sender_one, mut receiver_one) = mpsc::channel(1);
+        let handle = replica.add_spawn_to_queue(async move {
             storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
-            return ("WAL".to_string(), "write-ahead log".to_string());
+            let _ = sender_one.send(("WAL".to_string(), "write-ahead log".to_string())).await;
         });
 
         blocking_runtime.block_on(async {
-            let (key, value) = handle.await.unwrap();
+            let (key, value) = receiver_one.recv().await.unwrap();
 
             assert_eq!("WAL".to_string(), key);
             assert_eq!("write-ahead log".to_string(), value);

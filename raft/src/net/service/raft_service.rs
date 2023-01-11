@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 use tonic::{Request, Response};
 
@@ -66,7 +67,7 @@ impl Raft for RaftService {
                 eprintln!("failed to send request_vote_response to {:?}", originating_host_port);
             }
         };
-        let _ = replica.submit_to_queue(handler);
+        let _ = replica.add_async_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 
@@ -85,39 +86,42 @@ impl Raft for RaftService {
         let replica = self.state.get_replica_reference();
 
         let append_entries = request.into_inner();
+
+        let (sender, mut receiver) = mpsc::channel::<AppendEntriesResponse>(1);
         let handler = async move {
             state.mark_heartbeat_received();
             let term = state.get_term();
             if append_entries.term > term {
                 state.change_to_follower(append_entries.term);
-                return AppendEntriesResponse {
+                let _ = sender.send(AppendEntriesResponse {
                     success: true,
                     term: append_entries.term,
                     correlation_id: append_entries.correlation_id,
                     log_entry_index: None,
-                };
+                }).await;
             }
             if append_entries.term == term {
-                return AppendEntriesResponse {
+                let _ = sender.send(AppendEntriesResponse {
                     success: true,
                     term,
                     correlation_id: append_entries.correlation_id,
                     log_entry_index: None,
-                };
+                }).await;
             }
-            return AppendEntriesResponse {
+            let _ = sender.send(AppendEntriesResponse {
                 success: false,
                 term,
                 correlation_id: append_entries.correlation_id,
                 log_entry_index: None,
-            };
+            }).await;
         };
 
-        return match replica.add_to_queue(handler).await {
-            Ok(append_entries_response) =>
+        let _ = replica.add_async_to_queue(handler).await;
+        return match receiver.recv().await {
+            Some(append_entries_response) =>
                 Ok(Response::new(append_entries_response)),
-            Err(err) =>
-                Err(tonic::Status::unknown(err.to_string()))
+            None =>
+                Err(tonic::Status::unknown("failed receiving AppendEntriesResponse from the async handler"))
         };
     }
 
@@ -171,7 +175,7 @@ impl Raft for RaftService {
             }
         };
 
-        let _ = replica.submit_to_queue(handler);
+        let _ = replica.add_async_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 
@@ -195,7 +199,7 @@ impl Raft for RaftService {
             follower_state.register(response, originating_host_port);
         };
 
-        let _ = &self.state.get_replica_reference().submit_to_queue(handler);
+        let _ = &self.state.get_replica_reference().add_async_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 
@@ -213,7 +217,7 @@ impl Raft for RaftService {
             let _ = follower_state.replicate_log();
         };
 
-        let _ = replica.submit_to_queue(handler);
+        let _ = replica.add_async_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 }

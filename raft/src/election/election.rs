@@ -28,7 +28,7 @@ impl Election {
         let state = self.state.clone();
         let service_request_factory = self.service_request_factory.clone();
 
-        replica.submit_to_queue(async move {
+        replica.add_spawn_to_queue(async move {
             let term = state.change_to_candidate();
             println!("starting election with term {}", term);
 
