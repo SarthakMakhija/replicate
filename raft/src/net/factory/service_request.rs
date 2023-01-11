@@ -61,6 +61,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                      leader_id: ReplicaId,
                      previous_log_index: Option<u64>,
                      previous_log_term: Option<u64>,
+                     leader_commit_index: Option<u64>,
                      entry: Option<Entry>,
     ) -> ServiceRequest<AppendEntries, ()> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
@@ -74,7 +75,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 entry,
                 previous_log_index,
                 previous_log_term,
-                leader_commit_index: None,
+                leader_commit_index,
             },
             Box::new(ReplicateLogClient {}),
             correlation_id,

@@ -129,6 +129,7 @@ impl FollowerState {
             self.state.get_replica_reference().get_id(),
             previous_log_index,
             previous_log_term,
+            self.state.get_replicated_log().get_commit_index(),
             entry,
         );
     }
@@ -205,6 +206,79 @@ mod tests {
 
         let payload = service_request.get_payload();
         assert_eq!(1, payload.term);
+    }
+
+    #[test]
+    fn service_request_with_no_leader_commit_index() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let follower_state = FollowerState::new(
+            state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        );
+
+        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+            (peer, 1),
+            1,
+        );
+
+        let payload = service_request.get_payload();
+        assert_eq!(None, payload.leader_commit_index);
+    }
+
+    #[test]
+    fn service_request_with_leader_commit_index() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            state.get_replicated_log().append_command(
+                &command,
+                1,
+            );
+
+            state.get_replicated_log().acknowledge_log_entry_at(0);
+            state.get_replicated_log().acknowledge_log_entry_at(0);
+            state.get_replicated_log().commit();
+            return state;
+        });
+
+        let follower_state = FollowerState::new(
+            state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        );
+
+        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+            (peer, 1),
+            1,
+        );
+
+        let payload = service_request.get_payload();
+        assert_eq!(Some(0), payload.leader_commit_index);
     }
 
     #[test]
