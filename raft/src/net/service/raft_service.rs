@@ -189,8 +189,10 @@ impl Raft for RaftService {
         let handler = async move {
             let term = state.get_term();
             if response.term > term {
-                state.change_to_follower(response.term);
-            } else {
+                state.clone().change_to_follower(response.term);
+            }
+            let replica_role = state.get_role();
+            if replica_role == ReplicaRole::Leader {
                 if response.success {
                     let replicated_log = state.get_replicated_log();
                     let log_entry_index = response.log_entry_index.unwrap() as usize;
@@ -848,7 +850,9 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            return State::new(Arc::new(replica), HeartbeatConfig::default());
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.clone().change_to_leader();
+            return state;
         });
 
         let inner_state = state.clone();
@@ -856,7 +860,7 @@ mod tests {
             let raft_service = RaftService::new(inner_state.clone());
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
                 term: 3,
-                success: true,
+                success: false,
                 log_entry_index: Some(0),
                 correlation_id: 10
             });
@@ -867,6 +871,68 @@ mod tests {
         thread::sleep(Duration::from_millis(20));
         assert_eq!(ReplicaRole::Follower, state.get_role());
         assert_eq!(3, state.get_term());
+    }
+
+    #[test]
+    fn finish_replicate_log_and_leader_steps_down_does_not_acknowledge_following_log_responses() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_host_and_port];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("anything");
+            let command = Command { command: content.as_bytes().to_vec() };
+            let term = state.get_term();
+            state.get_replicated_log().append_command(&command, term);
+
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
+                term: 3,
+                success: false,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_1.add_host_port(peer_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
+
+            let mut response_from_peer_2 = Request::new(AppendEntriesResponse {
+                term: 0,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_2.add_host_port(peer_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_2).await;
+
+            let mut response_from_peer_3 = Request::new(AppendEntriesResponse {
+                term: 0,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_3.add_host_port(peer_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_3).await;
+        });
+
+        thread::sleep(Duration::from_millis(40));
+        assert_eq!(ReplicaRole::Follower, state.get_role());
+        assert_eq!(3, state.get_term());
+        assert_eq!(None, state.get_replicated_log().get_commit_index());
     }
 
     #[test]
@@ -926,6 +992,7 @@ mod tests {
             let term = state.get_term();
 
             state.get_replicated_log().append_command(&command, term);
+            state.clone().change_to_leader();
             return state;
         });
 
@@ -966,6 +1033,7 @@ mod tests {
             let term = state.get_term();
 
             state.get_replicated_log().append_command(&command, term);
+            state.clone().change_to_leader();
             return state;
         });
 
@@ -989,6 +1057,66 @@ mod tests {
             });
             response_from_peer_2.add_host_port(self_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_2).await;
+        });
+
+        thread::sleep(Duration::from_millis(20));
+        assert_eq!(0, state.get_replicated_log().get_commit_index().unwrap());
+    }
+
+    #[test]
+    fn finish_replicate_log_and_commit_with_one_false_response() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_host_and_port];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("anything");
+            let command = Command { command: content.as_bytes().to_vec() };
+            let term = state.get_term();
+
+            state.get_replicated_log().append_command(&command, term);
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
+                term: 0,
+                success: false,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_1.add_host_port(peer_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
+
+            let mut response_from_peer_2 = Request::new(AppendEntriesResponse {
+                term: 0,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_2.add_host_port(peer_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_2).await;
+
+            let mut response_from_peer_3 = Request::new(AppendEntriesResponse {
+                term: 0,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_3.add_host_port(peer_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_3).await;
         });
 
         thread::sleep(Duration::from_millis(20));
