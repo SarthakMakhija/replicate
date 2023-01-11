@@ -68,6 +68,7 @@ impl ReplicatedLog {
         }
     }
 
+    //TODO: Handle the gap in log entries
     pub(crate) fn maybe_advance_commit_index_to(&self, requested_commit_index: Option<u64>) {
         if let Some(commit_index) = requested_commit_index {
             let mut write_guard = self.replicated_log_state.write().unwrap();
