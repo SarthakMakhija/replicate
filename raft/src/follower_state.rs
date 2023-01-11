@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use dashmap::mapref::one::Ref;
 
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_and_port::HostAndPort;
@@ -47,7 +46,7 @@ impl FollowerState {
         let source_address = self.state.get_replica_reference().get_self_address();
 
         for peer in &self.peers {
-            let next_log_index_by_peer = self.next_log_index_by_peer.get(peer).unwrap();
+            let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
             let service_request = self.service_request(next_log_index_by_peer, term);
             let target_address = peer.clone();
 
@@ -56,7 +55,7 @@ impl FollowerState {
                     service_request,
                     source_address,
                     target_address,
-                )
+                ).await
             });
         }
     }
@@ -76,29 +75,32 @@ impl FollowerState {
     }
 
     fn retry_reducing_log_index(&self, peer: HostAndPort) {
-        let next_log_index_by_peer = self.next_log_index_by_peer.get(&peer).unwrap();
+        let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
         let (previous_log_index, _) = self.previous_log_index_term(&next_log_index_by_peer);
 
         if let Some(previous_log_index) = previous_log_index {
-            self.next_log_index_by_peer.entry(peer.clone())
-                .and_modify(|next_log_index| *next_log_index = previous_log_index);
+            {
+                self.next_log_index_by_peer.entry(peer.clone())
+                    .and_modify(|next_log_index| *next_log_index = previous_log_index);
+            }
 
             let term = self.state.get_term();
             let source_address = self.state.get_replica_reference().get_self_address();
-            let service_request = self.service_request(self.next_log_index_by_peer.get(&peer).unwrap(), term);
+            let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
+            let service_request = self.service_request(next_log_index_by_peer, term);
 
             tokio::spawn(async move {
                 AsyncNetwork::send_with_source_footprint(
                     service_request,
                     source_address,
                     peer,
-                )
+                ).await
             });
         }
     }
 
-    fn service_request(&self, next_log_index_by_peer: Ref<HostAndPort, NextLogIndex>, term: u64) -> ServiceRequest<AppendEntries, ()> {
-        let next_log_index = *(next_log_index_by_peer.value());
+    fn service_request(&self, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) -> ServiceRequest<AppendEntries, ()> {
+        let next_log_index = next_log_index_by_peer.1;
         let (previous_log_index, previous_log_term) = self.previous_log_index_term(&next_log_index_by_peer);
 
         let entry = match self.state.get_replicated_log().get_log_entry_at(next_log_index as usize) {
@@ -122,8 +124,8 @@ impl FollowerState {
         );
     }
 
-    fn previous_log_index_term(&self, next_log_index_by_peer: &Ref<HostAndPort, NextLogIndex>) -> (Option<u64>, Option<u64>) {
-        let next_log_index = *(next_log_index_by_peer.value());
+    fn previous_log_index_term(&self, next_log_index_by_peer: &(HostAndPort, NextLogIndex)) -> (Option<u64>, Option<u64>) {
+        let next_log_index = next_log_index_by_peer.1;
         let previous_log_index = if next_log_index >= 1 {
             Some(next_log_index - 1)
         } else {
@@ -135,6 +137,13 @@ impl FollowerState {
             Some(index) => self.state.get_replicated_log().get_log_term_at(index as usize)
         };
         return (previous_log_index, previous_log_term);
+    }
+
+    fn next_log_index_by_peer_for(&self, peer: &HostAndPort) -> (HostAndPort, NextLogIndex) {
+        return {
+            let next_log_index_by_peer = self.next_log_index_by_peer.get(peer).unwrap();
+            (next_log_index_by_peer.key().clone(), *next_log_index_by_peer.value())
+        };
     }
 }
 
@@ -180,9 +189,8 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
-        let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
-            next_log_index_by_peer,
+            (peer, 1),
             1,
         );
 
@@ -212,9 +220,8 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
-        let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
-            next_log_index_by_peer,
+            (peer, 1),
             1,
         );
 
@@ -252,9 +259,8 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
-        let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
-            next_log_index_by_peer,
+            (peer, 1),
             1,
         );
 
@@ -285,9 +291,8 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
-        let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
-            next_log_index_by_peer,
+            (peer, 1),
             1,
         );
 
@@ -328,9 +333,8 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
-        let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
-            next_log_index_by_peer,
+            (peer, 1),
             1,
         );
 
@@ -362,7 +366,7 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
-        follower_state.register(AppendEntriesResponse{
+        follower_state.register(AppendEntriesResponse {
             term: 1,
             success: true,
             log_entry_index: Some(10),
