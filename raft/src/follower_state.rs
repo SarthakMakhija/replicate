@@ -8,7 +8,7 @@ use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
 
 use crate::net::factory::service_request::ServiceRequestFactory;
-use crate::net::rpc::grpc::{AppendEntries, Command, Entry};
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
 use crate::state::State;
 
 type NextLogIndex = u64;
@@ -61,12 +61,28 @@ impl FollowerState {
         }
     }
 
-    pub(crate) fn retry_replicate_log(&self, peer: HostAndPort) {
+    pub(crate) fn register(&self, response: AppendEntriesResponse, from: HostAndPort) {
+        if response.success {
+            self.acknowledge_log_index(response, from);
+            return;
+        }
+        self.retry_reducing_log_index(from);
+    }
+
+    fn acknowledge_log_index(&self, response: AppendEntriesResponse, peer: HostAndPort) {
+        let response_log_entry_index = response.log_entry_index.unwrap();
+        self.next_log_index_by_peer.entry(peer)
+            .and_modify(|next_log_index| *next_log_index = response_log_entry_index + 1);
+    }
+
+    fn retry_reducing_log_index(&self, peer: HostAndPort) {
         let next_log_index_by_peer = self.next_log_index_by_peer.get(&peer).unwrap();
         let (previous_log_index, _) = self.previous_log_index_term(&next_log_index_by_peer);
 
         if let Some(previous_log_index) = previous_log_index {
-            self.next_log_index_by_peer.insert(peer.clone(), previous_log_index);
+            self.next_log_index_by_peer.entry(peer.clone())
+                .and_modify(|next_log_index| *next_log_index = previous_log_index);
+
             let term = self.state.get_term();
             let source_address = self.state.get_replica_reference().get_self_address();
             let service_request = self.service_request(self.next_log_index_by_peer.get(&peer).unwrap(), term);
@@ -126,16 +142,19 @@ impl FollowerState {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
+
     use tokio::runtime::Builder;
+
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceRequest;
     use replicate::net::replica::Replica;
+
     use crate::follower_state::FollowerState;
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::net::factory::service_request::BuiltInServiceRequestFactory;
+    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command};
     use crate::state::State;
-    use crate::net::rpc::grpc::{AppendEntries, Command};
 
     #[test]
     fn service_request_with_term() {
@@ -151,20 +170,20 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state =  State::new(Arc::new(replica), HeartbeatConfig::default());
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             state.change_to_candidate();
             return state;
         });
 
         let follower_state = FollowerState::new(
             state,
-            Arc::new(BuiltInServiceRequestFactory::new())
+            Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
             next_log_index_by_peer,
-            1
+            1,
         );
 
         let payload = service_request.get_payload();
@@ -190,13 +209,13 @@ mod tests {
 
         let follower_state = FollowerState::new(
             state,
-            Arc::new(BuiltInServiceRequestFactory::new())
+            Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
             next_log_index_by_peer,
-            1
+            1,
         );
 
         let payload = service_request.get_payload();
@@ -230,13 +249,13 @@ mod tests {
 
         let follower_state = FollowerState::new(
             state,
-            Arc::new(BuiltInServiceRequestFactory::new())
+            Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
             next_log_index_by_peer,
-            1
+            1,
         );
 
         let payload = service_request.get_payload();
@@ -263,13 +282,13 @@ mod tests {
 
         let follower_state = FollowerState::new(
             state,
-            Arc::new(BuiltInServiceRequestFactory::new())
+            Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
             next_log_index_by_peer,
-            1
+            1,
         );
 
         let payload = service_request.get_payload();
@@ -306,18 +325,52 @@ mod tests {
 
         let follower_state = FollowerState::new(
             state,
-            Arc::new(BuiltInServiceRequestFactory::new())
+            Arc::new(BuiltInServiceRequestFactory::new()),
         );
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
             next_log_index_by_peer,
-            1
+            1,
         );
 
         let payload = service_request.get_payload();
         let entry = payload.entry.as_ref().unwrap();
         assert_eq!(1, entry.term);
         assert_eq!(1, entry.index);
+    }
+
+    #[test]
+    fn register_success_response_from_peer() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let follower_state = FollowerState::new(
+            state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        );
+
+        follower_state.register(AppendEntriesResponse{
+            term: 1,
+            success: true,
+            log_entry_index: Some(10),
+            correlation_id: 10,
+        }, peer.clone());
+
+
+        let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
+        assert_eq!(11, *(next_log_index_by_peer.value()));
     }
 }
