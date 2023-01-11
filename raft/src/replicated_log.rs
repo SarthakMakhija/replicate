@@ -60,10 +60,26 @@ impl ReplicatedLog {
         let starting_commit_index: usize = match replicated_log_state.commit_index {
             None => 0,
             Some(commit_index) => (commit_index + 1) as usize
-        } ;
+        };
         for commit_index in starting_commit_index..replicated_log_state.log_entries.len() {
             if self._is_entry_replicated(commit_index, replicated_log_state) {
                 replicated_log_state.commit_index = Some(commit_index as u64);
+            }
+        }
+    }
+
+    pub(crate) fn maybe_advance_commit_index_to(&self, requested_commit_index: Option<u64>) {
+        if let Some(commit_index) = requested_commit_index {
+            let mut write_guard = self.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+
+            let self_commit_index = match replicated_log_state.commit_index {
+                None => 0,
+                Some(commit_index) => commit_index
+            };
+
+            if commit_index >= self_commit_index {
+                replicated_log_state.commit_index = requested_commit_index;
             }
         }
     }
@@ -229,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn commit_index_for_few_entry() {
+    fn commit_index_for_few_entries() {
         let replicated_log = ReplicatedLog::new(1);
 
         for _count in 1..=3 {
@@ -261,5 +277,61 @@ mod tests {
 
         replicated_log.commit();
         assert_eq!(Some(1), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn do_not_advance_commit_index() {
+        let replicated_log = ReplicatedLog::new(1);
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+
+        replicated_log.append_command(&command, 1);
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.commit();
+
+        replicated_log.maybe_advance_commit_index_to(None);
+        assert_eq!(Some(0), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn do_not_advance_commit_index_as_the_requested_commit_index_is_smaller() {
+        let replicated_log = ReplicatedLog::new(1);
+        for _count in 1..=2 {
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            replicated_log.append_command(&command, 1);
+        }
+
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.acknowledge_log_entry_at(1);
+        replicated_log.commit();
+
+        replicated_log.maybe_advance_commit_index_to(Some(0));
+        assert_eq!(Some(1), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn advance_commit_index_as_requested_commit_index_is_the_first() {
+        let replicated_log = ReplicatedLog::new(1);
+
+        replicated_log.maybe_advance_commit_index_to(Some(0));
+        assert_eq!(Some(0), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn advance_commit_index() {
+        let replicated_log = ReplicatedLog::new(1);
+        for _count in 1..=2 {
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            replicated_log.append_command(&command, 1);
+        }
+
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.acknowledge_log_entry_at(1);
+        replicated_log.commit();
+
+        replicated_log.maybe_advance_commit_index_to(Some(2));
+        assert_eq!(Some(2), replicated_log.get_commit_index())
     }
 }
