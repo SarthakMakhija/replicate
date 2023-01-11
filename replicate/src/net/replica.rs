@@ -111,8 +111,7 @@ impl Replica {
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response>,
               F: Fn(Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
-              T: Future + Send + 'static,
-              T::Output: Send + 'static {
+              T: Future<Output = ()> + Send + 'static{
         let peer_addresses = self.peer_addresses.clone();
 
         for address in peer_addresses {
@@ -131,7 +130,7 @@ impl Replica {
                 ).await;
 
                 if let Some(handler) = peer_handler_generator(response) {
-                    singular_update_queue.submit(handler);
+                    let _ = singular_update_queue.add_async(handler).await;
                 }
             });
         }
