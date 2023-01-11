@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
+use tokio::task::JoinHandle;
 
 use replicate::net::connect::async_network::AsyncNetwork;
+use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
 
@@ -41,23 +43,29 @@ impl FollowerState {
         return follower_state;
     }
 
-    pub(crate) fn replicate_log(&self) {
+    pub(crate) fn replicate_log(&self) -> Vec<JoinHandle<Result<(), ServiceResponseError>>> {
         let term = self.state.get_term();
         let source_address = self.state.get_replica_reference().get_self_address();
+        let mut task_handles = Vec::new();
 
         for peer in &self.peers {
             let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
+            println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
+
             let service_request = self.service_request(next_log_index_by_peer, term);
             let target_address = peer.clone();
 
-            tokio::spawn(async move {
-                AsyncNetwork::send_with_source_footprint(
-                    service_request,
-                    source_address,
-                    target_address,
-                ).await
-            });
+            task_handles.push(
+                tokio::spawn(async move {
+                    AsyncNetwork::send_with_source_footprint(
+                        service_request,
+                        source_address,
+                        target_address,
+                    ).await
+                })
+            );
         }
+        return task_handles;
     }
 
     pub(crate) fn register(&self, response: AppendEntriesResponse, from: HostAndPort) {
@@ -89,6 +97,7 @@ impl FollowerState {
             let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
             let service_request = self.service_request(next_log_index_by_peer, term);
 
+            println!("retrying log replication at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
             tokio::spawn(async move {
                 AsyncNetwork::send_with_source_footprint(
                     service_request,
