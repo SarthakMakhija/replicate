@@ -182,21 +182,26 @@ impl Raft for RaftService {
     async fn finish_replicate_log(&self, request: Request<AppendEntriesResponse>) -> Result<Response<()>, tonic::Status> {
         let originating_host_port = request.try_referral_host_port()?;
         let response = request.into_inner();
-        println!("received AppendEntriesResponse with success? {}", response.success);
+        println!("received AppendEntriesResponse with success? {} and term {}", response.success, response.term);
 
         let follower_state = self.follower_state.clone();
         let state = self.state.clone();
         let handler = async move {
-            if response.success {
-                let replicated_log = state.get_replicated_log();
-                let log_entry_index = response.log_entry_index.unwrap() as usize;
+            let term = state.get_term();
+            if response.term > term {
+                state.change_to_follower(response.term);
+            } else {
+                if response.success {
+                    let replicated_log = state.get_replicated_log();
+                    let log_entry_index = response.log_entry_index.unwrap() as usize;
 
-                replicated_log.acknowledge_log_entry_at(log_entry_index);
-                if replicated_log.is_entry_replicated(log_entry_index) {
-                    replicated_log.commit();
+                    replicated_log.acknowledge_log_entry_at(log_entry_index);
+                    if replicated_log.is_entry_replicated(log_entry_index) {
+                        replicated_log.commit();
+                    }
                 }
+                follower_state.register(response, originating_host_port);
             }
-            follower_state.register(response, originating_host_port);
         };
 
         let _ = &self.state.get_replica_reference().add_async_to_queue(handler).await;
@@ -830,6 +835,78 @@ mod tests {
     }
 
     #[test]
+    fn finish_replicate_log_and_leader_steps_down() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
+                term: 3,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_1.add_host_port(self_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
+        });
+
+        thread::sleep(Duration::from_millis(20));
+        assert_eq!(ReplicaRole::Follower, state.get_role());
+        assert_eq!(3, state.get_term());
+    }
+
+    #[test]
+    fn finish_replicate_log_and_leader_does_not_step_down() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+            let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
+                term: 0,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10
+            });
+            response_from_peer_1.add_host_port(self_host_and_port);
+            let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
+        });
+
+        thread::sleep(Duration::from_millis(20));
+        assert_eq!(ReplicaRole::Leader, state.get_role());
+        assert_eq!(0, state.get_term());
+    }
+
+    #[test]
     fn finish_replicate_log_and_do_not_commit() {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
         let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
@@ -896,7 +973,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
-                term: 1,
+                term: 0,
                 success: true,
                 log_entry_index: Some(0),
                 correlation_id: 10
@@ -905,7 +982,7 @@ mod tests {
             let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
 
             let mut response_from_peer_2 = Request::new(AppendEntriesResponse {
-                term: 1,
+                term: 0,
                 success: true,
                 log_entry_index: Some(0),
                 correlation_id: 10
