@@ -46,9 +46,10 @@ fn replicate_log_successfully() {
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
     blocking_runtime.block_on(async {
-        send_a_command(self_host_and_port, Command {
-            command: content.as_bytes().to_vec()
-        }).await.unwrap();
+        send_commands(
+            self_host_and_port,
+            vec![Command { command: content.as_bytes().to_vec() }],
+        ).await.unwrap();
     });
 
     thread::sleep(Duration::from_millis(60));
@@ -68,10 +69,12 @@ fn replicate_log_successfully() {
     });
 }
 
-async fn send_a_command(address: HostAndPort, command: Command) -> Result<Response<()>, ServiceResponseError> {
+async fn send_commands(address: HostAndPort, commands: Vec<Command>) -> Result<Response<()>, ServiceResponseError> {
     let mut client = RaftClient::connect(address.as_string_with_http()).await?;
-    let response = client.execute(Request::new(command)).await?;
-    return Ok(response);
+    for command in commands {
+        client.execute(Request::new(command)).await?;
+    }
+    return Ok(Response::new(()));
 }
 
 fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<HostAndPort>) -> (AllServicesShutdownHandle, Arc<State>) {
