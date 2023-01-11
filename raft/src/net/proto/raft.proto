@@ -35,6 +35,7 @@ message AppendEntries {
   optional Entry entry = 4;
   optional uint64 previous_log_index = 5;
   optional uint64 previous_log_term = 6;
+  optional uint64 leader_commit_index = 7;
 }
 
 message AppendEntriesResponse {

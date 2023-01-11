@@ -126,7 +126,8 @@ mod tests {
                 correlation_id: 10,
                 entry: None,
                 previous_log_index: None,
-                previous_log_term: None
+                previous_log_term: None,
+                leader_commit_index: None,
             }
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
@@ -148,7 +149,8 @@ mod tests {
                 correlation_id: 10,
                 previous_log_index: None,
                 previous_log_term: None,
-                entry: None
+                entry: None,
+                leader_commit_index: None,
             }
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);

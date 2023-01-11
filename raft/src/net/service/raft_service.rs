@@ -397,6 +397,7 @@ mod tests {
                         entry: None,
                         previous_log_index: None,
                         previous_log_term: None,
+                        leader_commit_index: None,
                     }
                 )
             ).await;
@@ -433,6 +434,7 @@ mod tests {
                         entry: None,
                         previous_log_index: None,
                         previous_log_term: None,
+                        leader_commit_index: None,
                     }
                 )
             ).await;
@@ -473,6 +475,7 @@ mod tests {
                         entry: None,
                         previous_log_index: None,
                         previous_log_term: None,
+                        leader_commit_index: None,
                     }
                 )
             ).await;
@@ -515,6 +518,7 @@ mod tests {
                         entry: None,
                         previous_log_index: None,
                         previous_log_term: None,
+                        leader_commit_index: None,
                     }
                 )
             ).await;
@@ -600,6 +604,7 @@ mod tests {
                 }),
                 previous_log_index: None,
                 previous_log_term: None,
+                leader_commit_index: None,
             });
             request.add_host_port(self_host_and_port);
 
@@ -647,6 +652,7 @@ mod tests {
                 }),
                 previous_log_index: None,
                 previous_log_term: None,
+                leader_commit_index: None,
             });
             request.add_host_port(self_host_and_port);
 
@@ -691,6 +697,7 @@ mod tests {
                 }),
                 previous_log_index: Some(0),
                 previous_log_term: Some(0),
+                leader_commit_index: None,
             });
             request.add_host_port(self_host_and_port);
 
@@ -741,6 +748,7 @@ mod tests {
                 }),
                 previous_log_index: Some(0),
                 previous_log_term: Some(0),
+                leader_commit_index: None,
             });
             request.add_host_port(self_host_and_port);
 

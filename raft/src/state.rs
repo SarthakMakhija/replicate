@@ -671,6 +671,7 @@ mod tests {
                         entry: None,
                         previous_log_index: None,
                         previous_log_term: None,
+                        leader_commit_index: None,
                     },
                     client,
                     correlation_id,
