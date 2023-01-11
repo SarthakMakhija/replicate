@@ -10,7 +10,6 @@ pub struct ReplicatedLog {
 
 struct ReplicatedLogState {
     log_entries: Vec<LogEntry>,
-    next_index: u64,
 }
 
 impl ReplicatedLog {
@@ -19,7 +18,6 @@ impl ReplicatedLog {
             majority_quorum,
             replicated_log_state: RwLock::new(ReplicatedLogState {
                 log_entries: Vec::new(),
-                next_index: 1,
             }),
         };
     }
@@ -30,26 +28,6 @@ impl ReplicatedLog {
             None => false,
             Some(log_entry) => log_entry.matches_term(term)
         };
-    }
-
-    pub(crate) fn get_previous_log_index(&self) -> Option<u64> {
-        let guard = self.replicated_log_state.read().unwrap();
-        let next_index = (*guard).next_index;
-        if next_index >= 1 {
-            return Some(next_index - 1);
-        }
-        return None;
-    }
-
-    pub(crate) fn reduce_next_index(&self) {
-        let mut write_guard = self.replicated_log_state.write().unwrap();
-        let mut replicated_log_state = &mut *write_guard;
-        replicated_log_state.next_index = replicated_log_state.next_index - 1;
-    }
-
-    pub(crate) fn get_next_log_index(&self) -> u64 {
-        let guard = self.replicated_log_state.read().unwrap();
-        return (*guard).next_index;
     }
 
     pub(crate) fn get_log_term_at(&self, index: usize) -> Option<u64> {
@@ -116,24 +94,6 @@ mod tests {
         assert_eq!(1, log_entry.get_term());
         assert_eq!(0, log_entry.get_index());
         assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
-    }
-
-    #[test]
-    fn get_non_existing_previous_log_index() {
-        let replicated_log = ReplicatedLog::new(2);
-        {
-            let mut guard = replicated_log.replicated_log_state.write().unwrap();
-            let replicated_log_state = &mut *guard;
-            replicated_log_state.next_index = replicated_log_state.next_index - 1;
-        }
-
-        assert_eq!(None, replicated_log.get_previous_log_index());
-    }
-
-    #[test]
-    fn get_previous_log_index() {
-        let replicated_log = ReplicatedLog::new(2);
-        assert_eq!(Some(0), replicated_log.get_previous_log_index());
     }
 
     #[test]

@@ -2,14 +2,12 @@ use std::sync::Arc;
 
 use tonic::{Request, Response};
 
-use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
-use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 
 use crate::follower_state::FollowerState;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry, RequestVote, RequestVoteResponse};
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::{ReplicaRole, State};
 
