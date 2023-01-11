@@ -150,14 +150,6 @@ impl Replica {
         let _ = singular_update_queue.add_spawn(handler);
     }
 
-    pub fn add_to_queue<F>(&self, handler: F) -> JoinHandle<<F as Future>::Output>
-        where
-            F: Future + Send + 'static,
-            F::Output: Send + 'static {
-        let singular_update_queue = &self.singular_update_queue;
-        return singular_update_queue.add(handler);
-    }
-
     pub fn register_response(&self, correlation_id: CorrelationId, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
         let _ = &self.request_waiting_list.handle_response(correlation_id, from, response);
     }
@@ -467,7 +459,7 @@ mod tests {
         });
 
         let (sender_one, mut receiver_one) = mpsc::channel(1);
-        let handle = replica.add_spawn_to_queue(async move {
+        let _ = replica.add_spawn_to_queue(async move {
             storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
             let _ = sender_one.send(("WAL".to_string(), "write-ahead log".to_string())).await;
         });

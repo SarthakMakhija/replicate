@@ -41,32 +41,20 @@ impl SingularUpdateQueue {
 
     pub(crate) async fn add_async<F>(&self, handler: F) -> Result<(), SendError<Task>>
         where
-            F: Future<Output = ()> + Send + 'static {
+            F: Future<Output=()> + Send + 'static {
         let block = Box::pin(handler);
         return self.sender.clone().send(Task { block }).await;
     }
 
     pub(crate) fn add_spawn<F>(&self, handler: F) -> JoinHandle<Result<(), SendError<Task>>>
         where
-            F: Future<Output = ()> + Send + 'static {
+            F: Future<Output=()> + Send + 'static {
         let block = Box::pin(handler);
         let sender = self.sender.clone();
 
         return self.task_submission_pool.spawn(async move {
             return sender.send(Task { block }).await;
         });
-    }
-
-    pub(crate) fn submit<F>(&self, handler: F)
-        where
-            F: Future + Send + 'static,
-            F::Output: Send + 'static { self.single_thread_pool.spawn(handler); }
-
-    pub(crate) fn add<F>(&self, handler: F) -> JoinHandle<<F as Future>::Output>
-        where
-            F: Future + Send + 'static,
-            F::Output: Send + 'static {
-        return self.single_thread_pool.spawn(handler);
     }
 
     pub(crate) fn shutdown(self) {
