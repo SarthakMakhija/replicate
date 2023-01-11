@@ -10,6 +10,7 @@ pub struct ReplicatedLog {
 
 struct ReplicatedLogState {
     log_entries: Vec<LogEntry>,
+    commit_index: Option<u64>,
 }
 
 impl ReplicatedLog {
@@ -18,6 +19,7 @@ impl ReplicatedLog {
             majority_quorum,
             replicated_log_state: RwLock::new(ReplicatedLogState {
                 log_entries: Vec::new(),
+                commit_index: None,
             }),
         };
     }
@@ -52,6 +54,25 @@ impl ReplicatedLog {
         return entry.is_replicated(self.majority_quorum);
     }
 
+    pub(crate) fn commit(&self) {
+        let mut write_guard = self.replicated_log_state.write().unwrap();
+        let replicated_log_state = &mut *write_guard;
+        let starting_commit_index: usize = match replicated_log_state.commit_index {
+            None => 0,
+            Some(commit_index) => (commit_index + 1) as usize
+        } ;
+        for commit_index in starting_commit_index..replicated_log_state.log_entries.len() {
+            if self._is_entry_replicated(commit_index, replicated_log_state) {
+                replicated_log_state.commit_index = Some(commit_index as u64);
+            }
+        }
+    }
+
+    pub(crate) fn get_commit_index(&self) -> Option<u64> {
+        let guard = self.replicated_log_state.read().unwrap();
+        return (*guard).commit_index;
+    }
+
     pub fn append_command(&self, command: &Command, term: u64) {
         let mut write_guard = self.replicated_log_state.write().unwrap();
         let replicated_log_state = &mut *write_guard;
@@ -72,6 +93,11 @@ impl ReplicatedLog {
             None => None,
             Some(entry) => Some(LogEntry::from(entry))
         };
+    }
+
+    fn _is_entry_replicated(&self, index: usize, replicated_log_state: &ReplicatedLogState) -> bool {
+        let entry = &replicated_log_state.log_entries[index];
+        return entry.is_replicated(self.majority_quorum);
     }
 }
 
@@ -180,5 +206,60 @@ mod tests {
         replicated_log.acknowledge_log_entry_at(0);
 
         assert_eq!(false, replicated_log.is_entry_replicated(0));
+    }
+
+    #[test]
+    fn initial_commit_index() {
+        let replicated_log = ReplicatedLog::new(2);
+
+        assert_eq!(None, replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn commit_index_for_first_entry() {
+        let replicated_log = ReplicatedLog::new(1);
+        let content = String::from("Content");
+        let command = Command { command: content.as_bytes().to_vec() };
+        replicated_log.append_command(&command, 1);
+
+        replicated_log.acknowledge_log_entry_at(0);
+
+        replicated_log.commit();
+        assert_eq!(Some(0), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn commit_index_for_few_entry() {
+        let replicated_log = ReplicatedLog::new(1);
+
+        for _count in 1..=3 {
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            replicated_log.append_command(&command, 1);
+        }
+
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.acknowledge_log_entry_at(1);
+        replicated_log.acknowledge_log_entry_at(2);
+
+        replicated_log.commit();
+        assert_eq!(Some(2), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn commit_index_with_a_non_replicated_entry() {
+        let replicated_log = ReplicatedLog::new(1);
+
+        for _count in 1..=3 {
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            replicated_log.append_command(&command, 1);
+        }
+
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.acknowledge_log_entry_at(1);
+
+        replicated_log.commit();
+        assert_eq!(Some(1), replicated_log.get_commit_index())
     }
 }
