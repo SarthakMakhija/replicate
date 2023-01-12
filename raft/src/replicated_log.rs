@@ -88,7 +88,7 @@ impl ReplicatedLog {
         }
     }
 
-    pub(crate) fn get_commit_index(&self) -> Option<u64> {
+    pub fn get_commit_index(&self) -> Option<u64> {
         let guard = self.replicated_log_state.read().unwrap();
         return (*guard).commit_index;
     }
