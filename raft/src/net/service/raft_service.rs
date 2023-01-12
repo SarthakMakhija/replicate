@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 use tonic::{Request, Response};
-use replicate::clock::clock::Clock;
 
+use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
+use replicate::callback::single_response_completion_callback::SingleResponseCompletionCallback;
+use replicate::clock::clock::Clock;
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
+use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 
 use crate::follower_state::FollowerState;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
@@ -18,6 +21,7 @@ pub struct RaftService {
     state: Arc<State>,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
     follower_state: Arc<FollowerState>,
+    pending_committed_log_entries: Arc<RequestWaitingList>,
 }
 
 impl RaftService {
@@ -30,6 +34,12 @@ impl RaftService {
             state,
             service_request_factory,
             follower_state: Arc::new(FollowerState::new(inner_state, inner_service_request_factory)),
+            pending_committed_log_entries: Arc::new(
+                RequestWaitingList::new(
+                    clock,
+                    RequestWaitingListConfig::default(),
+                )
+            ),
         };
     }
 }
@@ -188,6 +198,8 @@ impl Raft for RaftService {
 
         let follower_state = self.follower_state.clone();
         let state = self.state.clone();
+        let pending_committed_log_entries = self.pending_committed_log_entries.clone();
+
         let handler = async move {
             let term = state.get_term();
             if response.term > term {
@@ -201,7 +213,13 @@ impl Raft for RaftService {
 
                     replicated_log.acknowledge_log_entry_at(log_entry_index);
                     if replicated_log.is_entry_replicated(log_entry_index) {
-                        replicated_log.commit();
+                        replicated_log.commit(|commit_index| {
+                            pending_committed_log_entries.handle_response(
+                                commit_index,
+                                state.get_replica_reference().get_self_address(),
+                                Ok(Box::new(()))
+                            );
+                        });
                     }
                 }
                 follower_state.register(response, originating_host_port);
@@ -219,15 +237,28 @@ impl Raft for RaftService {
         let command = request.into_inner();
         let follower_state = self.follower_state.clone();
 
+        let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term: u64 = state.get_term();
-            state.get_replicated_log().append_command(&command, term);
-
+            let index = state.get_replicated_log().append_command(&command, term);
             let _ = follower_state.replicate_log();
+            let _ = sender.send(index).await;
         };
 
         let _ = replica.add_async_to_queue(handler).await;
-        return Ok(Response::new(()));
+        let entry_index = receiver.recv().await.unwrap();
+        let response_callback = SingleResponseCompletionCallback::<()>::new();
+
+        self.pending_committed_log_entries.add(entry_index,
+                                               self.state.get_replica_reference().get_self_address(),
+                                               response_callback.clone());
+
+        return match response_callback.handle().await {
+            QuorumCompletionResponse::Success(_) =>
+                Ok(Response::new(())),
+            _ =>
+                Err(tonic::Status::unknown(format!("failed receiving the response of command execution for raft log entry index {}", entry_index))),
+        };
     }
 }
 
@@ -564,15 +595,26 @@ mod tests {
         });
 
         let inner_state = state.clone();
-        let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
+        let raft_service = Arc::new(
+            RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()))
+        );
+        let inner_raft_service = raft_service.clone();
+        let _ = runtime.spawn(async move {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
             let mut request = Request::new(command);
             request.add_host_port(self_host_and_port);
 
-            let _ = raft_service.execute(request).await;
+            let _ = inner_raft_service.execute(request).await;
+        });
+
+        runtime.block_on(async {
+            raft_service.pending_committed_log_entries.handle_response(
+                0,
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060),
+                Ok(Box::new(()))
+            );
         });
 
         thread::sleep(Duration::from_millis(5));

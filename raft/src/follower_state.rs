@@ -263,7 +263,7 @@ mod tests {
 
             state.get_replicated_log().acknowledge_log_entry_at(0);
             state.get_replicated_log().acknowledge_log_entry_at(0);
-            state.get_replicated_log().commit();
+            state.get_replicated_log().commit(|_| {});
             return state;
         });
 

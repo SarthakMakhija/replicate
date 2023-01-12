@@ -40,8 +40,8 @@ fn replicate_log_successfully() {
     election.start();
 
     thread::sleep(Duration::from_millis(20));
-
     assert_eq!(ReplicaRole::Leader, state.get_role());
+
     let content = String::from("replicate");
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
@@ -51,8 +51,6 @@ fn replicate_log_successfully() {
             vec![Command { command: content.as_bytes().to_vec() }],
         ).await.unwrap();
     });
-
-    thread::sleep(Duration::from_millis(60));
 
     blocking_runtime.block_on(async move {
         assert_eq!(1, state.get_replicated_log().total_log_entries());

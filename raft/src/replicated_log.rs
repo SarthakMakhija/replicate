@@ -54,7 +54,8 @@ impl ReplicatedLog {
         return entry.is_replicated(self.majority_quorum);
     }
 
-    pub(crate) fn commit(&self) {
+    pub(crate) fn commit<F>(&self, commit_execution_block: F)
+        where F: Fn(u64) -> () {
         let mut write_guard = self.replicated_log_state.write().unwrap();
         let replicated_log_state = &mut *write_guard;
         let starting_commit_index: usize = match replicated_log_state.commit_index {
@@ -63,7 +64,9 @@ impl ReplicatedLog {
         };
         for commit_index in starting_commit_index..replicated_log_state.log_entries.len() {
             if self._is_entry_replicated(commit_index, replicated_log_state) {
-                replicated_log_state.commit_index = Some(commit_index as u64);
+                let index = commit_index as u64;
+                replicated_log_state.commit_index = Some(index);
+                commit_execution_block(index);
             }
         }
     }
@@ -123,6 +126,7 @@ impl ReplicatedLog {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
     use crate::log_entry::LogEntry;
     use crate::net::rpc::grpc::Command;
     use crate::replicated_log::ReplicatedLog;
@@ -261,7 +265,7 @@ mod tests {
 
         replicated_log.acknowledge_log_entry_at(0);
 
-        replicated_log.commit();
+        replicated_log.commit(|_| {});
         assert_eq!(Some(0), replicated_log.get_commit_index())
     }
 
@@ -279,8 +283,33 @@ mod tests {
         replicated_log.acknowledge_log_entry_at(1);
         replicated_log.acknowledge_log_entry_at(2);
 
-        replicated_log.commit();
+        replicated_log.commit(|_| {});
         assert_eq!(Some(2), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn commit_index_for_few_entries_with_execution_block() {
+        let replicated_log = ReplicatedLog::new(1);
+
+        for _count in 1..=3 {
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            replicated_log.append_command(&command, 1);
+        }
+
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.acknowledge_log_entry_at(1);
+        replicated_log.acknowledge_log_entry_at(2);
+
+        let commit_count = Arc::new(Mutex::new(0));
+        replicated_log.commit(|_commit_index| {
+            let mut guard = commit_count.lock().unwrap();
+            *guard = *guard + 1;
+        });
+
+        let count = commit_count.lock().unwrap();
+        assert_eq!(3, *count);
+        assert_eq!(Some(2), replicated_log.get_commit_index());
     }
 
     #[test]
@@ -296,7 +325,7 @@ mod tests {
         replicated_log.acknowledge_log_entry_at(0);
         replicated_log.acknowledge_log_entry_at(1);
 
-        replicated_log.commit();
+        replicated_log.commit(|_| {});
         assert_eq!(Some(1), replicated_log.get_commit_index())
     }
 
@@ -308,7 +337,7 @@ mod tests {
 
         replicated_log.append_command(&command, 1);
         replicated_log.acknowledge_log_entry_at(0);
-        replicated_log.commit();
+        replicated_log.commit(|_| {});
 
         replicated_log.maybe_advance_commit_index_to(None);
         assert_eq!(Some(0), replicated_log.get_commit_index())
@@ -325,7 +354,7 @@ mod tests {
 
         replicated_log.acknowledge_log_entry_at(0);
         replicated_log.acknowledge_log_entry_at(1);
-        replicated_log.commit();
+        replicated_log.commit(|_| {});
 
         replicated_log.maybe_advance_commit_index_to(Some(0));
         assert_eq!(Some(1), replicated_log.get_commit_index())
@@ -350,7 +379,7 @@ mod tests {
 
         replicated_log.acknowledge_log_entry_at(0);
         replicated_log.acknowledge_log_entry_at(1);
-        replicated_log.commit();
+        replicated_log.commit(|_| {});
 
         replicated_log.maybe_advance_commit_index_to(Some(2));
         assert_eq!(Some(2), replicated_log.get_commit_index())
