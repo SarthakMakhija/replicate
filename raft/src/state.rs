@@ -206,6 +206,7 @@ impl State {
 
             let response_handler_generator =
                 move |response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                    println!("response is ## {:?}", response);
                     match response {
                         Ok(response) => Some(self.clone().get_heartbeat_response_handler(response)),
                         Err(_) => None
@@ -609,6 +610,8 @@ mod tests {
                 }),
             );
             state.clone().change_to_leader();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
             return state;
         });
 
@@ -617,7 +620,7 @@ mod tests {
             let cloned = inner_state.clone();
             let _ = inner_state.get_heartbeat_sender().await;
 
-            thread::sleep(Duration::from_millis(8));
+            thread::sleep(Duration::from_millis(15));
 
             assert_eq!(ReplicaRole::Follower, cloned.get_role());
             assert_eq!(5, cloned.get_term());
