@@ -59,7 +59,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(inner_state)),
+            RaftServer::new(RaftService::new(inner_state, Arc::new(SystemClock::new()))),
             all_services_shutdown_receiver,
         ).await;
     });
@@ -82,7 +82,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(state)),
+            RaftServer::new(RaftService::new(state, Arc::new(SystemClock::new()))),
             all_services_shutdown_receiver,
         ).await;
     });
@@ -105,7 +105,7 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
     runtime.spawn(async move {
         ServiceRegistration::register_services_on(
             &self_host_and_port,
-            RaftServer::new(RaftService::new(state)),
+            RaftServer::new(RaftService::new(state, Arc::new(SystemClock::new()))),
             all_services_shutdown_receiver,
         ).await;
     });

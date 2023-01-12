@@ -1,10 +1,12 @@
 use std::sync::Arc;
-use tokio::sync::mpsc;
 
+use tokio::sync::mpsc;
 use tonic::{Request, Response};
+use replicate::clock::clock::Clock;
 
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
+use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 
 use crate::follower_state::FollowerState;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
@@ -19,7 +21,7 @@ pub struct RaftService {
 }
 
 impl RaftService {
-    pub fn new(state: Arc<State>) -> Self {
+    pub fn new(state: Arc<State>, clock: Arc<dyn Clock>) -> Self {
         let inner_state = state.clone();
         let service_request_factory = Arc::new(BuiltInServiceRequestFactory::new());
         let inner_service_request_factory = service_request_factory.clone();
@@ -269,7 +271,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
 
             let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
@@ -304,7 +306,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
 
             let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
@@ -339,7 +341,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
 
             let mut request = Request::new(RequestVote { term: 10, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
@@ -370,7 +372,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
 
             let mut request = Request::new(RequestVote { term: 0, replica_id: 30, correlation_id: 20 });
             request.add_host_port(self_host_and_port);
@@ -400,7 +402,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let _ = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
@@ -437,7 +439,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
@@ -477,7 +479,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
 
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
@@ -521,7 +523,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
@@ -563,7 +565,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
@@ -602,7 +604,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
@@ -650,7 +652,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
@@ -695,7 +697,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
@@ -746,7 +748,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
@@ -803,7 +805,7 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
@@ -857,12 +859,12 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
                 term: 3,
                 success: false,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_1.add_host_port(self_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
@@ -900,12 +902,12 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
                 term: 3,
                 success: false,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_1.add_host_port(peer_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
@@ -914,7 +916,7 @@ mod tests {
                 term: 0,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_2.add_host_port(peer_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_2).await;
@@ -923,7 +925,7 @@ mod tests {
                 term: 0,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_3.add_host_port(peer_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_3).await;
@@ -956,12 +958,12 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
                 term: 0,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_1.add_host_port(self_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
@@ -998,12 +1000,12 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
                 term: 1,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_1.add_host_port(self_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
@@ -1039,12 +1041,12 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
                 term: 0,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_1.add_host_port(self_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
@@ -1053,7 +1055,7 @@ mod tests {
                 term: 0,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_2.add_host_port(self_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_2).await;
@@ -1090,12 +1092,12 @@ mod tests {
 
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
+            let raft_service = RaftService::new(inner_state.clone(), Arc::new(SystemClock::new()));
             let mut response_from_peer_1 = Request::new(AppendEntriesResponse {
                 term: 0,
                 success: false,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_1.add_host_port(peer_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_1).await;
@@ -1104,7 +1106,7 @@ mod tests {
                 term: 0,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_2.add_host_port(peer_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_2).await;
@@ -1113,7 +1115,7 @@ mod tests {
                 term: 0,
                 success: true,
                 log_entry_index: Some(0),
-                correlation_id: 10
+                correlation_id: 10,
             });
             response_from_peer_3.add_host_port(peer_host_and_port);
             let _ = raft_service.finish_replicate_log(response_from_peer_3).await;
