@@ -247,7 +247,7 @@ mod tests {
 
     use tokio::runtime::Builder;
 
-    use replicate::clock::clock::SystemClock;
+    use replicate::clock::clock::{Clock, SystemClock};
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::replica::Replica;
 
@@ -467,7 +467,12 @@ mod tests {
         };
 
         thread::sleep(Duration::from_millis(2));
-        let handle = tokio::spawn(state.get_heartbeat_checker(
+        {
+            let mut guard = state.consensus_state.write().unwrap();
+            let mut consensus_state = &mut *guard;
+            consensus_state.creation_time = SystemClock::new().now();
+        }
+        let handle = tokio::spawn(state.clone().get_heartbeat_checker(
             heartbeat_timeout,
             election_starter,
         ));
