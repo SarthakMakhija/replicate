@@ -90,13 +90,15 @@ impl ReplicatedLog {
         return (*guard).commit_index;
     }
 
-    pub fn append_command(&self, command: &Command, term: u64) {
+    pub fn append_command(&self, command: &Command, term: u64) -> u64 {
         let mut write_guard = self.replicated_log_state.write().unwrap();
         let replicated_log_state = &mut *write_guard;
         let log_entries_size = replicated_log_state.log_entries.len();
 
         let log_entry = LogEntry::new(term, log_entries_size as u64, command);
         replicated_log_state.log_entries.push(log_entry);
+
+        return log_entries_size as u64;
     }
 
     pub fn total_log_entries(&self) -> usize {
@@ -131,12 +133,30 @@ mod tests {
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
 
-        replicated_log.append_command(&command, 1);
+        let index = replicated_log.append_command(&command, 1);
 
         let log_entry = replicated_log.get_log_entry_at(0).unwrap();
+        assert_eq!(0, index);
         assert_eq!(1, log_entry.get_term());
         assert_eq!(0, log_entry.get_index());
         assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+    }
+
+    #[test]
+    fn append_multiple_commands() {
+        let replicated_log = ReplicatedLog::new(2);
+        for count in 1..=3 {
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+
+            let index = replicated_log.append_command(&command, 1);
+            let log_entry = replicated_log.get_log_entry_at(0).unwrap();
+
+            assert_eq!(count - 1, index);
+            assert_eq!(1, log_entry.get_term());
+            assert_eq!(0, log_entry.get_index());
+            assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+        }
     }
 
     #[test]
