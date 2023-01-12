@@ -25,6 +25,7 @@ impl SingularUpdateQueue {
             .build()
             .unwrap();
 
+        //TODO: make 100 configurable
         let (sender, receiver) = mpsc::channel::<Task>(100);
         Self::spin(&single_thread_pool, receiver);
 
@@ -32,7 +33,7 @@ impl SingularUpdateQueue {
             sender,
             single_thread_pool,
             task_submission_pool: Builder::new_multi_thread()
-                .worker_threads(10)
+                .worker_threads(10)//TODO: make 10 configurable
                 .enable_all()
                 .build()
                 .unwrap(),
