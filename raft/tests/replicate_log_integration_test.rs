@@ -39,7 +39,7 @@ fn replicate_log() {
     let election = Election::new(state.clone());
     election.start();
 
-    thread::sleep(Duration::from_millis(20));
+    thread::sleep(Duration::from_millis(30));
     assert_eq!(ReplicaRole::Leader, state.get_role());
 
     let content = String::from("replicate");
@@ -87,7 +87,7 @@ fn replicate_multiple_logs_sequentially() {
     let election = Election::new(state.clone());
     election.start();
 
-    thread::sleep(Duration::from_millis(20));
+    thread::sleep(Duration::from_millis(30));
     assert_eq!(ReplicaRole::Leader, state.get_role());
 
     let content_replicate = String::from("replicate");
