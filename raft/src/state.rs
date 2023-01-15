@@ -127,7 +127,7 @@ impl State {
         let clock = self.clock.clone();
 
         return async move {
-            let write_guard = inner_self.consensus_state.write().unwrap();
+            let write_guard = inner_self.consensus_state.read().unwrap();
             let consensus_state = &*write_guard;
             match consensus_state.heartbeat_received_time {
                 Some(last_heartbeat_time) => {
