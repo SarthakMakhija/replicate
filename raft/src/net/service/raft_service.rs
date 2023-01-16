@@ -240,9 +240,9 @@ impl Raft for RaftService {
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term: u64 = state.get_term();
-            let index = state.get_replicated_log().append_command(&command, term);
-            let _ = follower_state.replicate_log();
-            let _ = sender.send(index).await;
+            let log_entry_index = state.get_replicated_log().append_command(&command, term);
+            let _ = follower_state.replicate_log_at(log_entry_index);
+            let _ = sender.send(log_entry_index).await;
         };
 
         let _ = replica.add_async_to_queue(handler).await;
