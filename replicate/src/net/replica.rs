@@ -143,13 +143,6 @@ impl Replica {
         let _ = singular_update_queue.add_async(handler).await;
     }
 
-    pub fn add_spawn_to_queue<F>(&self, handler: F)
-        where
-            F: Future<Output=()> + Send + 'static {
-        let singular_update_queue = &self.singular_update_queue;
-        let _ = singular_update_queue.add_spawn(handler);
-    }
-
     pub fn register_response(&self, correlation_id: CorrelationId, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
         let _ = &self.request_waiting_list.handle_response(correlation_id, from, response);
     }
@@ -440,35 +433,6 @@ mod tests {
             let read_storage = readable_storage.read().unwrap();
 
             assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
-        });
-    }
-
-    #[test]
-    fn add_to_queue() {
-        let any_replica_port = 8988;
-        let storage = Arc::new(RwLock::new(HashMap::new()));
-
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let replica = blocking_runtime.block_on(async {
-            return Replica::new(
-                10,
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-                vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
-                Arc::new(SystemClock::new()),
-            );
-        });
-
-        let (sender_one, mut receiver_one) = mpsc::channel(1);
-        let _ = replica.add_spawn_to_queue(async move {
-            storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
-            let _ = sender_one.send(("WAL".to_string(), "write-ahead log".to_string())).await;
-        });
-
-        blocking_runtime.block_on(async {
-            let (key, value) = receiver_one.recv().await.unwrap();
-
-            assert_eq!("WAL".to_string(), key);
-            assert_eq!("write-ahead log".to_string(), value);
         });
     }
 
