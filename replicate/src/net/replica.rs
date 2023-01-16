@@ -656,6 +656,56 @@ mod tests {
         });
     }
 
+    #[test]
+    fn send_one_way_to_the_replicas_with_response_hook_and_callback() {
+        let runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let inner_replica = replica.clone();
+        let self_address = inner_replica.self_address;
+
+        runtime.block_on(async move {
+            let correlation_id_generator = FixedCorrelationIdGenerator::new(30);
+            let service_request_constructor = move || {
+                ServiceRequest::new(
+                    GetValueRequest {},
+                    Box::new(GetValueRequestSuccessClient {}),
+                    correlation_id_generator.generate(),
+                )
+            };
+
+            let  replica = inner_replica.clone();
+            let response_handler_generator = move |_response: Result<(), ServiceResponseError>| {
+                let replica = inner_replica.clone();
+                return Some(async move {
+                    replica.register_response(
+                        30,
+                        self_address,
+                        Ok(Box::new(String::from("success response"))),
+                    )
+                });
+            };
+            let callback = AsyncQuorumCallback::<String>::new(1, 1);
+            replica.send_to_replicas_with_handler_hook(
+                service_request_constructor,
+                Arc::new(response_handler_generator),
+                 || Some(callback.clone()),
+            ).await;
+
+            let completion_response = callback.handle().await;
+            assert_eq!(&String::from("success response"),
+                       completion_response.success_response().unwrap().get(&replica.get_self_address()).unwrap()
+            );
+        });
+    }
+
     fn handler(response_counter: &Arc<ResponseCounter>, value_add: i8, sender: Sender<()>) -> impl Future<Output=()> {
         let response_counter = response_counter.clone();
         return async move {
