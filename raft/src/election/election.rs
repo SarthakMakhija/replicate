@@ -66,7 +66,6 @@ impl Election {
         let election_term = receiver.recv().await.unwrap();
 
         let _ = replica.add_to_queue(async move {
-            println!("quorum_completion_response {:?}", quorum_completion_response);
             if quorum_completion_response.is_success() {
                 response_state.change_to_leader();
             } else {

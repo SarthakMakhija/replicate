@@ -104,14 +104,16 @@ impl Replica {
         return total_failed_sends;
     }
 
-    pub async fn send_to_replicas_without_callback<Payload, S, Response, F, T>(&self,
-                                                                               service_request_constructor: S,
-                                                                               response_handler_generator: Arc<F>)
+    pub async fn send_to_replicas_with_handler_hook<Payload, S, Response, F, T, U>(&self,
+                                                                                   service_request_constructor: S,
+                                                                                   response_handler_generator: Arc<F>,
+                                                                                   response_callback_generator: U)
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response>,
               F: Fn(Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
-              T: Future<Output=()> + Send + 'static {
+              T: Future<Output=()> + Send + 'static,
+              U: Fn() -> Option<ResponseCallbackType> {
         let peer_addresses = self.peer_addresses.clone();
 
         for peer_address in peer_addresses {
@@ -124,6 +126,10 @@ impl Replica {
             let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
             let peer_handler_generator = response_handler_generator.clone();
 
+            if let Some(response_callback) = response_callback_generator() {
+                let correlation_id = service_request.correlation_id;
+                self.request_waiting_list.add(correlation_id, peer_address.clone(), response_callback);
+            }
             tokio::spawn(async move {
                 let response = AsyncNetwork::send_with_source_footprint(
                     service_request,
@@ -423,7 +429,7 @@ mod tests {
         });
 
         let (sender, mut receiver) = mpsc::channel(1);
-        blocking_runtime.block_on( async {
+        blocking_runtime.block_on(async {
             let _ = replica.add_to_queue(async move {
                 storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
                 sender.send(()).await.unwrap();
@@ -593,7 +599,11 @@ mod tests {
             };
             let response_handler_generator = Arc::new(response_handler_generator);
 
-            inner_replica.send_to_replicas_without_callback(service_request_constructor, response_handler_generator.clone()).await;
+            inner_replica.send_to_replicas_with_handler_hook(
+                service_request_constructor,
+                response_handler_generator.clone(),
+                || None,
+            ).await;
 
             receiver.recv().await.unwrap();
             assert_eq!(1, inner_response_counter.counter.load(Ordering::SeqCst));
@@ -635,7 +645,11 @@ mod tests {
                 return Some(handler(&response_counter, -1, sender.clone()));
             });
 
-            inner_replica.send_to_replicas_without_callback(service_request_constructor, response_handler_generator.clone()).await;
+            inner_replica.send_to_replicas_with_handler_hook(
+                service_request_constructor,
+                response_handler_generator.clone(),
+                || None,
+            ).await;
 
             receiver.recv().await.unwrap();
             assert_eq!(-1, inner_response_counter.counter.load(Ordering::SeqCst));

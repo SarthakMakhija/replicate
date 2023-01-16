@@ -222,7 +222,11 @@ impl State {
                     }
                 };
 
-            replica.send_to_replicas_without_callback(service_request_constructor, Arc::new(response_handler_generator)).await;
+            replica.send_to_replicas_with_handler_hook(
+                service_request_constructor,
+                Arc::new(response_handler_generator),
+                || None
+            ).await;
             return Ok(());
         };
     }
