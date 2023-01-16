@@ -3,7 +3,7 @@ use replicate::net::connect::random_correlation_id_generator::RandomCorrelationI
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::ReplicaId;
 
-use crate::net::factory::client_provider::{HeartbeatServiceClient, ReplicateLogClient, ReplicateLogResponseClient, RequestVoteClient};
+use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, ReplicateLogResponseClient, RequestVoteClient};
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::AppendEntriesResponse;
 use crate::net::rpc::grpc::Entry;
@@ -39,7 +39,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 previous_log_term: None,
                 leader_commit_index: None,
             },
-            Box::new(HeartbeatServiceClient {}),
+            Box::new(HeartbeatClient {}),
             correlation_id,
         );
     }
