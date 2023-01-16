@@ -1,9 +1,12 @@
+use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::correlation_id::RESERVED_CORRELATION_ID;
 use replicate::net::connect::error::ServiceResponseError;
+use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::replica::Replica;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
@@ -44,32 +47,14 @@ impl Election {
             println!("starting election with term {}", term);
 
             let replica_id = inner_replica.get_id();
-            let service_request_constructor = || {
-                service_request_factory.request_vote(replica_id, term)
-            };
             let replica = inner_replica.clone();
-            let response_handler_generator = move |peer, response: Result<RequestVoteResponse, ServiceResponseError>| {
-                let replica = inner_replica.clone();
-                return Some(
-                    async move {
-                        match response {
-                            Ok(request_vote_response) => {
-                                println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
-                                let _ = replica.register_response(request_vote_response.correlation_id, peer, Ok(Box::new(request_vote_response)));
-                            }
-                            Err(_err) => {
-                                eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
-                            }
-                        }
-                    }
-                );
-            };
 
-            let response_callback_generator = || Some(inner_async_quorum_callback.clone() as Arc<dyn ResponseCallback>);
             let _ = replica.send_to_replicas_with_handler_hook(
-                service_request_constructor,
-                Arc::new(response_handler_generator),
-                response_callback_generator,
+                || { service_request_factory.request_vote(replica_id, term) },
+                Arc::new(move |peer, response: Result<RequestVoteResponse, ServiceResponseError>| {
+                    return Self::request_vote_response_handler(inner_replica.clone(), peer, response);
+                }),
+                || Some(inner_async_quorum_callback.clone() as Arc<dyn ResponseCallback>),
             ).await;
 
             inner_async_quorum_callback.on_response(replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
@@ -91,6 +76,26 @@ impl Election {
                 response_state.change_to_follower(election_term);
             }
         }).await;
+    }
+
+    fn request_vote_response_handler(
+        replica: Arc<Replica>,
+        peer: HostAndPort,
+        response: Result<RequestVoteResponse, ServiceResponseError>
+    ) -> Option<impl Future<Output=()>> {
+        return Some(
+            async move {
+                match response {
+                    Ok(request_vote_response) => {
+                        println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
+                        let _ = replica.register_response(request_vote_response.correlation_id, peer, Ok(Box::new(request_vote_response)));
+                    }
+                    Err(_err) => {
+                        eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
+                    }
+                }
+            }
+        );
     }
 }
 
