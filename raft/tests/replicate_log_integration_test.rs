@@ -143,6 +143,7 @@ async fn send_commands(address: HostAndPort, commands: Vec<Command>) -> Result<R
     let mut client = RaftClient::connect(address.as_string_with_http()).await?;
     for command in commands {
         client.execute(Request::new(command)).await?;
+        thread::sleep(Duration::from_millis(60));
     }
     return Ok(Response::new(()));
 }
