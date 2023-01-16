@@ -79,7 +79,7 @@ impl Raft for RaftService {
                 eprintln!("failed to send request_vote_response to {:?}", originating_host_port);
             }
         };
-        let _ = replica.add_async_to_queue(handler).await;
+        let _ = replica.add_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 
@@ -128,7 +128,7 @@ impl Raft for RaftService {
             }).await;
         };
 
-        let _ = replica.add_async_to_queue(handler).await;
+        let _ = replica.add_to_queue(handler).await;
         return match receiver.recv().await {
             Some(append_entries_response) =>
                 Ok(Response::new(append_entries_response)),
@@ -187,7 +187,7 @@ impl Raft for RaftService {
             }
         };
 
-        let _ = replica.add_async_to_queue(handler).await;
+        let _ = replica.add_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 
@@ -226,7 +226,7 @@ impl Raft for RaftService {
             }
         };
 
-        let _ = &self.state.get_replica_reference().add_async_to_queue(handler).await;
+        let _ = &self.state.get_replica_reference().add_to_queue(handler).await;
         return Ok(Response::new(()));
     }
 
@@ -245,7 +245,7 @@ impl Raft for RaftService {
             let _ = sender.send(log_entry_index).await;
         };
 
-        let _ = replica.add_async_to_queue(handler).await;
+        let _ = replica.add_to_queue(handler).await;
         let entry_index = receiver.recv().await.unwrap();
         let response_callback = SingleResponseCompletionCallback::<()>::new();
 

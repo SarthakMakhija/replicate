@@ -33,7 +33,7 @@ impl SingularUpdateQueue {
         return singular_update_queue;
     }
 
-    pub(crate) async fn add_async<F>(&self, handler: F) -> Result<(), SendError<Task>>
+    pub(crate) async fn add<F>(&self, handler: F) -> Result<(), SendError<Task>>
         where
             F: Future<Output=()> + Send + 'static {
         let block = Box::pin(handler);
@@ -69,7 +69,7 @@ mod tests {
         let singular_update_queue = SingularUpdateQueue::new();
 
         let (sender, mut receiver) = mpsc::channel(1);
-        let _ = singular_update_queue.add_async(async move {
+        let _ = singular_update_queue.add(async move {
             storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
             sender.send(()).await.unwrap();
         }).await;
@@ -92,12 +92,12 @@ mod tests {
         let (sender_one, mut receiver_one) = mpsc::channel(1);
         let (sender_other, mut receiver_other) = mpsc::channel(1);
 
-        let _ = singular_update_queue.add_async(async move {
+        let _ = singular_update_queue.add(async move {
             writable_storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
             sender_one.clone().send(()).await.unwrap();
         }).await;
 
-        let _ = singular_update_queue.add_async(async move {
+        let _ = singular_update_queue.add(async move {
             storage.write().unwrap().insert("RAFT".to_string(), "consensus".to_string());
             sender_other.clone().send(()).await.unwrap();
         }).await;
@@ -124,13 +124,13 @@ mod tests {
         let (sender_one, mut receiver_one) = mpsc::channel(1);
         let (sender_other, mut receiver_other) = mpsc::channel(1);
 
-        let _ = singular_update_queue.add_async(async move {
+        let _ = singular_update_queue.add(async move {
             tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
             writable_storage_one.write().unwrap().push("WAL".to_string());
             sender_one.clone().send(()).await.unwrap();
         }).await;
 
-        let _ = singular_update_queue.add_async(async move {
+        let _ = singular_update_queue.add(async move {
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
             writable_storage_two.write().unwrap().push("consensus".to_string());
             sender_other.clone().send(()).await.unwrap();

@@ -130,17 +130,17 @@ impl Replica {
                 ).await;
 
                 if let Some(handler) = peer_handler_generator(response) {
-                    let _ = singular_update_queue.add_async(handler).await;
+                    let _ = singular_update_queue.add(handler).await;
                 }
             });
         }
     }
 
-    pub async fn add_async_to_queue<F>(&self, handler: F)
+    pub async fn add_to_queue<F>(&self, handler: F)
         where
             F: Future<Output=()> + Send + 'static {
         let singular_update_queue = &self.singular_update_queue;
-        let _ = singular_update_queue.add_async(handler).await;
+        let _ = singular_update_queue.add(handler).await;
     }
 
     pub fn register_response(&self, correlation_id: CorrelationId, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>) {
@@ -422,7 +422,7 @@ mod tests {
 
         let (sender, mut receiver) = mpsc::channel(1);
         blocking_runtime.block_on( async {
-            let _ = replica.add_async_to_queue(async move {
+            let _ = replica.add_to_queue(async move {
                 storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
                 sender.send(()).await.unwrap();
             }).await;

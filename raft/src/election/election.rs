@@ -61,11 +61,11 @@ impl Election {
             let _ = sender.send(term).await;
         };
 
-        let _ = replica.add_async_to_queue(handler).await;
+        let _ = replica.add_to_queue(handler).await;
         let quorum_completion_response = async_quorum_callback.handle().await;
         let election_term = receiver.recv().await.unwrap();
 
-        let _ = replica.add_async_to_queue(async move {
+        let _ = replica.add_to_queue(async move {
             println!("quorum_completion_response {:?}", quorum_completion_response);
             if quorum_completion_response.is_success() {
                 response_state.change_to_leader();
