@@ -114,19 +114,21 @@ impl Replica {
               T: Future<Output=()> + Send + 'static {
         let peer_addresses = self.peer_addresses.clone();
 
-        for address in peer_addresses {
-            if address.eq(&self.self_address) {
+        for peer_address in peer_addresses {
+            if peer_address.eq(&self.self_address) {
                 continue;
             }
 
+            let source_address = self.self_address.clone();
             let singular_update_queue = self.singular_update_queue.clone();
             let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
             let peer_handler_generator = response_handler_generator.clone();
 
             tokio::spawn(async move {
-                let response = AsyncNetwork::send_without_source_footprint(
+                let response = AsyncNetwork::send_with_source_footprint(
                     service_request,
-                    address,
+                    source_address,
+                    peer_address,
                 ).await;
 
                 if let Some(handler) = peer_handler_generator(response) {
