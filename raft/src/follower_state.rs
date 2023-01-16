@@ -93,7 +93,7 @@ impl FollowerState {
             }
 
             let term = self.state.get_term();
-            let latest_log_entry_index = self.state.get_replicated_log().get_latest_log_entry_index();
+            let latest_log_entry_index = self.state.get_replicated_log_reference().get_latest_log_entry_index();
             let source_address = self.state.get_replica_reference().get_self_address();
             let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
             let service_request = self.service_request(next_log_index_by_peer.1, latest_log_entry_index, term);
@@ -112,7 +112,7 @@ impl FollowerState {
     fn service_request(&self, next_log_index: NextLogIndex, latest_log_entry_index: u64, term: u64) -> ServiceRequest<AppendEntries, ()> {
         let (previous_log_index, previous_log_term) = self.previous_log_index_term(latest_log_entry_index);
 
-        let entry = match self.state.get_replicated_log().get_log_entry_at(next_log_index as usize) {
+        let entry = match self.state.get_replicated_log_reference().get_log_entry_at(next_log_index as usize) {
             None => None,
             Some(entry) => {
                 Some(
@@ -129,7 +129,7 @@ impl FollowerState {
             self.state.get_replica_reference().get_id(),
             previous_log_index,
             previous_log_term,
-            self.state.get_replicated_log().get_commit_index(),
+            self.state.get_replicated_log_reference().get_commit_index(),
             entry,
         );
     }
@@ -143,7 +143,7 @@ impl FollowerState {
 
         let previous_log_term = match previous_log_index {
             None => None,
-            Some(index) => self.state.get_replicated_log().get_log_term_at(index as usize)
+            Some(index) => self.state.get_replicated_log_reference().get_log_term_at(index as usize)
         };
         return (previous_log_index, previous_log_term);
     }
@@ -265,14 +265,14 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            state.get_replicated_log().append_command(
+            state.get_replicated_log_reference().append_command(
                 &command,
                 1,
             );
 
-            state.get_replicated_log().acknowledge_log_entry_at(0);
-            state.get_replicated_log().acknowledge_log_entry_at(0);
-            state.get_replicated_log().commit(|_| {});
+            state.get_replicated_log_reference().acknowledge_log_entry_at(0);
+            state.get_replicated_log_reference().acknowledge_log_entry_at(0);
+            state.get_replicated_log_reference().commit(|_| {});
             return state;
         });
 
@@ -386,7 +386,7 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            state.get_replicated_log().append_command(
+            state.get_replicated_log_reference().append_command(
                 &command,
                 1,
             );
@@ -466,7 +466,7 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            state.get_replicated_log().append_command(
+            state.get_replicated_log_reference().append_command(
                 &command,
                 1,
             );

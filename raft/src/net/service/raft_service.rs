@@ -134,14 +134,14 @@ impl Raft for RaftService {
                 success = false;
             } else if append_entries.previous_log_index.is_none() {
                 success = true;
-            } else if !state.get_replicated_log().matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
+            } else if !state.get_replicated_log_reference().matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
                 success = false;
             } else {
                 success = true;
             };
 
             let log_entry_index = if success {
-                let replicated_log = state.get_replicated_log();
+                let replicated_log = state.get_replicated_log_reference();
                 let entry = append_entries.entry.unwrap();
                 let command = entry.command.unwrap();
 
@@ -182,7 +182,7 @@ impl Raft for RaftService {
             let replica_role = state.get_role();
             if replica_role == ReplicaRole::Leader {
                 if response.success {
-                    let replicated_log = state.get_replicated_log();
+                    let replicated_log = state.get_replicated_log_reference();
                     let log_entry_index = response.log_entry_index.unwrap() as usize;
 
                     replicated_log.acknowledge_log_entry_at(log_entry_index);
@@ -214,7 +214,7 @@ impl Raft for RaftService {
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term: u64 = state.get_term();
-            let log_entry_index = state.get_replicated_log().append_command(&command, term);
+            let log_entry_index = state.get_replicated_log_reference().append_command(&command, term);
             let _ = follower_state.replicate_log_at(log_entry_index);
             let _ = sender.send(log_entry_index).await;
         };
@@ -591,7 +591,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        let log_entry = state.get_replicated_log().get_log_entry_at(0).unwrap();
+        let log_entry = state.get_replicated_log_reference().get_log_entry_at(0).unwrap();
 
         assert_eq!(0, log_entry.get_term());
         assert_eq!(String::from("Content").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
@@ -642,7 +642,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert_eq!(0, state.get_replicated_log().total_log_entries());
+        assert_eq!(0, state.get_replicated_log_reference().total_log_entries());
     }
 
     #[test]
@@ -735,7 +735,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert_eq!(0, state.get_replicated_log().total_log_entries());
+        assert_eq!(0, state.get_replicated_log_reference().total_log_entries());
     }
 
     #[test]
@@ -757,7 +757,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log().append_command(&command, term);
+            state.get_replicated_log_reference().append_command(&command, term);
             return state;
         });
 
@@ -787,8 +787,8 @@ mod tests {
 
         thread::sleep(Duration::from_millis(20));
 
-        assert_eq!(2, state.get_replicated_log().total_log_entries());
-        let log_entry = state.get_replicated_log().get_log_entry_at(1).unwrap();
+        assert_eq!(2, state.get_replicated_log_reference().total_log_entries());
+        let log_entry = state.get_replicated_log_reference().get_log_entry_at(1).unwrap();
 
         assert_eq!(1, log_entry.get_term());
         assert_eq!(1, log_entry.get_index());
@@ -814,7 +814,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log().append_command(&command, term);
+            state.get_replicated_log_reference().append_command(&command, term);
             return state;
         });
 
@@ -844,13 +844,13 @@ mod tests {
 
         thread::sleep(Duration::from_millis(20));
 
-        assert_eq!(2, state.get_replicated_log().total_log_entries());
-        let log_entry = state.get_replicated_log().get_log_entry_at(1).unwrap();
+        assert_eq!(2, state.get_replicated_log_reference().total_log_entries());
+        let log_entry = state.get_replicated_log_reference().get_log_entry_at(1).unwrap();
 
         assert_eq!(1, log_entry.get_term());
         assert_eq!(1, log_entry.get_index());
         assert_eq!(String::from("Content").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
-        assert_eq!(Some(0), state.get_replicated_log().get_commit_index());
+        assert_eq!(Some(0), state.get_replicated_log_reference().get_commit_index());
     }
 
     #[test]
@@ -909,7 +909,7 @@ mod tests {
             let content = String::from("anything");
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
-            state.get_replicated_log().append_command(&command, term);
+            state.get_replicated_log_reference().append_command(&command, term);
 
             state.clone().change_to_leader();
             return state;
@@ -949,7 +949,7 @@ mod tests {
         thread::sleep(Duration::from_millis(40));
         assert_eq!(ReplicaRole::Follower, state.get_role());
         assert_eq!(3, state.get_term());
-        assert_eq!(None, state.get_replicated_log().get_commit_index());
+        assert_eq!(None, state.get_replicated_log_reference().get_commit_index());
     }
 
     #[test]
@@ -1008,7 +1008,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log().append_command(&command, term);
+            state.get_replicated_log_reference().append_command(&command, term);
             state.clone().change_to_leader();
             return state;
         });
@@ -1027,7 +1027,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(20));
-        assert_eq!(None, state.get_replicated_log().get_commit_index());
+        assert_eq!(None, state.get_replicated_log_reference().get_commit_index());
     }
 
     #[test]
@@ -1049,7 +1049,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log().append_command(&command, term);
+            state.get_replicated_log_reference().append_command(&command, term);
             state.clone().change_to_leader();
             return state;
         });
@@ -1077,7 +1077,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(20));
-        assert_eq!(0, state.get_replicated_log().get_commit_index().unwrap());
+        assert_eq!(0, state.get_replicated_log_reference().get_commit_index().unwrap());
     }
 
     #[test]
@@ -1100,7 +1100,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log().append_command(&command, term);
+            state.get_replicated_log_reference().append_command(&command, term);
             state.clone().change_to_leader();
             return state;
         });
@@ -1137,6 +1137,6 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(20));
-        assert_eq!(0, state.get_replicated_log().get_commit_index().unwrap());
+        assert_eq!(0, state.get_replicated_log_reference().get_commit_index().unwrap());
     }
 }

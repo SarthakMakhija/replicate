@@ -57,13 +57,13 @@ fn replicate_log() {
     blocking_runtime.block_on(async move {
         thread::sleep(Duration::from_millis(30));
 
-        assert_eq!(1, state.get_replicated_log().total_log_entries());
-        assert_eq!(1, state_peer_one.get_replicated_log().total_log_entries());
-        assert_eq!(1, state_peer_other.get_replicated_log().total_log_entries());
+        assert_eq!(1, state.get_replicated_log_reference().total_log_entries());
+        assert_eq!(1, state_peer_one.get_replicated_log_reference().total_log_entries());
+        assert_eq!(1, state_peer_other.get_replicated_log_reference().total_log_entries());
 
-        assert_eq!(content.as_bytes().to_vec(), state_peer_one.get_replicated_log().get_log_entry_at(0).unwrap().get_bytes_as_vec());
-        assert_eq!(content.as_bytes().to_vec(), state_peer_other.get_replicated_log().get_log_entry_at(0).unwrap().get_bytes_as_vec());
-        assert!(state.get_replicated_log().get_log_entry_at(0).unwrap().get_acknowledgements() >= 2);
+        assert_eq!(content.as_bytes().to_vec(), state_peer_one.get_replicated_log_reference().get_log_entry_at(0).unwrap().get_bytes_as_vec());
+        assert_eq!(content.as_bytes().to_vec(), state_peer_other.get_replicated_log_reference().get_log_entry_at(0).unwrap().get_bytes_as_vec());
+        assert!(state.get_replicated_log_reference().get_log_entry_at(0).unwrap().get_acknowledgements() >= 2);
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();
@@ -116,22 +116,22 @@ fn replicate_multiple_logs_sequentially() {
         thread::sleep(Duration::from_millis(30));
 
         for state in vec![&state, &state_peer_one, &state_peer_other] {
-            assert_eq!(3, state.get_replicated_log().total_log_entries());
+            assert_eq!(3, state.get_replicated_log_reference().total_log_entries());
 
             assert_eq!(content_replicate.as_bytes().to_vec(),
-                       state.get_replicated_log().get_log_entry_at(0).unwrap().get_bytes_as_vec()
+                       state.get_replicated_log_reference().get_log_entry_at(0).unwrap().get_bytes_as_vec()
             );
             assert_eq!(content_raft.as_bytes().to_vec(),
-                       state.get_replicated_log().get_log_entry_at(1).unwrap().get_bytes_as_vec()
+                       state.get_replicated_log_reference().get_log_entry_at(1).unwrap().get_bytes_as_vec()
             );
             assert_eq!(content_log.as_bytes().to_vec(),
-                       state.get_replicated_log().get_log_entry_at(2).unwrap().get_bytes_as_vec()
+                       state.get_replicated_log_reference().get_log_entry_at(2).unwrap().get_bytes_as_vec()
             );
         }
 
-        assert_eq!(Some(2), state.get_replicated_log().get_commit_index());
-        assert_eq!(Some(1), state_peer_one.get_replicated_log().get_commit_index());
-        assert_eq!(Some(1), state_peer_other.get_replicated_log().get_commit_index());
+        assert_eq!(Some(2), state.get_replicated_log_reference().get_commit_index());
+        assert_eq!(Some(1), state_peer_one.get_replicated_log_reference().get_commit_index());
+        assert_eq!(Some(1), state_peer_other.get_replicated_log_reference().get_commit_index());
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();

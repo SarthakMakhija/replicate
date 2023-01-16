@@ -196,7 +196,7 @@ impl State {
         return &self.pending_committed_log_entries;
     }
 
-    pub fn get_replicated_log(&self) -> &ReplicatedLog {
+    pub fn get_replicated_log_reference(&self) -> &ReplicatedLog {
         return &self.replicated_log;
     }
 
