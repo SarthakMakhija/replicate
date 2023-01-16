@@ -32,17 +32,16 @@ fn start_elections_with_new_term() {
     let (all_services_shutdown_handle_two, _) = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
     let (all_services_shutdown_handle_three, _) = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
 
-    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-
+    let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     let election = Election::new(state.clone());
-    blocking_runtime.block_on(async {
+    election_runtime.block_on(async {
         election.start().await;
     });
 
     thread::sleep(Duration::from_millis(10));
     assert_eq!(1, state.get_term());
 
-    blocking_runtime.block_on(async {
+    election_runtime.block_on(async {
         election.start().await;
     });
 
@@ -50,6 +49,7 @@ fn start_elections_with_new_term() {
     assert_eq!(2, state.get_term());
     assert_eq!(ReplicaRole::Leader, state.get_role());
 
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();

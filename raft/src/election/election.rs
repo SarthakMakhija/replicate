@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::correlation_id::RESERVED_CORRELATION_ID;
@@ -25,10 +26,20 @@ impl Election {
     pub async fn start(&self) {
         let replica = self.state.get_replica();
         let inner_replica = replica.clone();
-        let state = self.state.clone();
+        let (inner_state, response_state) = (self.state.clone(), self.state.clone());
         let service_request_factory = self.service_request_factory.clone();
+
+        let async_quorum_callback = AsyncQuorumCallback::<RequestVoteResponse>::new_with_success_condition(
+            inner_replica.cluster_size(),
+            replica.cluster_size(),
+            Box::new(|response: &RequestVoteResponse| response.voted),
+        );
+
+        let inner_async_quorum_callback = async_quorum_callback.clone();
+        let (sender, mut receiver) = mpsc::channel(1);
+
         let handler = async move {
-            let term = state.change_to_candidate();
+            let term = inner_state.change_to_candidate();
             println!("starting election with term {}", term);
 
             let service_request_constructor = || {
@@ -37,32 +48,31 @@ impl Election {
                     term,
                 )
             };
-            let success_condition = Box::new(|response: &RequestVoteResponse| response.voted);
-            let expected_responses = inner_replica.cluster_size();
-            let async_quorum_callback = AsyncQuorumCallback::<RequestVoteResponse>::new_with_success_condition(
-                inner_replica.cluster_size(),
-                expected_responses,
-                success_condition,
-            );
             let _ = inner_replica.send_to_replicas(
                 service_request_constructor,
-                async_quorum_callback.clone(),
+                inner_async_quorum_callback.clone(),
             ).await;
 
-            async_quorum_callback.on_response(inner_replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
+            inner_async_quorum_callback.on_response(inner_replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
                 term,
                 voted: true,
                 correlation_id: RESERVED_CORRELATION_ID,
             })));
-
-            let quorum_completion_response = async_quorum_callback.handle().await;
-            if quorum_completion_response.is_success() {
-                state.change_to_leader();
-            } else {
-                state.change_to_follower(term); //TODO: Change the term to the highest term received
-            }
+            let _ = sender.send(term).await;
         };
+
         let _ = replica.add_async_to_queue(handler).await;
+        let quorum_completion_response = async_quorum_callback.handle().await;
+        let election_term = receiver.recv().await.unwrap();
+
+        let _ = replica.add_async_to_queue(async move {
+            println!("quorum_completion_response {:?}", quorum_completion_response);
+            if quorum_completion_response.is_success() {
+                response_state.change_to_leader();
+            } else {
+                response_state.change_to_follower(election_term);
+            }
+        }).await;
     }
 }
 
@@ -168,7 +178,9 @@ mod tests {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
             }),
         );
-        blocking_runtime.block_on(async {
+
+        let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+        let handle = election_runtime.spawn(async move {
             election.start().await;
         });
 
@@ -183,6 +195,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         blocking_runtime.block_on(async move {
+            let _ = handle.await;
             thread::sleep(Duration::from_millis(10));
 
             assert_eq!(ReplicaRole::Leader, state.get_role());
@@ -217,7 +230,9 @@ mod tests {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
             }),
         );
-        blocking_runtime.block_on(async {
+
+        let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+        let handle = election_runtime.spawn(async move {
             election.start().await;
         });
 
@@ -238,7 +253,8 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         blocking_runtime.block_on(async move {
-            thread::sleep(Duration::from_millis(100));
+            let _ = handle.await;
+            thread::sleep(Duration::from_millis(10));
 
             assert_eq!(ReplicaRole::Follower, state.get_role());
         });
@@ -275,7 +291,9 @@ mod tests {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
             }),
         );
-        blocking_runtime.block_on(async {
+
+        let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+        let handle = election_runtime.spawn(async move {
             election.start().await;
         });
 
@@ -283,6 +301,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         blocking_runtime.block_on(async move {
+            let _ = handle.await;
             thread::sleep(Duration::from_millis(100));
 
             assert_eq!(ReplicaRole::Follower, state.get_role());
