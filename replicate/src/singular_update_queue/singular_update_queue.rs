@@ -25,12 +25,12 @@ impl SingularUpdateQueue {
 
         //TODO: make 100 configurable
         let (sender, receiver) = mpsc::channel::<Task>(100);
-        Self::spin(&single_thread_pool, receiver);
-
-        return SingularUpdateQueue {
+        let singular_update_queue = SingularUpdateQueue {
             sender,
             single_thread_pool,
         };
+        singular_update_queue.start(receiver);
+        return singular_update_queue;
     }
 
     pub(crate) async fn add_async<F>(&self, handler: F) -> Result<(), SendError<Task>>
@@ -44,8 +44,8 @@ impl SingularUpdateQueue {
         let _ = self.single_thread_pool.shutdown_background();
     }
 
-    fn spin(thread_pool: &Runtime, mut receiver: Receiver<Task>) {
-        thread_pool.spawn(async move {
+    fn start(&self, mut receiver: Receiver<Task>) {
+        self.single_thread_pool.spawn(async move {
             while let Some(task) = receiver.recv().await {
                 task.block.await;
             }
