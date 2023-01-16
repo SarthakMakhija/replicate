@@ -122,24 +122,34 @@ impl State {
     }
 
     pub(crate) fn get_heartbeat_checker<F>(self: Arc<State>, heartbeat_timeout: Duration, election_starter: F) -> impl Future<Output=Result<(), AnyError>>
-        where F: FnOnce(Arc<State>) -> () {
+        where F: Future<Output=()> + Send + 'static {
         let inner_self = self.clone();
         let clock = self.clock.clone();
 
         return async move {
-            let write_guard = inner_self.consensus_state.read().unwrap();
-            let consensus_state = &*write_guard;
-            match consensus_state.heartbeat_received_time {
-                Some(last_heartbeat_time) => {
-                    if clock.duration_since(last_heartbeat_time).ge(&heartbeat_timeout) {
-                        election_starter(inner_self.clone());
+            let should_start_election: bool;
+            {
+                let guard = inner_self.consensus_state.read().unwrap();
+                let consensus_state = &*guard;
+                match consensus_state.heartbeat_received_time {
+                    Some(last_heartbeat_time) => {
+                        if clock.duration_since(last_heartbeat_time).ge(&heartbeat_timeout) {
+                            should_start_election = true;
+                        } else {
+                            should_start_election = false;
+                        }
+                    },
+                    None => {
+                        if clock.duration_since(consensus_state.creation_time).ge(&heartbeat_timeout) {
+                            should_start_election = true;
+                        } else {
+                            should_start_election = false;
+                        }
                     }
                 }
-                None => {
-                    if clock.duration_since(consensus_state.creation_time).ge(&heartbeat_timeout) {
-                        election_starter(inner_self.clone());
-                    }
-                }
+            }
+            if should_start_election {
+                election_starter.await;
             }
             return Ok(());
         };
@@ -220,11 +230,14 @@ impl State {
     fn restart_heartbeat_checker(state: Arc<State>, heartbeat_check_scheduler: &SingleThreadedHeartbeatScheduler) {
         heartbeat_check_scheduler.restart_with(move || {
             let inner_state = state.clone();
+            let election_state = state.clone();
             let heartbeat_timeout = inner_state.heartbeat_config.get_heartbeat_timeout();
 
             inner_state.get_heartbeat_checker(
                 heartbeat_timeout,
-                |state| Election::new(state).start(),
+                async {
+                    Election::new(election_state).start().await;
+                }
             )
         });
     }
@@ -395,12 +408,14 @@ mod tests {
 
         let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         state.mark_heartbeat_received();
+        state.heartbeat_check_scheduler.stop();
+        state.heartbeat_send_scheduler.stop();
 
         let heartbeat_timeout = Duration::from_millis(0);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
 
-        let election_starter = move |_state| {
+        let election_starter = async move {
             let mut write_guard = cloned.write().unwrap();
             *write_guard = *write_guard + 1;
         };
@@ -426,11 +441,14 @@ mod tests {
         );
 
         let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        state.heartbeat_check_scheduler.stop();
+        state.heartbeat_send_scheduler.stop();
+
         let heartbeat_timeout = Duration::from_millis(5);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
 
-        let election_starter = move |_state| {
+        let election_starter = async move {
             let mut write_guard = cloned.write().unwrap();
             *write_guard = *write_guard + 1;
         };
@@ -457,11 +475,12 @@ mod tests {
         );
 
         let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+
         let heartbeat_timeout = Duration::from_millis(10);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
 
-        let election_starter = move |_state| {
+        let election_starter = async move {
             let mut write_guard = cloned.write().unwrap();
             *write_guard = *write_guard + 1;
         };
@@ -472,6 +491,9 @@ mod tests {
             let mut consensus_state = &mut *guard;
             consensus_state.creation_time = SystemClock::new().now();
         }
+        state.heartbeat_check_scheduler.stop();
+        state.heartbeat_send_scheduler.stop();
+
         let handle = tokio::spawn(state.clone().get_heartbeat_checker(
             heartbeat_timeout,
             election_starter,
@@ -494,12 +516,14 @@ mod tests {
 
         let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
         state.mark_heartbeat_received();
+        state.heartbeat_check_scheduler.stop();
+        state.heartbeat_send_scheduler.stop();
 
         let heartbeat_timeout = Duration::from_secs(100);
         let count = Arc::new(RwLock::new(0));
         let cloned = count.clone();
 
-        let election_starter = move |_state| {
+        let election_starter = async move {
             let mut write_guard = cloned.write().unwrap();
             *write_guard = *write_guard + 1;
         };

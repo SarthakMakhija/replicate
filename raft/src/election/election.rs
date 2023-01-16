@@ -22,7 +22,7 @@ impl Election {
         return Election { state, service_request_factory };
     }
 
-    pub fn start(&self) {
+    pub async fn start(&self) {
         let replica = self.state.get_replica();
         let inner_replica = replica.clone();
         let state = self.state.clone();
@@ -168,7 +168,9 @@ mod tests {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
             }),
         );
-        election.start();
+        blocking_runtime.block_on(async {
+            election.start().await;
+        });
 
         let response = RequestVoteResponse {
             term: 1,
@@ -215,7 +217,9 @@ mod tests {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
             }),
         );
-        election.start();
+        blocking_runtime.block_on(async {
+            election.start().await;
+        });
 
         let response_with_higher_term_one = RequestVoteResponse {
             term: 2,
@@ -271,7 +275,9 @@ mod tests {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
             }),
         );
-        election.start();
+        blocking_runtime.block_on(async {
+            election.start().await;
+        });
 
         thread::sleep(Duration::from_millis(20));
 
