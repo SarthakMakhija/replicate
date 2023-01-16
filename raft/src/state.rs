@@ -6,6 +6,8 @@ use replicate::clock::clock::Clock;
 use replicate::heartbeat::heartbeat_scheduler::SingleThreadedHeartbeatScheduler;
 use replicate::net::connect::error::{AnyError, ServiceResponseError};
 use replicate::net::replica::{Replica, ReplicaId};
+use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
+use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
@@ -22,6 +24,7 @@ pub struct State {
     heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
     replicated_log: ReplicatedLog,
+    pending_committed_log_entries: RequestWaitingList
 }
 
 struct ConsensusState {
@@ -46,6 +49,7 @@ impl State {
 
     fn new_with(replica: Arc<Replica>, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
+        let clock_clone = clock.clone();
         let heartbeat_config = heartbeat_config;
         let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
         let heartbeat_timeout = heartbeat_config.get_heartbeat_timeout();
@@ -66,6 +70,10 @@ impl State {
             heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_timeout),
             service_request_factory,
             replicated_log: ReplicatedLog::new(majority_quorum),
+            pending_committed_log_entries: RequestWaitingList::new(
+                clock_clone,
+                RequestWaitingListConfig::default()
+            )
         };
 
         let state = Arc::new(state);
@@ -182,6 +190,10 @@ impl State {
     pub(crate) fn get_voted_for(&self) -> Option<ReplicaId> {
         let guard = self.consensus_state.read().unwrap();
         return (*guard).voted_for;
+    }
+
+    pub(crate) fn get_pending_committed_log_entries_reference(&self) -> &RequestWaitingList {
+        return &self.pending_committed_log_entries;
     }
 
     pub fn get_replicated_log(&self) -> &ReplicatedLog {
