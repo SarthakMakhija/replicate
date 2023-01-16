@@ -55,6 +55,8 @@ fn replicate_log() {
     });
 
     blocking_runtime.block_on(async move {
+        thread::sleep(Duration::from_millis(30));
+
         assert_eq!(1, state.get_replicated_log().total_log_entries());
         assert_eq!(1, state_peer_one.get_replicated_log().total_log_entries());
         assert_eq!(1, state_peer_other.get_replicated_log().total_log_entries());
@@ -111,6 +113,8 @@ fn replicate_multiple_logs_sequentially() {
     });
 
     blocking_runtime.block_on(async move {
+        thread::sleep(Duration::from_millis(30));
+
         for state in vec![&state, &state_peer_one, &state_peer_other] {
             assert_eq!(3, state.get_replicated_log().total_log_entries());
 
