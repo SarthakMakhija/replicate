@@ -215,7 +215,7 @@ impl State {
             };
 
             let response_handler_generator =
-                move |response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                move |_peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
                     match response {
                         Ok(response) => Some(self.clone().get_heartbeat_response_handler(response)),
                         Err(_) => None

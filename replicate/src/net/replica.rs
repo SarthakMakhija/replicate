@@ -111,7 +111,7 @@ impl Replica {
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response>,
-              F: Fn(Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
+              F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
               T: Future<Output=()> + Send + 'static,
               U: Fn() -> Option<ResponseCallbackType> {
         let peer_addresses = self.peer_addresses.clone();
@@ -137,7 +137,7 @@ impl Replica {
                     peer_address,
                 ).await;
 
-                if let Some(handler) = peer_handler_generator(response) {
+                if let Some(handler) = peer_handler_generator(peer_address, response) {
                     let _ = singular_update_queue.add(handler).await;
                 }
             });
@@ -591,7 +591,7 @@ mod tests {
 
             let response_counter = Arc::new(ResponseCounter { counter: AtomicI8::new(0) });
             let inner_response_counter = response_counter.clone();
-            let response_handler_generator = move |response: Result<(), ServiceResponseError>| {
+            let response_handler_generator = move |_peer, response: Result<(), ServiceResponseError>| {
                 if response.is_ok() {
                     return Some(handler(&response_counter, 1, sender.clone()));
                 }
@@ -638,7 +638,7 @@ mod tests {
 
             let response_counter = Arc::new(ResponseCounter { counter: AtomicI8::new(0) });
             let inner_response_counter = response_counter.clone();
-            let response_handler_generator = Arc::new(move |response: Result<(), ServiceResponseError>| {
+            let response_handler_generator = Arc::new(move |_peer, response: Result<(), ServiceResponseError>| {
                 if response.is_ok() {
                     return Some(handler(&response_counter, 1, sender.clone()));
                 }
@@ -682,7 +682,7 @@ mod tests {
             };
 
             let  replica = inner_replica.clone();
-            let response_handler_generator = move |_response: Result<(), ServiceResponseError>| {
+            let response_handler_generator = move |_peer, _response: Result<(), ServiceResponseError>| {
                 let replica = inner_replica.clone();
                 return Some(async move {
                     replica.register_response(
