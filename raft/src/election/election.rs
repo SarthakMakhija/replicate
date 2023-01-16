@@ -27,8 +27,7 @@ impl Election {
         let inner_replica = replica.clone();
         let state = self.state.clone();
         let service_request_factory = self.service_request_factory.clone();
-
-        replica.add_spawn_to_queue(async move {
+        let handler = async move {
             let term = state.change_to_candidate();
             println!("starting election with term {}", term);
 
@@ -62,7 +61,8 @@ impl Election {
             } else {
                 state.change_to_follower(term); //TODO: Change the term to the highest term received
             }
-        });
+        };
+        let _ = replica.add_async_to_queue(handler).await;
     }
 }
 
