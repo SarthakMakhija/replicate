@@ -23,7 +23,7 @@ impl LogEntry {
             term,
             index,
             command: LogCommand::from(command),
-            acknowledgements: 0
+            acknowledgements: 1
         };
     }
 

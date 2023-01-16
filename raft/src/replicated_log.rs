@@ -199,13 +199,12 @@ mod tests {
     }
 
     #[test]
-    fn acknowledge_log_entry() {
+    fn acknowledge_log_entry_as_soon_as_it_is_created() {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
         replicated_log.append_command(&command, 1);
 
-        replicated_log.acknowledge_log_entry_at(0);
         assert_eq!(1, replicated_log.get_log_entry_at(0).unwrap().get_acknowledgements());
         assert_eq!(1, replicated_log.total_log_entries());
     }
@@ -220,13 +219,13 @@ mod tests {
         replicated_log.acknowledge_log_entry_at(0);
         replicated_log.acknowledge_log_entry_at(0);
 
-        assert_eq!(2, replicated_log.get_log_entry_at(0).unwrap().get_acknowledgements());
+        assert_eq!(3, replicated_log.get_log_entry_at(0).unwrap().get_acknowledgements());
         assert_eq!(1, replicated_log.total_log_entries());
     }
 
     #[test]
     fn is_entry_replicated() {
-        let replicated_log = ReplicatedLog::new(2);
+        let replicated_log = ReplicatedLog::new(3);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
         replicated_log.append_command(&command, 1);
@@ -239,7 +238,7 @@ mod tests {
 
     #[test]
     fn is_entry_not_replicated() {
-        let replicated_log = ReplicatedLog::new(2);
+        let replicated_log = ReplicatedLog::new(3);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
         replicated_log.append_command(&command, 1);
@@ -314,7 +313,7 @@ mod tests {
 
     #[test]
     fn commit_index_with_a_non_replicated_entry() {
-        let replicated_log = ReplicatedLog::new(1);
+        let replicated_log = ReplicatedLog::new(2);
 
         for _count in 1..=3 {
             let content = String::from("Content");

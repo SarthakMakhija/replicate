@@ -59,7 +59,7 @@ fn replicate_log() {
 
         assert_eq!(content.as_bytes().to_vec(), state_peer_one.get_replicated_log().get_log_entry_at(0).unwrap().get_bytes_as_vec());
         assert_eq!(content.as_bytes().to_vec(), state_peer_other.get_replicated_log().get_log_entry_at(0).unwrap().get_bytes_as_vec());
-        assert_eq!(2, state.get_replicated_log().get_log_entry_at(0).unwrap().get_acknowledgements());
+        assert_eq!(3, state.get_replicated_log().get_log_entry_at(0).unwrap().get_acknowledgements());
 
         all_services_shutdown_handle_one.shutdown().await.unwrap();
         all_services_shutdown_handle_two.shutdown().await.unwrap();
