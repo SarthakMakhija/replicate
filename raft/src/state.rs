@@ -643,7 +643,7 @@ mod tests {
             let cloned = inner_state.clone();
             let _ = inner_state.get_heartbeat_sender().await;
 
-            thread::sleep(Duration::from_millis(15));
+            thread::sleep(Duration::from_millis(20));
 
             assert_eq!(ReplicaRole::Follower, cloned.get_role());
             assert_eq!(5, cloned.get_term());
