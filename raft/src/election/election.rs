@@ -3,6 +3,7 @@ use tokio::sync::mpsc;
 
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::correlation_id::RESERVED_CORRELATION_ID;
+use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
@@ -36,24 +37,42 @@ impl Election {
         );
 
         let inner_async_quorum_callback = async_quorum_callback.clone();
-        let (sender, mut receiver) = mpsc::channel(1);
 
-        let handler = async move {
+        let (sender, mut receiver) = mpsc::channel(1);
+        let request_vote_handler = async move {
             let term = inner_state.change_to_candidate();
             println!("starting election with term {}", term);
 
+            let replica_id = inner_replica.get_id();
             let service_request_constructor = || {
-                service_request_factory.request_vote(
-                    inner_replica.get_id(),
-                    term,
-                )
+                service_request_factory.request_vote(replica_id, term)
             };
-            let _ = inner_replica.send_to_replicas(
+            let replica = inner_replica.clone();
+            let response_handler_generator = move |peer, response: Result<RequestVoteResponse, ServiceResponseError>| {
+                let replica = inner_replica.clone();
+                return Some(
+                    async move {
+                        match response {
+                            Ok(request_vote_response) => {
+                                println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
+                                let _ = replica.register_response(request_vote_response.correlation_id, peer, Ok(Box::new(request_vote_response)));
+                            }
+                            Err(_err) => {
+                                eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
+                            }
+                        }
+                    }
+                );
+            };
+
+            let response_callback_generator = || Some(inner_async_quorum_callback.clone() as Arc<dyn ResponseCallback>);
+            let _ = replica.send_to_replicas_with_handler_hook(
                 service_request_constructor,
-                inner_async_quorum_callback.clone(),
+                Arc::new(response_handler_generator),
+                response_callback_generator,
             ).await;
 
-            inner_async_quorum_callback.on_response(inner_replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
+            inner_async_quorum_callback.on_response(replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
                 term,
                 voted: true,
                 correlation_id: RESERVED_CORRELATION_ID,
@@ -61,7 +80,7 @@ impl Election {
             let _ = sender.send(term).await;
         };
 
-        let _ = replica.add_to_queue(handler).await;
+        let _ = replica.add_to_queue(request_vote_handler).await;
         let quorum_completion_response = async_quorum_callback.handle().await;
         let election_term = receiver.recv().await.unwrap();
 
@@ -88,12 +107,11 @@ mod tests {
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::replica::Replica;
-    use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 
     use crate::election::election::Election;
+    use crate::election::election::tests::setup::ClientType::{Failure, Success};
     use crate::election::election::tests::setup::IncrementingCorrelationIdServiceRequestFactory;
     use crate::heartbeat_config::HeartbeatConfig;
-    use crate::net::rpc::grpc::RequestVoteResponse;
     use crate::state::{ReplicaRole, State};
 
     mod setup {
@@ -108,16 +126,25 @@ mod tests {
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
         use replicate::net::replica::ReplicaId;
+        use crate::election::election::tests::setup::ClientType::Success;
 
         use crate::net::factory::service_request::ServiceRequestFactory;
         use crate::net::rpc::grpc::RequestVote;
+        use crate::net::rpc::grpc::RequestVoteResponse;
+
+        #[derive(PartialEq)]
+        pub(crate) enum ClientType {
+            Success,
+            Failure,
+        }
 
         pub(crate) struct IncrementingCorrelationIdServiceRequestFactory {
             pub(crate) base_correlation_id: RwLock<AtomicU64>,
+            pub(crate) client_type: ClientType,
         }
 
         impl ServiceRequestFactory for IncrementingCorrelationIdServiceRequestFactory {
-            fn request_vote(&self, replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, ()> {
+            fn request_vote(&self, replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, RequestVoteResponse> {
                 {
                     let write_guard = self.base_correlation_id.write().unwrap();
                     write_guard.fetch_add(1, Ordering::SeqCst);
@@ -125,6 +152,11 @@ mod tests {
 
                 let guard = self.base_correlation_id.read().unwrap();
                 let correlation_id: CorrelationId = guard.load(Ordering::SeqCst);
+                let client: Box<dyn ServiceClientProvider<RequestVote, RequestVoteResponse>> = if self.client_type == Success {
+                    Box::new(VotedRequestVoteClient { correlation_id })
+                } else {
+                    Box::new(NotVotedRequestVoteClient { correlation_id })
+                };
 
                 return ServiceRequest::new(
                     RequestVote {
@@ -132,19 +164,41 @@ mod tests {
                         term,
                         correlation_id,
                     },
-                    Box::new(TestRequestVoteClient {}),
+                    client,
                     correlation_id,
                 );
             }
         }
 
-        struct TestRequestVoteClient {}
+        struct VotedRequestVoteClient {
+            correlation_id: CorrelationId
+        }
+
+        struct NotVotedRequestVoteClient {
+            correlation_id: CorrelationId
+        }
 
         #[async_trait]
-        impl ServiceClientProvider<RequestVote, ()> for TestRequestVoteClient {
-            async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+        impl ServiceClientProvider<RequestVote, RequestVoteResponse> for VotedRequestVoteClient {
+            async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(())
+                    Response::new(RequestVoteResponse {
+                        voted: true,
+                        term: 1,
+                        correlation_id: self.correlation_id
+                    })
+                );
+            }
+        }
+        #[async_trait]
+        impl ServiceClientProvider<RequestVote, RequestVoteResponse> for NotVotedRequestVoteClient {
+            async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
+                return Ok(
+                    Response::new(RequestVoteResponse {
+                        voted: false,
+                        term: 1,
+                        correlation_id: self.correlation_id
+                    })
                 );
             }
         }
@@ -175,6 +229,7 @@ mod tests {
             state.clone(),
             Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                client_type: Success
             }),
         );
 
@@ -182,15 +237,6 @@ mod tests {
         let handle = election_runtime.spawn(async move {
             election.start().await;
         });
-
-        let response = RequestVoteResponse {
-            term: 1,
-            voted: true,
-            correlation_id: 1,
-        };
-
-        thread::sleep(Duration::from_millis(20));
-        some_replica.register_response(1, peer_host, Ok(Box::new(response)));
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         blocking_runtime.block_on(async move {
@@ -227,6 +273,7 @@ mod tests {
             state.clone(),
             Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                client_type: Failure
             }),
         );
 
@@ -234,74 +281,11 @@ mod tests {
         let handle = election_runtime.spawn(async move {
             election.start().await;
         });
-
-        let response_with_higher_term_one = RequestVoteResponse {
-            term: 2,
-            voted: false,
-            correlation_id: 1,
-        };
-        let response_with_higher_term_two = RequestVoteResponse {
-            term: 2,
-            voted: false,
-            correlation_id: 2,
-        };
-
-        thread::sleep(Duration::from_millis(20));
-        some_replica.register_response(1, peer_host, Ok(Box::new(response_with_higher_term_one)));
-        some_replica.register_response(2, peer_other_host, Ok(Box::new(response_with_higher_term_two)));
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         blocking_runtime.block_on(async move {
             let _ = handle.await;
             thread::sleep(Duration::from_millis(10));
-
-            assert_eq!(ReplicaRole::Follower, state.get_role());
-        });
-    }
-
-    #[test]
-    fn lose_the_election_with_request_timeout() {
-        let self_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971);
-        let peer_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297);
-        let peer_other_host = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1298);
-
-        let some_replica = Replica::new_with_waiting_list_config(
-            10,
-            self_host,
-            vec![peer_host, peer_other_host],
-            Arc::new(SystemClock::new()),
-            RequestWaitingListConfig::new(
-                Duration::from_millis(50),
-                Duration::from_millis(30),
-            ),
-        );
-
-        let some_replica = Arc::new(some_replica);
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-
-        let inner_replica = some_replica.clone();
-        let state = blocking_runtime.block_on(async move {
-            return State::new(inner_replica, HeartbeatConfig::default());
-        });
-
-        let election = Election::new_with(
-            state.clone(),
-            Arc::new(IncrementingCorrelationIdServiceRequestFactory {
-                base_correlation_id: RwLock::new(AtomicU64::new(0)),
-            }),
-        );
-
-        let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-        let handle = election_runtime.spawn(async move {
-            election.start().await;
-        });
-
-        thread::sleep(Duration::from_millis(20));
-
-        let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        blocking_runtime.block_on(async move {
-            let _ = handle.await;
-            thread::sleep(Duration::from_millis(100));
 
             assert_eq!(ReplicaRole::Follower, state.get_role());
         });

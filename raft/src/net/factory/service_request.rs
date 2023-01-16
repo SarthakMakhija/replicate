@@ -3,7 +3,7 @@ use replicate::net::connect::random_correlation_id_generator::RandomCorrelationI
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::ReplicaId;
 
-use crate::net::factory::client_provider::{HeartbeatServiceClient, ReplicateLogClient, ReplicateLogResponseClient, RequestVoteClient, RequestVoteResponseClient};
+use crate::net::factory::client_provider::{HeartbeatServiceClient, ReplicateLogClient, ReplicateLogResponseClient, RequestVoteClient};
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::AppendEntriesResponse;
 use crate::net::rpc::grpc::Entry;
@@ -11,7 +11,7 @@ use crate::net::rpc::grpc::RequestVote;
 use crate::net::rpc::grpc::RequestVoteResponse;
 
 pub(crate) trait ServiceRequestFactory: Send + Sync {
-    fn request_vote(&self, replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, ()> {
+    fn request_vote(&self, replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, RequestVoteResponse> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(
@@ -21,18 +21,6 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 correlation_id,
             },
             Box::new(RequestVoteClient {}),
-            correlation_id,
-        );
-    }
-
-    fn request_vote_response(&self, term: u64, voted: bool, correlation_id: CorrelationId) -> ServiceRequest<RequestVoteResponse, ()> {
-        return ServiceRequest::new(
-            RequestVoteResponse {
-                term,
-                voted,
-                correlation_id,
-            },
-            Box::new(RequestVoteResponseClient {}),
             correlation_id,
         );
     }

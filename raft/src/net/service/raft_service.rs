@@ -46,17 +46,14 @@ impl RaftService {
 
 #[tonic::async_trait]
 impl Raft for RaftService {
-    async fn acknowledge_request_vote(&self, request: Request<RequestVote>) -> Result<Response<()>, tonic::Status> {
-        let originating_host_port = request.try_referral_host_port()?;
-
+    async fn acknowledge_request_vote(&self, request: Request<RequestVote>) -> Result<Response<RequestVoteResponse>, tonic::Status> {
         let state = self.state.clone();
         let request = request.into_inner();
         let correlation_id = request.correlation_id;
         let replica = self.state.get_replica();
-        let source_address = replica.get_self_address();
-        let service_request_factory = self.service_request_factory.clone();
 
         println!("received RequestVote with term {}", request.term);
+        let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term = state.get_term();
             let role = state.get_role();
@@ -68,28 +65,16 @@ impl Raft for RaftService {
             if voted {
                 state.voted_for(request.replica_id);
             }
-
-            let send_result = AsyncNetwork::send_with_source_footprint(
-                service_request_factory.request_vote_response(term, voted, correlation_id),
-                source_address,
-                originating_host_port,
-            ).await;
-
-            if send_result.is_err() {
-                eprintln!("failed to send request_vote_response to {:?}", originating_host_port);
-            }
+            let response = RequestVoteResponse { term, voted, correlation_id };
+            let _ = sender.send(response).await;
         };
         let _ = replica.add_to_queue(handler).await;
-        return Ok(Response::new(()));
-    }
-
-    async fn finish_request_vote(&self, request: Request<RequestVoteResponse>) -> Result<Response<()>, tonic::Status> {
-        let originating_host_port = request.try_referral_host_port()?;
-        let response = request.into_inner();
-        println!("received RequestVoteResponse with voted? {}", response.voted);
-
-        let _ = &self.state.get_replica_reference().register_response(response.correlation_id, originating_host_port, Ok(Box::new(response)));
-        return Ok(Response::new(()));
+        return match receiver.recv().await {
+            Some(request_vote_response) =>
+                Ok(Response::new(request_vote_response)),
+            None =>
+                Err(tonic::Status::unknown("failed receiving RequestVoteResponse from the async handler"))
+        };
     }
 
     async fn acknowledge_heartbeat(&self, request: Request<AppendEntries>) -> Result<Response<AppendEntriesResponse>, tonic::Status> {
@@ -217,7 +202,7 @@ impl Raft for RaftService {
                             pending_committed_log_entries.handle_response(
                                 commit_index,
                                 state.get_replica_reference().get_self_address(),
-                                Ok(Box::new(()))
+                                Ok(Box::new(())),
                             );
                         });
                     }
@@ -613,7 +598,7 @@ mod tests {
             raft_service.pending_committed_log_entries.handle_response(
                 0,
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060),
-                Ok(Box::new(()))
+                Ok(Box::new(())),
             );
         });
 
