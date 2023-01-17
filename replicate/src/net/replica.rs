@@ -114,13 +114,32 @@ impl Replica {
               F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
               T: Future<Output=()> + Send + 'static,
               U: Fn() -> Option<ResponseCallbackType> {
-        let peer_addresses = self.peer_addresses.clone();
 
-        for peer_address in peer_addresses {
+        self.send_to_with_handler_hook(
+            &self.peer_addresses,
+            service_request_constructor,
+            response_handler_generator,
+            response_callback_generator,
+        ).await;
+    }
+
+    pub async fn send_to_with_handler_hook<Payload, S, Response, F, T, U>(&self,
+                                                                          hosts: &Vec<HostAndPort>,
+                                                                          service_request_constructor: S,
+                                                                          response_handler_generator: Arc<F>,
+                                                                          response_callback_generator: U)
+        where Payload: Send + 'static,
+              Response: Send + Debug + 'static,
+              S: Fn() -> ServiceRequest<Payload, Response>,
+              F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
+              T: Future<Output=()> + Send + 'static,
+              U: Fn() -> Option<ResponseCallbackType> {
+        for peer_address in hosts {
             if peer_address.eq(&self.self_address) {
                 continue;
             }
 
+            let peer_address = peer_address.clone();
             let source_address = self.self_address.clone();
             let singular_update_queue = self.singular_update_queue.clone();
             let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
@@ -681,7 +700,7 @@ mod tests {
                 )
             };
 
-            let  replica = inner_replica.clone();
+            let replica = inner_replica.clone();
             let response_handler_generator = move |_peer, _response: Result<(), ServiceResponseError>| {
                 let replica = inner_replica.clone();
                 return Some(async move {
@@ -696,7 +715,58 @@ mod tests {
             replica.send_to_replicas_with_handler_hook(
                 service_request_constructor,
                 Arc::new(response_handler_generator),
-                 || Some(callback.clone()),
+                || Some(callback.clone()),
+            ).await;
+
+            let completion_response = callback.handle().await;
+            assert_eq!(&String::from("success response"),
+                       completion_response.success_response().unwrap().get(&replica.get_self_address()).unwrap()
+            );
+        });
+    }
+
+    #[test]
+    fn send_to_the_host_with_response_hook_and_callback() {
+        let runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+        let replica = Arc::new(replica);
+        let inner_replica = replica.clone();
+        let self_address = inner_replica.self_address;
+
+        runtime.block_on(async move {
+            let correlation_id_generator = FixedCorrelationIdGenerator::new(30);
+            let service_request_constructor = move || {
+                ServiceRequest::new(
+                    GetValueRequest {},
+                    Box::new(GetValueRequestSuccessClient {}),
+                    correlation_id_generator.generate(),
+                )
+            };
+
+            let replica = inner_replica.clone();
+            let response_handler_generator = move |_peer, _response: Result<(), ServiceResponseError>| {
+                let replica = inner_replica.clone();
+                return Some(async move {
+                    replica.register_response(
+                        30,
+                        self_address,
+                        Ok(Box::new(String::from("success response"))),
+                    )
+                });
+            };
+            let callback = AsyncQuorumCallback::<String>::new(1, 1);
+            replica.send_to_with_handler_hook(
+                &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989)],
+                service_request_constructor,
+                Arc::new(response_handler_generator),
+                || Some(callback.clone()),
             ).await;
 
             let completion_response = callback.handle().await;
