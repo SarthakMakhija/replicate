@@ -7,14 +7,13 @@ use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
 use replicate::callback::single_response_completion_callback::SingleResponseCompletionCallback;
 
 use crate::follower_state::FollowerState;
-use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
+use crate::net::factory::service_request::BuiltInServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::{ReplicaRole, State};
 
 pub struct RaftService {
     state: Arc<State>,
-    service_request_factory: Arc<dyn ServiceRequestFactory>,
     follower_state: Arc<FollowerState>,
 }
 
@@ -22,12 +21,9 @@ impl RaftService {
     pub fn new(state: Arc<State>) -> Self {
         let inner_state = state.clone();
         let service_request_factory = Arc::new(BuiltInServiceRequestFactory::new());
-        let inner_service_request_factory = service_request_factory.clone();
-
         return RaftService {
             state,
-            service_request_factory,
-            follower_state: Arc::new(FollowerState::new(inner_state, inner_service_request_factory)),
+            follower_state: Arc::new(FollowerState::new(inner_state, service_request_factory)),
         };
     }
 }
