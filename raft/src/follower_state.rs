@@ -42,7 +42,7 @@ impl FollowerState {
         return follower_state;
     }
 
-    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, log_entry_index: u64) {
+    pub(crate) fn replicate_log_at(self: Arc<FollowerState>) {
         let term = self.state.get_term();
 
         for peer in &self.peers {
@@ -52,7 +52,7 @@ impl FollowerState {
             let follower_state = self.clone();
             self.state.get_replica_reference().send_to_with_handler_hook(
                 &vec![peer.clone()],
-                || self.service_request(next_log_index_by_peer.1, log_entry_index, term),
+                || self.service_request(next_log_index_by_peer.1, term),
                 Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
                     return Self::append_entries_response_handler(follower_state.clone(), peer, response);
                 }),
@@ -63,16 +63,15 @@ impl FollowerState {
 
     pub(crate) fn register(self: Arc<FollowerState>, response: AppendEntriesResponse, from: HostAndPort) {
         if response.success {
-            self.acknowledge_log_index(response, from);
+            self.acknowledge_log_index(from);
             return;
         }
         self.retry_reducing_log_index(from);
     }
 
-    fn acknowledge_log_index(&self, response: AppendEntriesResponse, peer: HostAndPort) {
-        let response_log_entry_index = response.log_entry_index.unwrap();
+    fn acknowledge_log_index(&self, peer: HostAndPort) {
         self.next_log_index_by_peer.entry(peer)
-            .and_modify(|next_log_index| *next_log_index = response_log_entry_index + 1);
+            .and_modify(|next_log_index| *next_log_index = *next_log_index + 1);
     }
 
     fn retry_reducing_log_index(self: Arc<FollowerState>, peer: HostAndPort) {
@@ -86,14 +85,13 @@ impl FollowerState {
             }
 
             let term = self.state.get_term();
-            let latest_log_entry_index = self.state.get_replicated_log_reference().get_latest_log_entry_index();
             let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
 
             println!("retrying log replication at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
             let follower_state = self.clone();
             self.state.get_replica_reference().send_to_with_handler_hook(
                 &vec![peer.clone()],
-                || self.service_request(next_log_index_by_peer.1, latest_log_entry_index, term),
+                || self.service_request(next_log_index_by_peer.1, term),
                 Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
                     return Self::append_entries_response_handler(follower_state.clone(), peer, response);
                 }),
@@ -102,8 +100,8 @@ impl FollowerState {
         }
     }
 
-    fn service_request(&self, next_log_index: NextLogIndex, latest_log_entry_index: u64, term: u64) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
-        let (previous_log_index, previous_log_term) = self.previous_log_index_term(latest_log_entry_index);
+    fn service_request(&self, next_log_index: NextLogIndex, term: u64) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
+        let (previous_log_index, previous_log_term) = self.previous_log_index_term(next_log_index);
 
         let entry = match self.state.get_replicated_log_reference().get_log_entry_at(next_log_index as usize) {
             None => None,
@@ -127,9 +125,9 @@ impl FollowerState {
         );
     }
 
-    fn previous_log_index_term(&self, latest_log_entry_index: u64) -> (Option<u64>, Option<u64>) {
-        let previous_log_index = if latest_log_entry_index >= 1 {
-            Some(latest_log_entry_index - 1)
+    fn previous_log_index_term(&self, next_log_index: NextLogIndex) -> (Option<u64>, Option<u64>) {
+        let previous_log_index = if next_log_index >= 1 {
+            Some(next_log_index - 1)
         } else {
             None
         };
@@ -233,12 +231,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 1;
-        let latest_log_entry_index: u64 = 1;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -269,12 +265,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 1;
-        let latest_log_entry_index: u64 = 1;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -316,12 +310,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 1;
-        let latest_log_entry_index: u64 = 1;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -352,12 +344,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 0;
-        let latest_log_entry_index: u64 = 0;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -389,12 +379,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 1;
-        let latest_log_entry_index: u64 = 1;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -433,12 +421,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 1;
-        let latest_log_entry_index: u64 = 1;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -470,12 +456,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 1;
-        let latest_log_entry_index: u64 = 1;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -513,12 +497,10 @@ mod tests {
         ));
 
         let next_log_index: NextLogIndex = 0;
-        let latest_log_entry_index: u64 = 0;
         let term = 1;
 
         let service_request = follower_state.service_request(
             next_log_index,
-            latest_log_entry_index,
             term,
         );
 
@@ -554,13 +536,13 @@ mod tests {
             follower_state.clone().register(AppendEntriesResponse {
                 term: 1,
                 success: true,
-                log_entry_index: Some(10),
+                log_entry_index: Some(5),
                 correlation_id: 10,
             }, peer.clone());
         });
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
-        assert_eq!(11, *(next_log_index_by_peer.value()));
+        assert_eq!(1, *(next_log_index_by_peer.value()));
     }
 
     #[test]
