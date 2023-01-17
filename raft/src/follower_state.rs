@@ -43,7 +43,7 @@ impl FollowerState {
         return follower_state;
     }
 
-    pub(crate) fn replicate_log_at(&self, log_entry_index: u64) -> Vec<JoinHandle<Result<(), ServiceResponseError>>> {
+    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, log_entry_index: u64) -> Vec<JoinHandle<Result<(), ServiceResponseError>>> {
         let term = self.state.get_term();
         let source_address = self.state.get_replica_reference().get_self_address();
         let mut task_handles = Vec::new();
@@ -68,7 +68,7 @@ impl FollowerState {
         return task_handles;
     }
 
-    pub(crate) fn register(&self, response: AppendEntriesResponse, from: HostAndPort) {
+    pub(crate) fn register(self: Arc<FollowerState>, response: AppendEntriesResponse, from: HostAndPort) {
         if response.success {
             self.acknowledge_log_index(response, from);
             return;
@@ -193,10 +193,10 @@ mod tests {
             return state;
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
@@ -229,10 +229,10 @@ mod tests {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
@@ -276,10 +276,10 @@ mod tests {
             return state;
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
@@ -312,10 +312,10 @@ mod tests {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 0;
         let latest_log_entry_index: u64 = 0;
@@ -349,10 +349,10 @@ mod tests {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
@@ -393,10 +393,10 @@ mod tests {
             return state;
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
@@ -430,10 +430,10 @@ mod tests {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
@@ -473,10 +473,10 @@ mod tests {
             return state;
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
         let next_log_index : NextLogIndex = 0;
         let latest_log_entry_index: u64 = 0;
@@ -511,12 +511,12 @@ mod tests {
             return State::new(Arc::new(replica), HeartbeatConfig::default());
         });
 
-        let follower_state = FollowerState::new(
+        let follower_state = Arc::new(FollowerState::new(
             state,
             Arc::new(BuiltInServiceRequestFactory::new()),
-        );
+        ));
 
-        follower_state.register(AppendEntriesResponse {
+        follower_state.clone().register(AppendEntriesResponse {
             term: 1,
             success: true,
             log_entry_index: Some(10),
