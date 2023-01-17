@@ -127,7 +127,7 @@ impl Raft for RaftService {
                 let entry = append_entries.entry.unwrap();
                 let command = entry.command.unwrap();
 
-                replicated_log.append_command(&command, append_entries.term);
+                replicated_log.append(&command, append_entries.term);
                 replicated_log.maybe_advance_commit_index_to(append_entries.leader_commit_index);
                 Some(entry.index)
             } else {
@@ -161,7 +161,7 @@ impl Raft for RaftService {
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term: u64 = state.get_term();
-            let log_entry_index = state.get_replicated_log_reference().append_command(&command, term);
+            let log_entry_index = state.get_replicated_log_reference().append(&command, term);
             let _ = follower_state.replicate_log_at();
             let _ = sender.send(log_entry_index).await;
         };
@@ -704,7 +704,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log_reference().append_command(&command, term);
+            state.get_replicated_log_reference().append(&command, term);
             return state;
         });
 
@@ -761,7 +761,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log_reference().append_command(&command, term);
+            state.get_replicated_log_reference().append(&command, term);
             return state;
         });
 

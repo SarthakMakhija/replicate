@@ -108,7 +108,7 @@ impl ReplicatedLog {
         return (*guard).commit_index;
     }
 
-    pub fn append_command(&self, command: &Command, term: u64) -> u64 {
+    pub fn append(&self, command: &Command, term: u64) -> u64 {
         let mut write_guard = self.replicated_log_state.write().unwrap();
         let replicated_log_state = &mut *write_guard;
         let log_entries_size = replicated_log_state.log_entries.len();
@@ -153,7 +153,7 @@ mod tests {
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
 
-        let index = replicated_log.append_command(&command, 1);
+        let index = replicated_log.append(&command, 1);
 
         let log_entry = replicated_log.get_log_entry_at(0).unwrap();
         assert_eq!(0, index);
@@ -169,7 +169,7 @@ mod tests {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
-            let index = replicated_log.append_command(&command, 1);
+            let index = replicated_log.append(&command, 1);
             let log_entry = replicated_log.get_log_entry_at(0).unwrap();
 
             assert_eq!(count - 1, index);
@@ -191,7 +191,7 @@ mod tests {
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
 
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
         assert_eq!(Some(1), replicated_log.get_log_term_at(0));
     }
 
@@ -206,7 +206,7 @@ mod tests {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
 
         assert_eq!(
             Some(LogEntry::new(1, 0, &command)),
@@ -219,7 +219,7 @@ mod tests {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
 
         assert_eq!(1, replicated_log.get_log_entry_at(0).unwrap().get_acknowledgements());
         assert_eq!(1, replicated_log.total_log_entries());
@@ -230,7 +230,7 @@ mod tests {
         let replicated_log = ReplicatedLog::new(2);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
 
         replicated_log.acknowledge_log_entry_at(0);
         replicated_log.acknowledge_log_entry_at(0);
@@ -244,7 +244,7 @@ mod tests {
         let replicated_log = ReplicatedLog::new(3);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
 
         replicated_log.acknowledge_log_entry_at(0);
         replicated_log.acknowledge_log_entry_at(0);
@@ -257,7 +257,7 @@ mod tests {
         let replicated_log = ReplicatedLog::new(3);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
 
         replicated_log.acknowledge_log_entry_at(0);
 
@@ -276,7 +276,7 @@ mod tests {
         let replicated_log = ReplicatedLog::new(1);
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
 
         replicated_log.acknowledge_log_entry_at(0);
 
@@ -291,7 +291,7 @@ mod tests {
         for _count in 1..=3 {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            replicated_log.append_command(&command, 1);
+            replicated_log.append(&command, 1);
         }
 
         replicated_log.acknowledge_log_entry_at(0);
@@ -309,7 +309,7 @@ mod tests {
         for _count in 1..=3 {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            replicated_log.append_command(&command, 1);
+            replicated_log.append(&command, 1);
         }
 
         replicated_log.acknowledge_log_entry_at(0);
@@ -334,7 +334,7 @@ mod tests {
         for _count in 1..=3 {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            replicated_log.append_command(&command, 1);
+            replicated_log.append(&command, 1);
         }
 
         replicated_log.acknowledge_log_entry_at(0);
@@ -350,7 +350,7 @@ mod tests {
         let content = String::from("Content");
         let command = Command { command: content.as_bytes().to_vec() };
 
-        replicated_log.append_command(&command, 1);
+        replicated_log.append(&command, 1);
         replicated_log.acknowledge_log_entry_at(0);
         replicated_log.commit(|_| {});
 
@@ -364,7 +364,7 @@ mod tests {
         for _count in 1..=2 {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            replicated_log.append_command(&command, 1);
+            replicated_log.append(&command, 1);
         }
 
         replicated_log.acknowledge_log_entry_at(0);
@@ -389,7 +389,7 @@ mod tests {
         for _count in 1..=2 {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            replicated_log.append_command(&command, 1);
+            replicated_log.append(&command, 1);
         }
 
         replicated_log.acknowledge_log_entry_at(0);

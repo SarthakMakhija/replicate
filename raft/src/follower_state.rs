@@ -293,7 +293,7 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            state.get_replicated_log_reference().append_command(
+            state.get_replicated_log_reference().append(
                 &command,
                 1,
             );
@@ -408,7 +408,7 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            state.get_replicated_log_reference().append_command(
+            state.get_replicated_log_reference().append(
                 &command,
                 1,
             );
@@ -484,7 +484,7 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            state.get_replicated_log_reference().append_command(
+            state.get_replicated_log_reference().append(
                 &command,
                 1,
             );
@@ -609,7 +609,7 @@ mod tests {
             let content = String::from("anything");
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
-            state.get_replicated_log_reference().append_command(&command, term);
+            state.get_replicated_log_reference().append(&command, term);
 
             state.clone().change_to_leader();
             return state;
@@ -680,7 +680,7 @@ mod tests {
             let state = State::new(Arc::new(replica), HeartbeatConfig::default());
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
-            state.get_replicated_log_reference().append_command(
+            state.get_replicated_log_reference().append(
                 &command,
                 0,
             );
@@ -732,7 +732,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log_reference().append_command(&command, term);
+            state.get_replicated_log_reference().append(&command, term);
             state.clone().change_to_leader();
             return state;
         });
@@ -779,7 +779,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log_reference().append_command(&command, term);
+            state.get_replicated_log_reference().append(&command, term);
             state.clone().change_to_leader();
             return state;
         });
@@ -837,7 +837,7 @@ mod tests {
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
 
-            state.get_replicated_log_reference().append_command(&command, term);
+            state.get_replicated_log_reference().append(&command, term);
             state.clone().change_to_leader();
             return state;
         });
