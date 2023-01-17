@@ -1,16 +1,15 @@
+use std::future::Future;
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use tokio::task::JoinHandle;
 
-use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
 
 use crate::net::factory::service_request::ServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
-use crate::state::State;
+use crate::state::{ReplicaRole, State};
 
 type NextLogIndex = u64;
 
@@ -43,29 +42,23 @@ impl FollowerState {
         return follower_state;
     }
 
-    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, log_entry_index: u64) -> Vec<JoinHandle<Result<(), ServiceResponseError>>> {
+    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, log_entry_index: u64) {
         let term = self.state.get_term();
-        let source_address = self.state.get_replica_reference().get_self_address();
-        let mut task_handles = Vec::new();
 
         for peer in &self.peers {
             let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
             println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
 
-            let service_request = self.service_request(next_log_index_by_peer.1, log_entry_index, term);
-            let target_address = peer.clone();
-
-            task_handles.push(
-                tokio::spawn(async move {
-                    AsyncNetwork::send_with_source_footprint(
-                        service_request,
-                        source_address,
-                        target_address,
-                    ).await
-                })
-            );
+            let follower_state = self.clone();
+            self.state.get_replica_reference().send_to_with_handler_hook(
+                &vec![peer.clone()],
+                || self.service_request(next_log_index_by_peer.1, log_entry_index, term),
+                Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                    return Self::append_entries_response_handler(follower_state.clone(), peer, response);
+                }),
+                || None,
+            )
         }
-        return task_handles;
     }
 
     pub(crate) fn register(self: Arc<FollowerState>, response: AppendEntriesResponse, from: HostAndPort) {
@@ -82,7 +75,7 @@ impl FollowerState {
             .and_modify(|next_log_index| *next_log_index = response_log_entry_index + 1);
     }
 
-    fn retry_reducing_log_index(&self, peer: HostAndPort) {
+    fn retry_reducing_log_index(self: Arc<FollowerState>, peer: HostAndPort) {
         let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
         let (previous_log_index, _) = self.previous_log_index_term(next_log_index_by_peer.1);
 
@@ -94,22 +87,22 @@ impl FollowerState {
 
             let term = self.state.get_term();
             let latest_log_entry_index = self.state.get_replicated_log_reference().get_latest_log_entry_index();
-            let source_address = self.state.get_replica_reference().get_self_address();
             let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
-            let service_request = self.service_request(next_log_index_by_peer.1, latest_log_entry_index, term);
 
             println!("retrying log replication at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
-            tokio::spawn(async move {
-                AsyncNetwork::send_with_source_footprint(
-                    service_request,
-                    source_address,
-                    peer,
-                ).await
-            });
+            let follower_state = self.clone();
+            self.state.get_replica_reference().send_to_with_handler_hook(
+                &vec![peer.clone()],
+                || self.service_request(next_log_index_by_peer.1, latest_log_entry_index, term),
+                Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                    return Self::append_entries_response_handler(follower_state.clone(), peer, response);
+                }),
+                || None,
+            )
         }
     }
 
-    fn service_request(&self, next_log_index: NextLogIndex, latest_log_entry_index: u64, term: u64) -> ServiceRequest<AppendEntries, ()> {
+    fn service_request(&self, next_log_index: NextLogIndex, latest_log_entry_index: u64, term: u64) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
         let (previous_log_index, previous_log_term) = self.previous_log_index_term(latest_log_entry_index);
 
         let entry = match self.state.get_replicated_log_reference().get_log_entry_at(next_log_index as usize) {
@@ -154,6 +147,49 @@ impl FollowerState {
             (next_log_index_by_peer.key().clone(), *next_log_index_by_peer.value())
         };
     }
+
+    fn append_entries_response_handler(follower_state: Arc<FollowerState>,
+                                       peer: HostAndPort,
+                                       response: Result<AppendEntriesResponse, ServiceResponseError>,
+    ) -> Option<impl Future<Output=()>> {
+
+        let inner_follower_state = follower_state.clone();
+        return Some(
+            async move {
+                match response {
+                    Ok(append_entries_response) => {
+                        let state = inner_follower_state.state.clone();
+                        let term = state.get_term();
+                        if append_entries_response.term > term {
+                            state.clone().change_to_follower(append_entries_response.term);
+                        }
+                        let replica_role = state.get_role();
+                        if replica_role == ReplicaRole::Leader {
+                            if append_entries_response.success {
+                                let replicated_log = state.get_replicated_log_reference();
+                                let log_entry_index = append_entries_response.log_entry_index.unwrap() as usize;
+
+                                replicated_log.acknowledge_log_entry_at(log_entry_index);
+                                if replicated_log.is_entry_replicated(log_entry_index) {
+                                    replicated_log.commit(|commit_index| {
+                                        state.get_pending_committed_log_entries_reference().handle_response(
+                                            commit_index,
+                                            state.get_replica_reference().get_self_address(),
+                                            Ok(Box::new(())),
+                                        );
+                                    });
+                                }
+                            }
+                            inner_follower_state.register(append_entries_response, peer);
+                        }
+                    }
+                    Err(_err) => {
+                        eprintln!("received AppendEntriesResponse with an error from the host {:?}", peer);
+                    }
+                }
+            }
+        );
+    }
 }
 
 #[cfg(test)]
@@ -165,13 +201,12 @@ mod tests {
 
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
-    use replicate::net::connect::service_client::ServiceRequest;
     use replicate::net::replica::Replica;
 
     use crate::follower_state::{FollowerState, NextLogIndex};
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::net::factory::service_request::BuiltInServiceRequestFactory;
-    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command};
+    use crate::net::rpc::grpc::{AppendEntriesResponse, Command};
     use crate::state::State;
 
     #[test]
@@ -198,11 +233,11 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 1;
+        let next_log_index: NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
             term,
@@ -234,14 +269,14 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 1;
+        let next_log_index: NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
-            term
+            term,
         );
 
         let payload = service_request.get_payload();
@@ -281,11 +316,11 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 1;
+        let next_log_index: NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
             term,
@@ -317,11 +352,11 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 0;
+        let next_log_index: NextLogIndex = 0;
         let latest_log_entry_index: u64 = 0;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
             term,
@@ -354,11 +389,11 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 1;
+        let next_log_index: NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
             term,
@@ -398,11 +433,11 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 1;
+        let next_log_index: NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
             term,
@@ -435,11 +470,11 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 1;
+        let next_log_index: NextLogIndex = 1;
         let latest_log_entry_index: u64 = 1;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
             term,
@@ -478,14 +513,14 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        let next_log_index : NextLogIndex = 0;
+        let next_log_index: NextLogIndex = 0;
         let latest_log_entry_index: u64 = 0;
         let term = 1;
 
-        let service_request: ServiceRequest<AppendEntries, ()> = follower_state.service_request(
+        let service_request = follower_state.service_request(
             next_log_index,
             latest_log_entry_index,
-            term
+            term,
         );
 
         let payload = service_request.get_payload();

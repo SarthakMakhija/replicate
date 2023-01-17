@@ -9,7 +9,7 @@ service Raft {
 
   rpc acknowledge_heartbeat (AppendEntries) returns (AppendEntriesResponse) {}
 
-  rpc acknowledge_replicate_log (AppendEntries) returns (google.protobuf.Empty) {}
+  rpc acknowledge_replicate_log (AppendEntries) returns (AppendEntriesResponse) {}
   rpc finish_replicate_log (AppendEntriesResponse) returns (google.protobuf.Empty) {}
 
   rpc execute (Command) returns (google.protobuf.Empty) {}

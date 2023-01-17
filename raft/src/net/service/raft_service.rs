@@ -5,7 +5,6 @@ use tonic::{Request, Response};
 
 use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
 use replicate::callback::single_response_completion_callback::SingleResponseCompletionCallback;
-use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::host_port_extractor::HostAndPortExtractor;
 
 use crate::follower_state::FollowerState;
@@ -112,16 +111,14 @@ impl Raft for RaftService {
         };
     }
 
-    async fn acknowledge_replicate_log(&self, request: Request<AppendEntries>) -> Result<Response<()>, tonic::Status> {
+    async fn acknowledge_replicate_log(&self, request: Request<AppendEntries>) -> Result<Response<AppendEntriesResponse>, tonic::Status> {
         println!("received replicate_log on {:?}", self.state.get_replica_reference().get_self_address());
 
-        let originating_host_port = request.try_referral_host_port()?;
         let state = self.state.clone();
         let replica = self.state.get_replica_reference();
-
-        let service_request_factory = self.service_request_factory.clone();
         let append_entries = request.into_inner();
 
+        let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             state.mark_heartbeat_received();
 
@@ -141,19 +138,22 @@ impl Raft for RaftService {
             } else {
                 None
             };
-            let send_result = AsyncNetwork::send_with_source_footprint(
-                service_request_factory.replicate_log_response(term, should_accept, log_entry_index, append_entries.correlation_id),
-                state.get_replica_reference().get_self_address(),
-                originating_host_port,
-            ).await;
 
-            if send_result.is_err() {
-                eprintln!("failed to send append_entries_response to {:?}", originating_host_port);
-            }
+            let _ = sender.send(AppendEntriesResponse {
+                term,
+                success: should_accept,
+                log_entry_index,
+                correlation_id: append_entries.correlation_id
+            }).await;
         };
 
         let _ = replica.add_to_queue(handler).await;
-        return Ok(Response::new(()));
+        return match receiver.recv().await {
+            Some(append_entries_response) =>
+                Ok(Response::new(append_entries_response)),
+            None =>
+                Err(tonic::Status::unknown("failed receiving AppendEntriesResponse from the async handler"))
+        };
     }
 
     async fn finish_replicate_log(&self, request: Request<AppendEntriesResponse>) -> Result<Response<()>, tonic::Status> {

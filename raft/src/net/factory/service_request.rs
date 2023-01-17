@@ -51,7 +51,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                      previous_log_term: Option<u64>,
                      leader_commit_index: Option<u64>,
                      entry: Option<Entry>,
-    ) -> ServiceRequest<AppendEntries, ()> {
+    ) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
 
