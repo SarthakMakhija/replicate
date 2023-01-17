@@ -125,9 +125,8 @@ impl Raft for RaftService {
             let log_entry_index = if should_accept {
                 let replicated_log = state.get_replicated_log_reference();
                 let entry = append_entries.entry.unwrap();
-                let command = entry.command.unwrap();
 
-                replicated_log.append(&command, append_entries.term);
+                replicated_log.maybe_append(&entry);
                 replicated_log.maybe_advance_commit_index_to(append_entries.leader_commit_index);
                 Some(entry.index)
             } else {
