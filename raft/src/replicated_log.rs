@@ -2,6 +2,7 @@ use std::sync::RwLock;
 
 use crate::log_entry::LogEntry;
 use crate::net::rpc::grpc::Command;
+use crate::net::rpc::grpc::AppendEntries;
 
 pub struct ReplicatedLog {
     majority_quorum: usize,
@@ -88,6 +89,20 @@ impl ReplicatedLog {
         }
     }
 
+    pub(crate) fn should_accept(&self, append_entries: &AppendEntries, term: u64) -> bool {
+        return if term > append_entries.term {
+            false
+        } else if append_entries.previous_log_index.is_none() {
+            true
+        } else if append_entries.previous_log_index.unwrap() >= self.total_log_entries() as u64 {
+            false
+        } else if !self.matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
+            false
+        } else {
+            true
+        }
+    }
+
     pub fn get_commit_index(&self) -> Option<u64> {
         let guard = self.replicated_log_state.read().unwrap();
         return (*guard).commit_index;
@@ -129,6 +144,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use crate::log_entry::LogEntry;
     use crate::net::rpc::grpc::Command;
+    use crate::net::rpc::grpc::AppendEntries;
     use crate::replicated_log::ReplicatedLog;
 
     #[test]
@@ -382,5 +398,150 @@ mod tests {
 
         replicated_log.maybe_advance_commit_index_to(Some(2));
         assert_eq!(Some(2), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn accepts_an_entry_with_higher_term() {
+        let replicated_log = ReplicatedLog::new(1);
+        let append_entries = AppendEntries {
+            term: 10,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: None,
+            previous_log_term: None,
+            leader_commit_index: None,
+        };
+        assert!(replicated_log.should_accept(&append_entries, 4));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_lower_term() {
+        let replicated_log = ReplicatedLog::new(1);
+        let append_entries = AppendEntries {
+            term: 4,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: None,
+            previous_log_term: None,
+            leader_commit_index: None,
+        };
+        assert_eq!(false, replicated_log.should_accept(&append_entries, 10));
+    }
+
+    #[test]
+    fn accepts_an_entry_with_no_previous_log_index() {
+        let replicated_log = ReplicatedLog::new(1);
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: None,
+            previous_log_term: None,
+            leader_commit_index: None,
+        };
+        assert!(replicated_log.should_accept(&append_entries, 1));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_non_matching_previous_log_term_at_previous_log_index() {
+        let replicated_log = ReplicatedLog::new(1);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("Content").as_bytes().to_vec() }
+            ));
+        }
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(0),
+            previous_log_term: Some(0),
+            leader_commit_index: None,
+        };
+        assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
+    }
+
+    #[test]
+    fn accepts_an_entry_with_matching_previous_log_term_at_previous_log_index() {
+        let replicated_log = ReplicatedLog::new(1);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("Content").as_bytes().to_vec() }
+            ));
+        }
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(0),
+            previous_log_term: Some(1),
+            leader_commit_index: None,
+        };
+        assert!(replicated_log.should_accept(&append_entries, 1));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_previous_log_index_greater_than_total_entries() {
+        let replicated_log = ReplicatedLog::new(1);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("Content").as_bytes().to_vec() }
+            ));
+        }
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(5),
+            previous_log_term: Some(1),
+            leader_commit_index: None,
+        };
+        assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_previous_log_index_equal_to_total_entries() {
+        let replicated_log = ReplicatedLog::new(1);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("Content").as_bytes().to_vec() }
+            ));
+        }
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(1),
+            previous_log_term: Some(1),
+            leader_commit_index: None,
+        };
+        assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
     }
 }
