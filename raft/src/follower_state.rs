@@ -43,7 +43,7 @@ impl FollowerState {
         return follower_state;
     }
 
-    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, log_entry_index: u64) -> Vec<JoinHandle<Result<(), ServiceResponseError>>> {
+    pub(crate) async fn replicate_log_at(self: Arc<FollowerState>, log_entry_index: u64) -> Vec<JoinHandle<Result<(), ServiceResponseError>>> {
         let term = self.state.get_term();
         let source_address = self.state.get_replica_reference().get_self_address();
         let mut task_handles = Vec::new();
@@ -68,12 +68,12 @@ impl FollowerState {
         return task_handles;
     }
 
-    pub(crate) fn register(self: Arc<FollowerState>, response: AppendEntriesResponse, from: HostAndPort) {
+    pub(crate) async fn register(self: Arc<FollowerState>, response: AppendEntriesResponse, from: HostAndPort) {
         if response.success {
             self.acknowledge_log_index(response, from);
             return;
         }
-        self.retry_reducing_log_index(from);
+        self.retry_reducing_log_index(from).await;
     }
 
     fn acknowledge_log_index(&self, response: AppendEntriesResponse, peer: HostAndPort) {
@@ -82,7 +82,7 @@ impl FollowerState {
             .and_modify(|next_log_index| *next_log_index = response_log_entry_index + 1);
     }
 
-    fn retry_reducing_log_index(&self, peer: HostAndPort) {
+    async fn retry_reducing_log_index(&self, peer: HostAndPort) {
         let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
         let (previous_log_index, _) = self.previous_log_index_term(next_log_index_by_peer.1);
 
@@ -516,13 +516,14 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        follower_state.clone().register(AppendEntriesResponse {
-            term: 1,
-            success: true,
-            log_entry_index: Some(10),
-            correlation_id: 10,
-        }, peer.clone());
-
+        runtime.block_on(async {
+            follower_state.clone().register(AppendEntriesResponse {
+                term: 1,
+                success: true,
+                log_entry_index: Some(10),
+                correlation_id: 10,
+            }, peer.clone()).await;
+        });
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         assert_eq!(11, *(next_log_index_by_peer.value()));
