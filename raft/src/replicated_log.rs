@@ -1,8 +1,7 @@
 use std::sync::RwLock;
 
 use crate::log_entry::LogEntry;
-use crate::net::rpc::grpc::Command;
-use crate::net::rpc::grpc::AppendEntries;
+use crate::net::rpc::grpc::{AppendEntries, Command, Entry};
 
 pub struct ReplicatedLog {
     majority_quorum: usize,
@@ -100,7 +99,7 @@ impl ReplicatedLog {
             false
         } else {
             true
-        }
+        };
     }
 
     pub fn get_commit_index(&self) -> Option<u64> {
@@ -117,6 +116,31 @@ impl ReplicatedLog {
         replicated_log_state.log_entries.push(log_entry);
 
         return log_entries_size as u64;
+    }
+
+    pub fn maybe_append(&self, entry: &Entry) {
+        let (entry_index, entry_term) = (entry.index, entry.term);
+
+        let should_append = {
+            let guard = self.replicated_log_state.read().unwrap();
+            let replicated_log_state = &*guard;
+            let total_log_entries = replicated_log_state.log_entries.len();
+
+            if entry_index < (total_log_entries as u64) &&
+                replicated_log_state.log_entries[entry_index as usize].matches_index(entry_index) &&
+                replicated_log_state.log_entries[entry_index as usize].matches_term(entry_term) {
+                false
+            } else {
+                true
+            }
+        };
+        if should_append {
+            let mut write_guard = self.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+
+            let command = entry.command.as_ref().unwrap();
+            replicated_log_state.log_entries.push(LogEntry::new(entry_term, entry_index, &command));
+        }
     }
 
     pub fn total_log_entries(&self) -> usize {
@@ -142,9 +166,11 @@ impl ReplicatedLog {
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
+
     use crate::log_entry::LogEntry;
-    use crate::net::rpc::grpc::Command;
     use crate::net::rpc::grpc::AppendEntries;
+    use crate::net::rpc::grpc::Command;
+    use crate::net::rpc::grpc::Entry;
     use crate::replicated_log::ReplicatedLog;
 
     #[test]
@@ -454,7 +480,7 @@ mod tests {
             replicated_log_state.log_entries.push(LogEntry::new(
                 1,
                 0,
-                &Command { command: String::from("Content").as_bytes().to_vec() }
+                &Command { command: String::from("Content").as_bytes().to_vec() },
             ));
         }
 
@@ -479,7 +505,7 @@ mod tests {
             replicated_log_state.log_entries.push(LogEntry::new(
                 1,
                 0,
-                &Command { command: String::from("Content").as_bytes().to_vec() }
+                &Command { command: String::from("Content").as_bytes().to_vec() },
             ));
         }
 
@@ -504,7 +530,7 @@ mod tests {
             replicated_log_state.log_entries.push(LogEntry::new(
                 1,
                 0,
-                &Command { command: String::from("Content").as_bytes().to_vec() }
+                &Command { command: String::from("Content").as_bytes().to_vec() },
             ));
         }
 
@@ -529,7 +555,7 @@ mod tests {
             replicated_log_state.log_entries.push(LogEntry::new(
                 1,
                 0,
-                &Command { command: String::from("Content").as_bytes().to_vec() }
+                &Command { command: String::from("Content").as_bytes().to_vec() },
             ));
         }
 
@@ -543,5 +569,81 @@ mod tests {
             leader_commit_index: None,
         };
         assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
+    }
+
+    #[test]
+    fn maybe_append_an_entry_as_it_is_the_first_entry() {
+        let replicated_log = ReplicatedLog::new(2);
+        let content = String::from("Content");
+        let entry = Entry {
+            command: Some(Command { command: content.as_bytes().to_vec() }),
+            term: 1,
+            index: 0
+        };
+
+        replicated_log.maybe_append(&entry);
+
+        let log_entry = replicated_log.get_log_entry_at(0).unwrap();
+        assert_eq!(1, log_entry.get_term());
+        assert_eq!(0, log_entry.get_index());
+        assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+    }
+
+    #[test]
+    fn maybe_append_an_entry_as_it_is_not_present() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("first").as_bytes().to_vec() },
+            ));
+        }
+
+        let content = String::from("second");
+        let entry = Entry {
+            command: Some(Command { command: content.as_bytes().to_vec() }),
+            term: 1,
+            index: 1
+        };
+
+        replicated_log.maybe_append(&entry);
+
+        let log_entry = replicated_log.get_log_entry_at(1).unwrap();
+        assert_eq!(1, log_entry.get_term());
+        assert_eq!(1, log_entry.get_index());
+        assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+    }
+
+    #[test]
+    fn maybe_do_not_append_an_entry_as_it_is_already_present() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("first").as_bytes().to_vec() },
+            ));
+        }
+
+        let content = String::from("first");
+        let entry = Entry {
+            command: Some(Command { command: content.as_bytes().to_vec() }),
+            term: 1,
+            index: 0
+        };
+
+        replicated_log.maybe_append(&entry);
+
+        assert_eq!(1, replicated_log.total_log_entries());
+
+        let log_entry = replicated_log.get_log_entry_at(0).unwrap();
+        assert_eq!(1, log_entry.get_term());
+        assert_eq!(0, log_entry.get_index());
+        assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
     }
 }
