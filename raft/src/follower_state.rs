@@ -152,7 +152,6 @@ impl FollowerState {
                                        peer: HostAndPort,
                                        response: Result<AppendEntriesResponse, ServiceResponseError>,
     ) -> Option<impl Future<Output=()>> {
-
         let inner_follower_state = follower_state.clone();
         return Some(
             async move {
@@ -207,7 +206,7 @@ mod tests {
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::net::factory::service_request::BuiltInServiceRequestFactory;
     use crate::net::rpc::grpc::{AppendEntriesResponse, Command};
-    use crate::state::State;
+    use crate::state::{ReplicaRole, State};
 
     #[test]
     fn service_request_with_term() {
@@ -562,5 +561,346 @@ mod tests {
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         assert_eq!(11, *(next_log_index_by_peer.value()));
+    }
+
+    #[test]
+    fn replicate_log_response_and_leader_steps_down() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let follower_state = Arc::new(FollowerState::new(
+            inner_state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        let handler = FollowerState::append_entries_response_handler(
+            follower_state,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+            Ok(AppendEntriesResponse {
+                term: 3,
+                success: false,
+                log_entry_index: Some(0),
+                correlation_id: 10,
+            }),
+        );
+
+        runtime.block_on(async {
+            let future = handler.unwrap();
+            future.await;
+
+            assert_eq!(ReplicaRole::Follower, state.get_role());
+            assert_eq!(3, state.get_term());
+        });
+    }
+
+    #[test]
+    fn replicate_log_response_and_leader_steps_down_does_not_acknowledge_following_log_responses() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_host_and_port];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("anything");
+            let command = Command { command: content.as_bytes().to_vec() };
+            let term = state.get_term();
+            state.get_replicated_log_reference().append_command(&command, term);
+
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let follower_state = Arc::new(FollowerState::new(
+            inner_state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        let handler = FollowerState::append_entries_response_handler(
+            follower_state.clone(),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+            Ok(AppendEntriesResponse {
+                term: 3,
+                success: false,
+                log_entry_index: Some(0),
+                correlation_id: 10,
+            }),
+        );
+
+        runtime.block_on(async {
+            handler.unwrap().await;
+
+            FollowerState::append_entries_response_handler(
+                follower_state.clone(),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+                Ok(AppendEntriesResponse {
+                    term: 0,
+                    success: true,
+                    log_entry_index: Some(0),
+                    correlation_id: 10,
+                }),
+            ).unwrap().await;
+
+            FollowerState::append_entries_response_handler(
+                follower_state.clone(),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+                Ok(AppendEntriesResponse {
+                    term: 0,
+                    success: true,
+                    log_entry_index: Some(0),
+                    correlation_id: 10,
+                }),
+            ).unwrap().await;
+
+            assert_eq!(ReplicaRole::Follower, state.get_role());
+            assert_eq!(3, state.get_term());
+            assert_eq!(None, state.get_replicated_log_reference().get_commit_index());
+        });
+    }
+
+    #[test]
+    fn replicate_log_response_and_leader_does_not_step_down() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            state.get_replicated_log_reference().append_command(
+                &command,
+                0,
+            );
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let follower_state = Arc::new(FollowerState::new(
+            inner_state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        let handler = FollowerState::append_entries_response_handler(
+            follower_state.clone(),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+            Ok(AppendEntriesResponse {
+                term: 0,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10,
+            }),
+        );
+
+        runtime.block_on(async {
+            handler.unwrap().await;
+
+            assert_eq!(ReplicaRole::Leader, state.get_role());
+            assert_eq!(0, state.get_term());
+        });
+    }
+
+    #[test]
+    fn replicate_log_response_and_do_not_commit() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("anything");
+            let command = Command { command: content.as_bytes().to_vec() };
+            let term = state.get_term();
+
+            state.get_replicated_log_reference().append_command(&command, term);
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let follower_state = Arc::new(FollowerState::new(
+            inner_state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        let handler = FollowerState::append_entries_response_handler(
+            follower_state.clone(),
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+            Ok(AppendEntriesResponse {
+                term: 1,
+                success: true,
+                log_entry_index: Some(0),
+                correlation_id: 10,
+            }),
+        );
+
+        runtime.block_on(async  {
+            handler.unwrap().await;
+            assert_eq!(None, state.get_replicated_log_reference().get_commit_index());
+        });
+    }
+
+    #[test]
+    fn replicate_log_response_and_commit() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("anything");
+            let command = Command { command: content.as_bytes().to_vec() };
+            let term = state.get_term();
+
+            state.get_replicated_log_reference().append_command(&command, term);
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let follower_state = Arc::new(FollowerState::new(
+            inner_state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        runtime.block_on(async {
+            FollowerState::append_entries_response_handler(
+                follower_state.clone(),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+                Ok(AppendEntriesResponse {
+                    term: 0,
+                    success: true,
+                    log_entry_index: Some(0),
+                    correlation_id: 10,
+                }),
+            ).unwrap().await;
+
+            FollowerState::append_entries_response_handler(
+                follower_state.clone(),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
+                Ok(AppendEntriesResponse {
+                    term: 0,
+                    success: true,
+                    log_entry_index: Some(0),
+                    correlation_id: 10,
+                }),
+            ).unwrap().await;
+
+            assert_eq!(0, state.get_replicated_log_reference().get_commit_index().unwrap());
+        });
+    }
+
+    #[test]
+    fn replicate_log_response_and_commit_with_one_false_response() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_host_and_port];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            let content = String::from("anything");
+            let command = Command { command: content.as_bytes().to_vec() };
+            let term = state.get_term();
+
+            state.get_replicated_log_reference().append_command(&command, term);
+            state.clone().change_to_leader();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let follower_state = Arc::new(FollowerState::new(
+            inner_state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        runtime.block_on(async {
+            FollowerState::append_entries_response_handler(
+                follower_state.clone(),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
+                Ok(AppendEntriesResponse {
+                    term: 0,
+                    success: false,
+                    log_entry_index: Some(0),
+                    correlation_id: 10,
+                }),
+            ).unwrap().await;
+
+            FollowerState::append_entries_response_handler(
+                follower_state.clone(),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
+                Ok(AppendEntriesResponse {
+                    term: 0,
+                    success: true,
+                    log_entry_index: Some(0),
+                    correlation_id: 10,
+                }),
+            ).unwrap().await;
+
+            FollowerState::append_entries_response_handler(
+                follower_state.clone(),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
+                Ok(AppendEntriesResponse {
+                    term: 0,
+                    success: true,
+                    log_entry_index: Some(0),
+                    correlation_id: 10,
+                }),
+            ).unwrap().await;
+
+            assert_eq!(0, state.get_replicated_log_reference().get_commit_index().unwrap());
+        });
     }
 }

@@ -1,9 +1,9 @@
-use replicate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
+use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::ReplicaId;
 
-use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, ReplicateLogResponseClient, RequestVoteClient};
+use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, RequestVoteClient};
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::AppendEntriesResponse;
 use crate::net::rpc::grpc::Entry;
@@ -66,19 +66,6 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 leader_commit_index,
             },
             Box::new(ReplicateLogClient {}),
-            correlation_id,
-        );
-    }
-
-    fn replicate_log_response(&self, term: u64, success: bool, log_entry_index: Option<u64>, correlation_id: CorrelationId) -> ServiceRequest<AppendEntriesResponse, ()> {
-        return ServiceRequest::new(
-            AppendEntriesResponse {
-                term,
-                success,
-                log_entry_index,
-                correlation_id
-            },
-            Box::new(ReplicateLogResponseClient {}),
             correlation_id,
         );
     }

@@ -1,23 +1,21 @@
 use async_trait::async_trait;
 use tonic::{Request, Response};
 
+use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceClientProvider;
-use replicate::net::connect::error::ServiceResponseError;
 
-use crate::net::rpc::grpc::RequestVote;
-use crate::net::rpc::grpc::RequestVoteResponse;
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::AppendEntriesResponse;
 use crate::net::rpc::grpc::raft_client::RaftClient;
+use crate::net::rpc::grpc::RequestVote;
+use crate::net::rpc::grpc::RequestVoteResponse;
 
 pub struct RequestVoteClient {}
 
 pub struct HeartbeatClient {}
 
 pub struct ReplicateLogClient {}
-
-pub struct ReplicateLogResponseClient {}
 
 #[async_trait]
 impl ServiceClientProvider<RequestVote, RequestVoteResponse> for RequestVoteClient {
@@ -46,29 +44,22 @@ impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for ReplicateLo
     }
 }
 
-#[async_trait]
-impl ServiceClientProvider<AppendEntriesResponse, ()> for ReplicateLogResponseClient {
-    async fn call(&self, request: Request<AppendEntriesResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
-        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
-        let response = client.finish_replicate_log(request).await?;
-        return Ok(response);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
+
     use tonic::Request;
+
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceClientProvider;
-    use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, ReplicateLogResponseClient, RequestVoteClient};
-    use crate::net::rpc::grpc::RequestVote;
+
+    use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, RequestVoteClient};
     use crate::net::rpc::grpc::AppendEntries;
-    use crate::net::rpc::grpc::AppendEntriesResponse;
+    use crate::net::rpc::grpc::RequestVote;
 
     #[tokio::test]
     async fn request_vote_client_with_connection_error() {
-        let client = RequestVoteClient{};
+        let client = RequestVoteClient {};
         let request = Request::new(
             RequestVote {
                 term: 1,
@@ -84,7 +75,6 @@ mod tests {
         let result = result.unwrap_err().downcast::<tonic::transport::Error>();
         assert!(result.is_ok());
     }
-
 
 
     #[tokio::test]
@@ -122,26 +112,6 @@ mod tests {
                 previous_log_term: None,
                 entry: None,
                 leader_commit_index: None,
-            }
-        );
-        let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
-
-        let result = client.call(request, address).await;
-        assert!(result.is_err());
-
-        let result = result.unwrap_err().downcast::<tonic::transport::Error>();
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn replicate_log_response_client_with_connection_error() {
-        let client = ReplicateLogResponseClient {};
-        let request = Request::new(
-            AppendEntriesResponse {
-                term: 1,
-                success: true,
-                correlation_id: 10,
-                log_entry_index: None,
             }
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
