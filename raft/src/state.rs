@@ -251,7 +251,7 @@ impl State {
                 service_request_constructor,
                 Arc::new(response_handler_generator),
                 || None
-            ).await;
+            );
             return Ok(());
         };
     }

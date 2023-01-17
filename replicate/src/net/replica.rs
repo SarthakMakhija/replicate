@@ -104,7 +104,7 @@ impl Replica {
         return total_failed_sends;
     }
 
-    pub async fn send_to_replicas_with_handler_hook<Payload, S, Response, F, T, U>(&self,
+    pub fn send_to_replicas_with_handler_hook<Payload, S, Response, F, T, U>(&self,
                                                                                    service_request_constructor: S,
                                                                                    response_handler_generator: Arc<F>,
                                                                                    response_callback_generator: U)
@@ -120,10 +120,10 @@ impl Replica {
             service_request_constructor,
             response_handler_generator,
             response_callback_generator,
-        ).await;
+        );
     }
 
-    pub async fn send_to_with_handler_hook<Payload, S, Response, F, T, U>(&self,
+    pub fn send_to_with_handler_hook<Payload, S, Response, F, T, U>(&self,
                                                                           hosts: &Vec<HostAndPort>,
                                                                           service_request_constructor: S,
                                                                           response_handler_generator: Arc<F>,
@@ -622,7 +622,7 @@ mod tests {
                 service_request_constructor,
                 response_handler_generator.clone(),
                 || None,
-            ).await;
+            );
 
             receiver.recv().await.unwrap();
             assert_eq!(1, inner_response_counter.counter.load(Ordering::SeqCst));
@@ -668,7 +668,7 @@ mod tests {
                 service_request_constructor,
                 response_handler_generator.clone(),
                 || None,
-            ).await;
+            );
 
             receiver.recv().await.unwrap();
             assert_eq!(-1, inner_response_counter.counter.load(Ordering::SeqCst));
@@ -716,7 +716,7 @@ mod tests {
                 service_request_constructor,
                 Arc::new(response_handler_generator),
                 || Some(callback.clone()),
-            ).await;
+            );
 
             let completion_response = callback.handle().await;
             assert_eq!(&String::from("success response"),
@@ -767,7 +767,7 @@ mod tests {
                 service_request_constructor,
                 Arc::new(response_handler_generator),
                 || Some(callback.clone()),
-            ).await;
+            );
 
             let completion_response = callback.handle().await;
             assert_eq!(&String::from("success response"),

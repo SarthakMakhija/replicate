@@ -49,13 +49,13 @@ impl Election {
             let replica_id = inner_replica.get_id();
             let replica = inner_replica.clone();
 
-            let _ = replica.send_to_replicas_with_handler_hook(
+            replica.send_to_replicas_with_handler_hook(
                 || { service_request_factory.request_vote(replica_id, term) },
                 Arc::new(move |peer, response: Result<RequestVoteResponse, ServiceResponseError>| {
                     return Self::request_vote_response_handler(inner_replica.clone(), peer, response);
                 }),
                 || Some(inner_async_quorum_callback.clone() as Arc<dyn ResponseCallback>),
-            ).await;
+            );
 
             inner_async_quorum_callback.on_response(replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
                 term,
