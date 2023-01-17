@@ -117,11 +117,6 @@ impl ReplicatedLog {
         };
     }
 
-    pub fn get_latest_log_entry_index(&self) -> u64 {
-        let guard = self.replicated_log_state.read().unwrap();
-        return (*guard).log_entries.len() as u64;
-    }
-
     fn _is_entry_replicated(&self, index: usize, replicated_log_state: &ReplicatedLogState) -> bool {
         let entry = &replicated_log_state.log_entries[index];
         return entry.is_replicated(self.majority_quorum);
