@@ -129,18 +129,8 @@ impl Raft for RaftService {
             if append_entries.term > term {
                 state.clone().change_to_follower(append_entries.term);
             }
-            let success;
-            if term > append_entries.term {
-                success = false;
-            } else if append_entries.previous_log_index.is_none() {
-                success = true;
-            } else if !state.get_replicated_log_reference().matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
-                success = false;
-            } else {
-                success = true;
-            };
-
-            let log_entry_index = if success {
+            let should_accept = state.should_accept(&append_entries);
+            let log_entry_index = if should_accept {
                 let replicated_log = state.get_replicated_log_reference();
                 let entry = append_entries.entry.unwrap();
                 let command = entry.command.unwrap();
@@ -152,7 +142,7 @@ impl Raft for RaftService {
                 None
             };
             let send_result = AsyncNetwork::send_with_source_footprint(
-                service_request_factory.replicate_log_response(term, success, log_entry_index, append_entries.correlation_id),
+                service_request_factory.replicate_log_response(term, should_accept, log_entry_index, append_entries.correlation_id),
                 state.get_replica_reference().get_self_address(),
                 originating_host_port,
             ).await;

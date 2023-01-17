@@ -12,7 +12,7 @@ use replicate::net::request_waiting_list::request_waiting_list_config::RequestWa
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::AppendEntriesResponse;
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse};
 use crate::replicated_log::ReplicatedLog;
 
 pub struct State {
@@ -198,6 +198,19 @@ impl State {
 
     pub fn get_replicated_log_reference(&self) -> &ReplicatedLog {
         return &self.replicated_log;
+    }
+
+    pub(crate) fn should_accept(&self, append_entries: &AppendEntries) -> bool {
+        let term = self.get_term();
+        return if term > append_entries.term {
+            false
+        } else if append_entries.previous_log_index.is_none() {
+            true
+        } else if !self.get_replicated_log_reference().matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
+            false
+        } else {
+            true
+        }
     }
 
     pub fn get_term(&self) -> u64 {
