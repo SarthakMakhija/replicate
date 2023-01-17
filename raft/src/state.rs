@@ -206,6 +206,8 @@ impl State {
             false
         } else if append_entries.previous_log_index.is_none() {
             true
+        } else if append_entries.previous_log_index.unwrap() >= self.get_replicated_log_reference().total_log_entries() as u64 {
+            false
         } else if !self.get_replicated_log_reference().matches_log_entry_term_at(append_entries.previous_log_index.unwrap() as usize, append_entries.previous_log_term.unwrap()) {
             false
         } else {
@@ -296,6 +298,7 @@ mod tests {
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::state::{ReplicaRole, State};
     use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
+    use crate::net::rpc::grpc::{AppendEntries, Command};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn change_to_candidate() {
@@ -677,6 +680,258 @@ mod tests {
             assert_eq!(ReplicaRole::Follower, cloned.get_role());
             assert_eq!(5, cloned.get_term());
         });
+    }
+
+    #[test]
+    fn accepts_an_entry_with_higher_term() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(some_replica, HeartbeatConfig::default());
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let append_entries = AppendEntries {
+            term: 10,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: None,
+            previous_log_term: None,
+            leader_commit_index: None,
+        };
+        assert!(state.should_accept(&append_entries));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_lower_term() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(some_replica, HeartbeatConfig::default());
+            state.change_to_candidate();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let append_entries = AppendEntries {
+            term: 0,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: None,
+            previous_log_term: None,
+            leader_commit_index: None,
+        };
+        assert_eq!(false, state.should_accept(&append_entries));
+    }
+
+    #[test]
+    fn accepts_an_entry_with_no_previous_log_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(some_replica, HeartbeatConfig::default());
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let append_entries = AppendEntries {
+            term: 0,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: None,
+            previous_log_term: None,
+            leader_commit_index: None,
+        };
+        assert!(state.should_accept(&append_entries));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_non_matching_previous_log_term_at_previous_log_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(some_replica, HeartbeatConfig::default());
+            state.get_replicated_log_reference().append_command(
+                &Command { command: String::from("Content").as_bytes().to_vec() },
+                1
+            );
+            state.change_to_candidate();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(0),
+            previous_log_term: Some(0),
+            leader_commit_index: None,
+        };
+        assert_eq!(false, state.should_accept(&append_entries));
+    }
+
+    #[test]
+    fn accepts_an_entry_with_matching_previous_log_term_at_previous_log_index() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(some_replica, HeartbeatConfig::default());
+            state.get_replicated_log_reference().append_command(
+                &Command { command: String::from("Content").as_bytes().to_vec() },
+                1
+            );
+            state.change_to_candidate();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(0),
+            previous_log_term: Some(1),
+            leader_commit_index: None,
+        };
+        assert_eq!(true, state.should_accept(&append_entries));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_previous_log_index_greater_than_total_entries() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(some_replica, HeartbeatConfig::default());
+            state.get_replicated_log_reference().append_command(
+                &Command { command: String::from("Content").as_bytes().to_vec() },
+                1
+            );
+            state.change_to_candidate();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(10),
+            previous_log_term: Some(1),
+            leader_commit_index: None,
+        };
+        assert_eq!(false, state.should_accept(&append_entries));
+    }
+
+    #[test]
+    fn does_not_accept_an_entry_with_previous_log_index_eq_to_total_entries() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new(some_replica, HeartbeatConfig::default());
+            state.get_replicated_log_reference().append_command(
+                &Command { command: String::from("Content").as_bytes().to_vec() },
+                1
+            );
+            state.change_to_candidate();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let append_entries = AppendEntries {
+            term: 1,
+            leader_id: 30,
+            correlation_id: 100,
+            entry: None,
+            previous_log_index: Some(1),
+            previous_log_term: Some(1),
+            leader_commit_index: None,
+        };
+        assert_eq!(false, state.should_accept(&append_entries));
     }
 
     mod setup {
