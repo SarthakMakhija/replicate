@@ -65,6 +65,8 @@ mod tests {
                 term: 1,
                 replica_id: 10,
                 correlation_id: 10,
+                last_log_index: None,
+                last_log_term: None,
             }
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);

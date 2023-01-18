@@ -24,6 +24,8 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 replica_id,
                 term,
                 correlation_id,
+                last_log_index,
+                last_log_term
             },
             Box::new(RequestVoteClient {}),
             correlation_id,
