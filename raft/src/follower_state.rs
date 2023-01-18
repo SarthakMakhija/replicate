@@ -12,11 +12,13 @@ use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry
 use crate::state::{ReplicaRole, State};
 
 type NextLogIndex = u64;
+type MatchLogIndex = u64;
 
 pub(crate) struct FollowerState {
     peers: Vec<HostAndPort>,
     state: Arc<State>,
     next_log_index_by_peer: DashMap<HostAndPort, NextLogIndex>,
+    match_log_index_by_peer: DashMap<HostAndPort, Option<MatchLogIndex>>,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
 }
 
@@ -29,14 +31,17 @@ impl FollowerState {
         let peers = replica.get_peers();
 
         let next_log_index_by_peer = DashMap::new();
+        let match_log_index_by_peer = DashMap::new();
         peers.iter().for_each(|host_and_port| {
             next_log_index_by_peer.insert(host_and_port.clone(), 0);
+            match_log_index_by_peer.insert(host_and_port.clone(), None);
         });
 
         let follower_state = FollowerState {
             peers,
             state,
             next_log_index_by_peer,
+            match_log_index_by_peer,
             service_request_factory,
         };
         return follower_state;
@@ -78,6 +83,17 @@ impl FollowerState {
     fn acknowledge_log_index(&self, peer: HostAndPort) {
         self.next_log_index_by_peer.entry(peer)
             .and_modify(|next_log_index| *next_log_index = *next_log_index + 1);
+        self.match_log_index_by_peer.entry(peer)
+            .and_modify(|match_log_index| {
+                match match_log_index {
+                    None => {
+                        *match_log_index = Some(0)
+                    }
+                    Some(match_index) => {
+                        *match_index = *match_index + 1
+                    }
+                }
+            });
     }
 
     fn retry_reducing_log_index(self: Arc<FollowerState>, peer: HostAndPort) {
@@ -548,6 +564,115 @@ mod tests {
         });
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
+        assert_eq!(1, *(next_log_index_by_peer.value()));
+    }
+
+    #[test]
+    fn register_success_response_from_peer_and_increment_match_index_first_time() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let follower_state = Arc::new(FollowerState::new(
+            state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        runtime.block_on(async {
+            follower_state.clone().register(AppendEntriesResponse {
+                term: 1,
+                success: true,
+                log_entry_index: Some(5),
+                correlation_id: 10,
+            }, peer.clone());
+        });
+
+        let match_log_index_by_peer = follower_state.match_log_index_by_peer.get(&peer).unwrap();
+        assert_eq!(&Some(0), match_log_index_by_peer.value());
+    }
+
+    #[test]
+    fn register_success_response_from_peer_and_increment_match_index() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let follower_state = Arc::new(FollowerState::new(
+            state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+        follower_state.match_log_index_by_peer.insert(peer.clone(), Some(0));
+
+        runtime.block_on(async {
+            follower_state.clone().register(AppendEntriesResponse {
+                term: 1,
+                success: true,
+                log_entry_index: Some(5),
+                correlation_id: 10,
+            }, peer.clone());
+        });
+
+        let match_log_index_by_peer = follower_state.match_log_index_by_peer.get(&peer).unwrap();
+        assert_eq!(&Some(1), match_log_index_by_peer.value());
+    }
+
+    #[test]
+    fn register_success_response_from_peer_and_increment_match_index_and_next_first_time() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let follower_state = Arc::new(FollowerState::new(
+            state,
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        runtime.block_on(async {
+            follower_state.clone().register(AppendEntriesResponse {
+                term: 1,
+                success: true,
+                log_entry_index: Some(5),
+                correlation_id: 10,
+            }, peer.clone());
+        });
+
+        let match_log_index_by_peer = follower_state.match_log_index_by_peer.get(&peer).unwrap();
+        let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
+
+        assert_eq!(&Some(0), match_log_index_by_peer.value());
         assert_eq!(1, *(next_log_index_by_peer.value()));
     }
 
