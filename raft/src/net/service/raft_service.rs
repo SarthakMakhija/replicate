@@ -10,7 +10,7 @@ use crate::follower_state::FollowerState;
 use crate::net::factory::service_request::BuiltInServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
-use crate::state::{ReplicaRole, State};
+use crate::state::State;
 
 pub struct RaftService {
     state: Arc<State>,
@@ -40,16 +40,11 @@ impl Raft for RaftService {
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term = state.get_term();
-            let role = state.get_role();
-            let voted: bool = if request.term > term && role != ReplicaRole::Leader && state.has_not_voted_for_or_matches(request.replica_id) {
-                true
-            } else {
-                false
-            };
-            if voted {
+            let should_vote = state.should_vote(&request);
+            if should_vote {
                 state.voted_for(request.replica_id);
             }
-            let response = RequestVoteResponse { term, voted, correlation_id };
+            let response = RequestVoteResponse { term, voted: should_vote, correlation_id };
             let _ = sender.send(response).await;
         };
         let _ = replica.add_to_queue(handler).await;
@@ -356,6 +351,84 @@ mod tests {
 
         thread::sleep(Duration::from_millis(5));
         assert_eq!(None, state.get_voted_for());
+    }
+
+    #[test]
+    fn acknowledge_request_vote_do_not_vote_given_the_request_log_is_not_up_to_date() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.get_replicated_log_reference().append(&Command { command: String::from("Content").as_bytes().to_vec() }, 1);
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+
+            let mut request = Request::new(RequestVote {
+                term: 0,
+                replica_id: 30,
+                correlation_id: 20,
+                last_log_index: Some(0),
+                last_log_term: Some(0),
+            });
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.acknowledge_request_vote(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(None, state.get_voted_for());
+    }
+
+    #[test]
+    fn acknowledge_request_vote_given_the_request_log_is_up_to_date() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.get_replicated_log_reference().append(&Command { command: String::from("Content").as_bytes().to_vec() }, 1);
+            return state;
+        });
+
+        let inner_state = state.clone();
+        let _ = runtime.block_on(async move {
+            let raft_service = RaftService::new(inner_state.clone());
+
+            let mut request = Request::new(RequestVote {
+                term: 1,
+                replica_id: 30,
+                correlation_id: 20,
+                last_log_index: Some(0),
+                last_log_term: Some(1),
+            });
+            request.add_host_port(self_host_and_port);
+
+            let _ = raft_service.acknowledge_request_vote(request).await;
+        });
+
+        thread::sleep(Duration::from_millis(5));
+        assert_eq!(Some(30), state.get_voted_for());
     }
 
     #[test]

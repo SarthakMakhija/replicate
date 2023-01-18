@@ -12,7 +12,7 @@ use replicate::net::request_waiting_list::request_waiting_list_config::RequestWa
 use crate::election::election::Election;
 use crate::heartbeat_config::HeartbeatConfig;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
-use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse};
+use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote};
 use crate::replicated_log::ReplicatedLog;
 
 pub struct State {
@@ -24,7 +24,7 @@ pub struct State {
     heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
     replicated_log: ReplicatedLog,
-    pending_committed_log_entries: RequestWaitingList
+    pending_committed_log_entries: RequestWaitingList,
 }
 
 struct ConsensusState {
@@ -72,8 +72,8 @@ impl State {
             replicated_log: ReplicatedLog::new(majority_quorum),
             pending_committed_log_entries: RequestWaitingList::new(
                 clock_clone,
-                RequestWaitingListConfig::default()
-            )
+                RequestWaitingListConfig::default(),
+            ),
         };
 
         let state = Arc::new(state);
@@ -146,7 +146,7 @@ impl State {
                         } else {
                             should_start_election = false;
                         }
-                    },
+                    }
                     None => {
                         if clock.duration_since(consensus_state.creation_time).ge(&heartbeat_timeout) {
                             should_start_election = true;
@@ -196,13 +196,26 @@ impl State {
         return &self.pending_committed_log_entries;
     }
 
-    pub fn get_replicated_log_reference(&self) -> &ReplicatedLog {
-        return &self.replicated_log;
-    }
-
     pub(crate) fn should_accept(&self, entry: &AppendEntries) -> bool {
         let term = self.get_term();
         return self.get_replicated_log_reference().should_accept(entry, term);
+    }
+
+    pub(crate) fn should_vote(&self, request_vote: &RequestVote) -> bool {
+        let term = self.get_term();
+        let role = self.get_role();
+
+        if request_vote.term > term &&
+            role != ReplicaRole::Leader &&
+            self.has_not_voted_for_or_matches(request_vote.replica_id) &&
+            self.get_replicated_log_reference().is_request_log_up_to_date(request_vote.last_log_index, request_vote.last_log_term) {
+            return true;
+        }
+        return false;
+    }
+
+    pub fn get_replicated_log_reference(&self) -> &ReplicatedLog {
+        return &self.replicated_log;
     }
 
     pub fn get_term(&self) -> u64 {
@@ -258,7 +271,7 @@ impl State {
                 heartbeat_timeout,
                 async {
                     Election::new(election_state).start().await;
-                }
+                },
             )
         });
     }
@@ -288,6 +301,7 @@ mod tests {
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::state::{ReplicaRole, State};
     use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
+    use crate::net::rpc::grpc::{RequestVote, Command};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn change_to_candidate() {
@@ -668,6 +682,312 @@ mod tests {
 
             assert_eq!(ReplicaRole::Follower, cloned.get_role());
             assert_eq!(5, cloned.get_term());
+        });
+    }
+
+    #[test]
+    fn should_vote_given_request_term_is_higher() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVote {
+                term: 10,
+                replica_id: 30,
+                correlation_id: 20,
+                last_log_index: None,
+                last_log_term: None,
+            };
+            assert!(inner_state.should_vote(&request_vote));
+        });
+    }
+
+    #[test]
+    fn should_not_vote_given_request_term_is_lower() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.change_to_candidate();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVote {
+                term: 0,
+                replica_id: 30,
+                correlation_id: 20,
+                last_log_index: None,
+                last_log_term: None,
+            };
+            assert_eq!(false, inner_state.should_vote(&request_vote));
+        });
+    }
+
+    #[test]
+    fn should_not_vote_given_already_a_leader() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.clone().change_to_leader();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVote {
+                term: 10,
+                replica_id: 30,
+                correlation_id: 20,
+                last_log_index: None,
+                last_log_term: None,
+            };
+            assert_eq!(false, inner_state.should_vote(&request_vote));
+        });
+    }
+
+    #[test]
+    fn should_not_vote_if_already_voted() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.voted_for(50);
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVote {
+                term: 10,
+                replica_id: 30,
+                correlation_id: 20,
+                last_log_index: None,
+                last_log_term: None,
+            };
+            assert_eq!(false, inner_state.should_vote(&request_vote));
+        });
+    }
+
+    #[test]
+    fn should_vote_if_voted_for_the_same_replica() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.voted_for(10);
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVote {
+                term: 10,
+                replica_id: 10,
+                correlation_id: 20,
+                last_log_index: None,
+                last_log_term: None,
+            };
+            assert!(inner_state.should_vote(&request_vote));
+        });
+    }
+
+    #[test]
+    fn should_vote_if_request_log_is_up_to_date() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.get_replicated_log_reference().append(
+                &Command { command: String::from("content").as_bytes().to_vec() },
+                1
+            );
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVote {
+                term: 10,
+                replica_id: 10,
+                correlation_id: 20,
+                last_log_index: Some(0),
+                last_log_term: Some(1),
+            };
+            assert!(inner_state.should_vote(&request_vote));
+        });
+    }
+
+    #[test]
+    fn should_not_vote_if_request_log_is_not_up_to_date() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Arc::new(SystemClock::new()),
+        );
+
+        let some_replica = Arc::new(some_replica);
+        let inner_replica = some_replica.clone();
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                inner_replica,
+                HeartbeatConfig::default(),
+                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.get_replicated_log_reference().append(
+                &Command { command: String::from("content").as_bytes().to_vec() },
+                1
+            );
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVote {
+                term: 10,
+                replica_id: 10,
+                correlation_id: 20,
+                last_log_index: Some(0),
+                last_log_term: Some(0),
+            };
+            assert_eq!(false, inner_state.should_vote(&request_vote));
         });
     }
 
