@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::sync::RwLock;
 
 use crate::log_entry::LogEntry;
@@ -74,6 +75,8 @@ impl ReplicatedLog {
     //TODO: Handle the gap in log entries
     pub(crate) fn maybe_advance_commit_index_to(&self, requested_commit_index: Option<u64>) {
         if let Some(commit_index) = requested_commit_index {
+            let (last_log_index, _) = self.get_last_log_index_and_term();
+
             let mut write_guard = self.replicated_log_state.write().unwrap();
             let replicated_log_state = &mut *write_guard;
 
@@ -83,7 +86,9 @@ impl ReplicatedLog {
             };
 
             if commit_index >= self_commit_index {
-                replicated_log_state.commit_index = requested_commit_index;
+                if let Some(last_log_index) = last_log_index {
+                    replicated_log_state.commit_index = Some(min(commit_index, last_log_index));
+                }
             }
         }
     }
@@ -416,6 +421,14 @@ mod tests {
     }
 
     #[test]
+    fn do_not_advance_commit_index_as_there_are_no_log_entries() {
+        let replicated_log = ReplicatedLog::new(1);
+
+        replicated_log.maybe_advance_commit_index_to(Some(2));
+        assert_eq!(None, replicated_log.get_commit_index())
+    }
+
+    #[test]
     fn do_not_advance_commit_index_as_the_requested_commit_index_is_smaller() {
         let replicated_log = ReplicatedLog::new(1);
         for _count in 1..=2 {
@@ -435,13 +448,14 @@ mod tests {
     #[test]
     fn advance_commit_index_as_requested_commit_index_is_the_first() {
         let replicated_log = ReplicatedLog::new(1);
+        replicated_log.append(&Command { command: String::from("Content").as_bytes().to_vec() }, 1);
 
         replicated_log.maybe_advance_commit_index_to(Some(0));
         assert_eq!(Some(0), replicated_log.get_commit_index())
     }
 
     #[test]
-    fn advance_commit_index() {
+    fn advance_commit_index_to_minimum_of_the_commit_index_and_the_latest_entry_index() {
         let replicated_log = ReplicatedLog::new(1);
         for _count in 1..=2 {
             let content = String::from("Content");
@@ -454,7 +468,7 @@ mod tests {
         replicated_log.commit(|_| {});
 
         replicated_log.maybe_advance_commit_index_to(Some(2));
-        assert_eq!(Some(2), replicated_log.get_commit_index())
+        assert_eq!(Some(1), replicated_log.get_commit_index())
     }
 
     #[test]
