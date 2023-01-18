@@ -55,23 +55,34 @@ impl ReplicatedLog {
         return entry.is_replicated(self.majority_quorum);
     }
 
-    //TODO: Write lock is being held too long
     pub(crate) fn commit<F>(&self, commit_execution_block: F)
         where F: Fn(u64) -> () {
-        let mut write_guard = self.replicated_log_state.write().unwrap();
-        let replicated_log_state = &mut *write_guard;
-        let starting_commit_index: usize = match replicated_log_state.commit_index {
-            None => 0,
-            Some(commit_index) => (commit_index + 1) as usize
-        };
-        for commit_index in starting_commit_index..replicated_log_state.log_entries.len() {
-            if self._is_entry_replicated(commit_index, replicated_log_state) {
-                let index = commit_index as u64;
-                replicated_log_state.commit_index = Some(index);
-                commit_execution_block(index);
-            } else {
-                break;
+        let commit_indices = {
+            let starting_commit_index: usize = match self.get_commit_index() {
+                None => 0,
+                Some(commit_index) => (commit_index + 1) as usize
+            };
+            let guard = self.replicated_log_state.read().unwrap();
+            let replicated_log_state = &*guard;
+
+            let mut commit_indices = Vec::new();
+            for commit_index in starting_commit_index..replicated_log_state.log_entries.len() {
+                if self._is_entry_replicated(commit_index, replicated_log_state) {
+                    commit_indices.push(commit_index);
+                } else {
+                    break;
+                }
             }
+            commit_indices
+        };
+        for commit_index in commit_indices {
+            let index = commit_index as u64;
+            {
+                let mut write_guard = self.replicated_log_state.write().unwrap();
+                let replicated_log_state = &mut *write_guard;
+                replicated_log_state.commit_index = Some(index);
+            }
+            commit_execution_block(index);
         }
     }
 
@@ -189,7 +200,7 @@ impl ReplicatedLog {
                         return false;
                     }
                     true
-                } else { false }
+                } else { false };
             }
         };
     }
