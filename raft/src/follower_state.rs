@@ -42,22 +42,14 @@ impl FollowerState {
         return follower_state;
     }
 
-    pub(crate) fn replicate_log_at(self: Arc<FollowerState>) {
+    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, latest_log_entry_index: u64) {
         let term = self.state.get_term();
 
         for peer in &self.peers {
             let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
-            println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
-
-            let follower_state = self.clone();
-            self.state.get_replica_reference().send_to_with_handler_hook(
-                &vec![peer.clone()],
-                || self.service_request(next_log_index_by_peer.1, term),
-                Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
-                    return Self::append_entries_response_handler(follower_state.clone(), peer, response);
-                }),
-                || None,
-            )
+            if next_log_index_by_peer.1 >= latest_log_entry_index {
+                (&self).replicate_to(peer, next_log_index_by_peer, term)
+            }
         }
     }
 
@@ -67,6 +59,20 @@ impl FollowerState {
             return;
         }
         self.retry_reducing_log_index(from);
+    }
+
+    fn replicate_to(self: &Arc<FollowerState>, peer: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
+        println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
+
+        let follower_state = self.clone();
+        self.state.get_replica_reference().send_to_with_handler_hook(
+            &vec![peer.clone()],
+            || self.service_request(next_log_index_by_peer.1, term),
+            Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                return Self::append_entries_response_handler(follower_state.clone(), peer, response);
+            }),
+            || None,
+        )
     }
 
     fn acknowledge_log_index(&self, peer: HostAndPort) {
@@ -754,7 +760,7 @@ mod tests {
             }),
         );
 
-        runtime.block_on(async  {
+        runtime.block_on(async {
             handler.unwrap().await;
             assert_eq!(None, state.get_replicated_log_reference().get_commit_index());
         });
