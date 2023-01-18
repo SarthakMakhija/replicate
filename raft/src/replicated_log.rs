@@ -68,6 +68,8 @@ impl ReplicatedLog {
                 let index = commit_index as u64;
                 replicated_log_state.commit_index = Some(index);
                 commit_execution_block(index);
+            } else {
+                break;
             }
         }
     }
@@ -404,6 +406,23 @@ mod tests {
 
         replicated_log.commit(|_| {});
         assert_eq!(Some(1), replicated_log.get_commit_index())
+    }
+
+    #[test]
+    fn commit_index_with_a_non_replicated_entry_in_between() {
+        let replicated_log = ReplicatedLog::new(2);
+
+        for _count in 1..=3 {
+            let content = String::from("Content");
+            let command = Command { command: content.as_bytes().to_vec() };
+            replicated_log.append(&command, 1);
+        }
+
+        replicated_log.acknowledge_log_entry_at(0);
+        replicated_log.acknowledge_log_entry_at(2);
+
+        replicated_log.commit(|_| {});
+        assert_eq!(Some(0), replicated_log.get_commit_index())
     }
 
     #[test]
