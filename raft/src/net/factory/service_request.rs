@@ -11,7 +11,12 @@ use crate::net::rpc::grpc::RequestVote;
 use crate::net::rpc::grpc::RequestVoteResponse;
 
 pub(crate) trait ServiceRequestFactory: Send + Sync {
-    fn request_vote(&self, replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, RequestVoteResponse> {
+    fn request_vote(&self,
+                    replica_id: ReplicaId,
+                    term: u64,
+                    last_log_index: Option<u64>,
+                    last_log_term: Option<u64>,
+    ) -> ServiceRequest<RequestVote, RequestVoteResponse> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(

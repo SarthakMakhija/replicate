@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::sync::Arc;
+
 use tokio::sync::mpsc;
 
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
@@ -48,9 +49,9 @@ impl Election {
 
             let replica_id = inner_replica.get_id();
             let replica = inner_replica.clone();
-
+            let (last_log_index, last_log_term): (Option<u64>, Option<u64>) = inner_state.get_replicated_log_reference().get_last_log_index_and_term();
             replica.send_to_replicas_with_handler_hook(
-                || { service_request_factory.request_vote(replica_id, term) },
+                || { service_request_factory.request_vote(replica_id, term, last_log_index, last_log_term) },
                 Arc::new(move |peer, response: Result<RequestVoteResponse, ServiceResponseError>| {
                     return Self::request_vote_response_handler(inner_replica.clone(), peer, response);
                 }),
@@ -81,7 +82,7 @@ impl Election {
     fn request_vote_response_handler(
         replica: Arc<Replica>,
         peer: HostAndPort,
-        response: Result<RequestVoteResponse, ServiceResponseError>
+        response: Result<RequestVoteResponse, ServiceResponseError>,
     ) -> Option<impl Future<Output=()>> {
         return Some(
             async move {
@@ -131,8 +132,8 @@ mod tests {
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
         use replicate::net::replica::ReplicaId;
-        use crate::election::election::tests::setup::ClientType::Success;
 
+        use crate::election::election::tests::setup::ClientType::Success;
         use crate::net::factory::service_request::ServiceRequestFactory;
         use crate::net::rpc::grpc::RequestVote;
         use crate::net::rpc::grpc::RequestVoteResponse;
@@ -149,7 +150,12 @@ mod tests {
         }
 
         impl ServiceRequestFactory for IncrementingCorrelationIdServiceRequestFactory {
-            fn request_vote(&self, replica_id: ReplicaId, term: u64) -> ServiceRequest<RequestVote, RequestVoteResponse> {
+            fn request_vote(&self,
+                            replica_id: ReplicaId,
+                            term: u64,
+                            last_log_index: Option<u64>,
+                            last_log_term: Option<u64>
+            ) -> ServiceRequest<RequestVote, RequestVoteResponse> {
                 {
                     let write_guard = self.base_correlation_id.write().unwrap();
                     write_guard.fetch_add(1, Ordering::SeqCst);
@@ -176,11 +182,11 @@ mod tests {
         }
 
         struct VotedRequestVoteClient {
-            correlation_id: CorrelationId
+            correlation_id: CorrelationId,
         }
 
         struct NotVotedRequestVoteClient {
-            correlation_id: CorrelationId
+            correlation_id: CorrelationId,
         }
 
         #[async_trait]
@@ -190,11 +196,12 @@ mod tests {
                     Response::new(RequestVoteResponse {
                         voted: true,
                         term: 1,
-                        correlation_id: self.correlation_id
+                        correlation_id: self.correlation_id,
                     })
                 );
             }
         }
+
         #[async_trait]
         impl ServiceClientProvider<RequestVote, RequestVoteResponse> for NotVotedRequestVoteClient {
             async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
@@ -202,7 +209,7 @@ mod tests {
                     Response::new(RequestVoteResponse {
                         voted: false,
                         term: 1,
-                        correlation_id: self.correlation_id
+                        correlation_id: self.correlation_id,
                     })
                 );
             }
@@ -234,7 +241,7 @@ mod tests {
             state.clone(),
             Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
-                client_type: Success
+                client_type: Success,
             }),
         );
 
@@ -278,7 +285,7 @@ mod tests {
             state.clone(),
             Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
-                client_type: Failure
+                client_type: Failure,
             }),
         );
 
