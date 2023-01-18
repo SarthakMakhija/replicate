@@ -55,6 +55,7 @@ impl ReplicatedLog {
         return entry.is_replicated(self.majority_quorum);
     }
 
+    //TODO: Write lock is being held too long
     pub(crate) fn commit<F>(&self, commit_execution_block: F)
         where F: Fn(u64) -> () {
         let mut write_guard = self.replicated_log_state.write().unwrap();
@@ -77,17 +78,17 @@ impl ReplicatedLog {
     pub(crate) fn maybe_advance_commit_index_to(&self, requested_commit_index: Option<u64>) {
         if let Some(commit_index) = requested_commit_index {
             let (last_log_index, _) = self.get_last_log_index_and_term();
-
-            let mut write_guard = self.replicated_log_state.write().unwrap();
-            let replicated_log_state = &mut *write_guard;
-
-            let self_commit_index = match replicated_log_state.commit_index {
-                None => 0,
-                Some(commit_index) => commit_index
+            let self_commit_index = {
+                match self.get_commit_index() {
+                    None => 0,
+                    Some(commit_index) => commit_index
+                }
             };
 
             if commit_index >= self_commit_index {
                 if let Some(last_log_index) = last_log_index {
+                    let mut write_guard = self.replicated_log_state.write().unwrap();
+                    let replicated_log_state = &mut *write_guard;
                     replicated_log_state.commit_index = Some(min(commit_index, last_log_index));
                 }
             }
