@@ -156,6 +156,15 @@ impl ReplicatedLog {
         };
     }
 
+    pub(crate) fn get_last_log_index_and_term(&self) -> (Option<u64>, Option<u64>) {
+        let total_log_entries = self.total_log_entries();
+        if total_log_entries == 0 {
+            return (None, None);
+        }
+        let last_log_index = total_log_entries - 1;
+        return (Some(last_log_index as u64), self.get_log_term_at(last_log_index));
+    }
+
     fn _is_entry_replicated(&self, index: usize, replicated_log_state: &ReplicatedLogState) -> bool {
         let entry = &replicated_log_state.log_entries[index];
         return entry.is_replicated(self.majority_quorum);
@@ -578,7 +587,7 @@ mod tests {
         let entry = Entry {
             command: Some(Command { command: content.as_bytes().to_vec() }),
             term: 1,
-            index: 0
+            index: 0,
         };
 
         replicated_log.maybe_append(&entry);
@@ -606,7 +615,7 @@ mod tests {
         let entry = Entry {
             command: Some(Command { command: content.as_bytes().to_vec() }),
             term: 1,
-            index: 1
+            index: 1,
         };
 
         replicated_log.maybe_append(&entry);
@@ -634,7 +643,7 @@ mod tests {
         let entry = Entry {
             command: Some(Command { command: content.as_bytes().to_vec() }),
             term: 1,
-            index: 0
+            index: 0,
         };
 
         replicated_log.maybe_append(&entry);
@@ -645,5 +654,33 @@ mod tests {
         assert_eq!(1, log_entry.get_term());
         assert_eq!(0, log_entry.get_index());
         assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+    }
+
+    #[test]
+    fn get_last_log_index_and_term_for_no_log_entries() {
+        let replicated_log = ReplicatedLog::new(2);
+        let (last_log_index, term) = replicated_log.get_last_log_index_and_term();
+
+        assert_eq!(None, last_log_index);
+        assert_eq!(None, term);
+    }
+
+    #[test]
+    fn get_last_log_index_and_term_for_with_log_entries() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("first").as_bytes().to_vec() },
+            ));
+        }
+
+        let (last_log_index, term) = replicated_log.get_last_log_index_and_term();
+
+        assert_eq!(Some(0), last_log_index);
+        assert_eq!(Some(1), term);
     }
 }
