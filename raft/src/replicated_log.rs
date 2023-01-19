@@ -14,6 +14,12 @@ struct ReplicatedLogState {
     commit_index: Option<u64>,
 }
 
+enum AppendAction {
+    Append,
+    Truncate,
+    Ignore,
+}
+
 impl ReplicatedLog {
     pub(crate) fn new(majority_quorum: usize) -> Self {
         return ReplicatedLog {
@@ -137,27 +143,16 @@ impl ReplicatedLog {
     }
 
     pub fn maybe_append(&self, entry: &Entry) {
-        let (entry_index, entry_term) = (entry.index, entry.term);
-
-        let should_append = {
-            let guard = self.replicated_log_state.read().unwrap();
-            let replicated_log_state = &*guard;
-            let total_log_entries = replicated_log_state.log_entries.len();
-
-            if entry_index < (total_log_entries as u64) &&
-                replicated_log_state.log_entries[entry_index as usize].matches_index(entry_index) &&
-                replicated_log_state.log_entries[entry_index as usize].matches_term(entry_term) {
-                false
-            } else {
-                true
+        let entry_index = entry.index;
+        match self.append_action(entry) {
+            AppendAction::Append => {
+                self.append_new(entry);
             }
-        };
-        if should_append {
-            let mut write_guard = self.replicated_log_state.write().unwrap();
-            let replicated_log_state = &mut *write_guard;
-
-            let command = entry.command.as_ref().unwrap();
-            replicated_log_state.log_entries.push(LogEntry::new(entry_term, entry_index, &command));
+            AppendAction::Truncate => {
+                self.truncate(entry_index);
+                self.append_new(entry);
+            }
+            _ => {}
         }
     }
 
@@ -208,6 +203,41 @@ impl ReplicatedLog {
     fn _is_entry_replicated(&self, index: usize, replicated_log_state: &ReplicatedLogState) -> bool {
         let entry = &replicated_log_state.log_entries[index];
         return entry.is_replicated(self.majority_quorum);
+    }
+
+    fn append_action(&self, entry: &Entry) -> AppendAction {
+        let guard = self.replicated_log_state.read().unwrap();
+        let replicated_log_state = &*guard;
+        let total_log_entries = replicated_log_state.log_entries.len();
+
+        let (entry_index, entry_term) = (entry.index, entry.term);
+        return if entry_index < (total_log_entries as u64) &&
+            replicated_log_state.log_entries[entry_index as usize].matches_index(entry_index) &&
+            replicated_log_state.log_entries[entry_index as usize].matches_term(entry_term) {
+            AppendAction::Ignore
+        } else if entry_index < (total_log_entries as u64) &&
+            replicated_log_state.log_entries[entry_index as usize].matches_index(entry_index) &&
+            !replicated_log_state.log_entries[entry_index as usize].matches_term(entry_term) {
+            AppendAction::Truncate
+        } else {
+            AppendAction::Append
+        };
+    }
+
+    fn truncate(&self, index: u64) {
+        let mut write_guard = self.replicated_log_state.write().unwrap();
+        let replicated_log_state = &mut *write_guard;
+        replicated_log_state.log_entries.truncate(index as usize);
+    }
+
+    fn append_new(&self, entry: &Entry) {
+        let mut write_guard = self.replicated_log_state.write().unwrap();
+        let replicated_log_state = &mut *write_guard;
+
+        let (entry_index, entry_term) = (entry.index, entry.term);
+
+        let command = entry.command.as_ref().unwrap();
+        replicated_log_state.log_entries.push(LogEntry::new(entry_term, entry_index, &command));
     }
 }
 
@@ -505,7 +535,7 @@ mod tests {
     fn accepts_an_entry_with_higher_term() {
         let replicated_log = ReplicatedLog::new(1);
         let append_entries = ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
-            10, 30, 100
+            10, 30, 100,
         );
         assert!(replicated_log.should_accept(&append_entries, 4));
     }
@@ -514,7 +544,7 @@ mod tests {
     fn does_not_accept_an_entry_with_lower_term() {
         let replicated_log = ReplicatedLog::new(1);
         let append_entries = ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
-            4, 30, 100
+            4, 30, 100,
         );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 10));
     }
@@ -523,7 +553,7 @@ mod tests {
     fn accepts_an_entry_with_no_previous_log_index() {
         let replicated_log = ReplicatedLog::new(1);
         let append_entries = ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
-            1, 30, 100
+            1, 30, 100,
         );
         assert!(replicated_log.should_accept(&append_entries, 1));
     }
@@ -541,7 +571,7 @@ mod tests {
             ));
         }
         let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
-            1, 30, 100, Some(0), Some(0), None, None
+            1, 30, 100, Some(0), Some(0), None, None,
         );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
     }
@@ -559,7 +589,7 @@ mod tests {
             ));
         }
         let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
-            1, 30, 100, Some(0), Some(1), None, None
+            1, 30, 100, Some(0), Some(1), None, None,
         );
         assert!(replicated_log.should_accept(&append_entries, 1));
     }
@@ -578,7 +608,7 @@ mod tests {
         }
 
         let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
-            1, 30, 100, Some(5), Some(1), None, None
+            1, 30, 100, Some(5), Some(1), None, None,
         );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
     }
@@ -597,7 +627,7 @@ mod tests {
         }
 
         let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
-            1, 30, 100, Some(1), Some(1), None, None
+            1, 30, 100, Some(1), Some(1), None, None,
         );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
     }
@@ -676,6 +706,111 @@ mod tests {
         assert_eq!(1, log_entry.get_term());
         assert_eq!(0, log_entry.get_index());
         assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+    }
+
+    #[test]
+    fn maybe_truncate_an_entry_and_then_append() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("first").as_bytes().to_vec() },
+            ));
+        }
+        let content = String::from("new content");
+        let entry = Entry {
+            command: Some(Command { command: content.as_bytes().to_vec() }),
+            term: 2,
+            index: 0,
+        };
+
+        replicated_log.maybe_append(&entry);
+
+        let log_entry = replicated_log.get_log_entry_at(0).unwrap();
+        assert_eq!(1, replicated_log.total_log_entries());
+        assert_eq!(2, log_entry.get_term());
+        assert_eq!(0, log_entry.get_index());
+        assert_eq!(content.as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+    }
+
+    #[test]
+    fn maybe_truncate_an_entry_at_index1_and_then_append() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("first").as_bytes().to_vec() },
+            ));
+            replicated_log_state.log_entries.push(LogEntry::new(
+                2,
+                1,
+                &Command { command: String::from("second").as_bytes().to_vec() },
+            ));
+        }
+        let content = String::from("new content");
+        let entry = Entry {
+            command: Some(Command { command: content.as_bytes().to_vec() }),
+            term: 3,
+            index: 1,
+        };
+
+        replicated_log.maybe_append(&entry);
+
+        assert_eq!(2, replicated_log.total_log_entries());
+
+        let log_entry = replicated_log.get_log_entry_at(0).unwrap();
+        assert_eq!(1, log_entry.get_term());
+        assert_eq!(0, log_entry.get_index());
+        assert_eq!(String::from("first").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+
+        let log_entry = replicated_log.get_log_entry_at(1).unwrap();
+        assert_eq!(3, log_entry.get_term());
+        assert_eq!(1, log_entry.get_index());
+        assert_eq!(String::from("new content").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+    }
+
+    #[test]
+    fn maybe_truncate_few_entries_and_then_append() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            for count in 1..=6 {
+                replicated_log_state.log_entries.push(LogEntry::new(
+                    1,
+                    count - 1,
+                    &Command { command: (count - 1).to_string().as_bytes().to_vec() },
+                ));
+            }
+        }
+        let content = String::from("new content");
+        let entry = Entry {
+            command: Some(Command { command: content.as_bytes().to_vec() }),
+            term: 3,
+            index: 3,
+        };
+
+        replicated_log.maybe_append(&entry);
+
+        assert_eq!(4, replicated_log.total_log_entries());
+        for index in 0..=2 {
+            let log_entry = replicated_log.get_log_entry_at(index).unwrap();
+
+            assert_eq!(1, log_entry.get_term());
+            assert_eq!(index as u64, log_entry.get_index());
+            assert_eq!(index.to_string().as_bytes().to_vec(), log_entry.get_bytes_as_vec());
+        }
+
+        let log_entry = replicated_log.get_log_entry_at(3).unwrap();
+        assert_eq!(3, log_entry.get_term());
+        assert_eq!(3, log_entry.get_index());
+        assert_eq!(String::from("new content").as_bytes().to_vec(), log_entry.get_bytes_as_vec());
     }
 
     #[test]
