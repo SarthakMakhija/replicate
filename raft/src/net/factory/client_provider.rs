@@ -61,7 +61,7 @@ mod tests {
     async fn request_vote_client_with_connection_error() {
         let client = RequestVoteClient {};
         let request = Request::new(
-            RequestVoteBuilder::new().request_vote(10, 1, 10)
+            RequestVoteBuilder::request_vote(10, 1, 10)
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
 

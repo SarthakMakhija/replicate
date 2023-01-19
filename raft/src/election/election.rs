@@ -171,7 +171,7 @@ mod tests {
                 };
 
                 return ServiceRequest::new(
-                    RequestVoteBuilder::new().request_vote_with_log(
+                    RequestVoteBuilder::request_vote_with_log(
                         replica_id,
                         term,
                         correlation_id,

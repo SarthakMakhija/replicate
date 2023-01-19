@@ -717,7 +717,7 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::new().request_vote(
+            let request_vote = RequestVoteBuilder::request_vote(
                 30,
                 10,
                 20,
@@ -759,7 +759,7 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::new().request_vote(
+            let request_vote = RequestVoteBuilder::request_vote(
                 30,
                 0,
                 20,
@@ -800,7 +800,7 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::new().request_vote(
+            let request_vote = RequestVoteBuilder::request_vote(
                 30,
                 10,
                 20,
@@ -841,7 +841,7 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::new().request_vote(
+            let request_vote = RequestVoteBuilder::request_vote(
                 30,
                 10,
                 20,
@@ -882,7 +882,7 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::new().request_vote(
+            let request_vote = RequestVoteBuilder::request_vote(
                 10,
                 10,
                 20,
@@ -926,7 +926,7 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::new().request_vote_with_log(
+            let request_vote = RequestVoteBuilder::request_vote_with_log(
                 10,
                 10,
                 20,
@@ -972,7 +972,7 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::new().request_vote_with_log(
+            let request_vote = RequestVoteBuilder::request_vote_with_log(
                 10,
                 10,
                 20,

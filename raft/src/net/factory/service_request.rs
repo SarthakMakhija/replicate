@@ -21,7 +21,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(
-            RequestVoteBuilder::new().request_vote_with_log(
+            RequestVoteBuilder::request_vote_with_log(
                 replica_id,
                 term,
                 correlation_id,

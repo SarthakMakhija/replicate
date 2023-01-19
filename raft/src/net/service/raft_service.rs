@@ -212,7 +212,7 @@ mod tests {
             let raft_service = RaftService::new(inner_state.clone());
 
             let mut request = Request::new(
-                RequestVoteBuilder::new().request_vote(30, 10, 20)
+                RequestVoteBuilder::request_vote(30, 10, 20)
             );
             request.add_host_port(self_host_and_port);
 
@@ -249,7 +249,7 @@ mod tests {
             let raft_service = RaftService::new(inner_state.clone());
 
             let mut request = Request::new(
-                RequestVoteBuilder::new().request_vote(30, 10, 20)
+                RequestVoteBuilder::request_vote(30, 10, 20)
             );
             request.add_host_port(self_host_and_port);
 
@@ -285,7 +285,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let mut request = Request::new(
-                RequestVoteBuilder::new().request_vote(30, 10, 20)
+                RequestVoteBuilder::request_vote(30, 10, 20)
             );
             request.add_host_port(self_host_and_port);
 
@@ -317,7 +317,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let mut request = Request::new(
-                RequestVoteBuilder::new().request_vote(30, 0, 20)
+                RequestVoteBuilder::request_vote(30, 0, 20)
             );
             request.add_host_port(self_host_and_port);
 
@@ -351,7 +351,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let mut request = Request::new(
-                RequestVoteBuilder::new().request_vote_with_log(30, 0, 20, Some(0), Some(0))
+                RequestVoteBuilder::request_vote_with_log(30, 0, 20, Some(0), Some(0))
             );
             request.add_host_port(self_host_and_port);
 
@@ -385,7 +385,7 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
             let mut request = Request::new(
-                RequestVoteBuilder::new().request_vote_with_log(30, 1, 20, Some(0), Some(1))
+                RequestVoteBuilder::request_vote_with_log(30, 1, 20, Some(0), Some(1))
             );
             request.add_host_port(self_host_and_port);
 
