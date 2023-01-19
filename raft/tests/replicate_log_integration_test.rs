@@ -37,9 +37,9 @@ fn replicate_log() {
     let (all_services_shutdown_handle_three, state_peer_other) = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
-    let election = Election::new(state.clone());
+    let election = Election::new();
     blocking_runtime.block_on(async {
-        election.start().await;
+        election.start(state.clone()).await;
     });
 
     thread::sleep(Duration::from_millis(30));
@@ -89,9 +89,9 @@ fn replicate_multiple_logs_sequentially() {
     let (all_services_shutdown_handle_three, state_peer_other) = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
-    let election = Election::new(state.clone());
+    let election = Election::new();
     blocking_runtime.block_on(async {
-        election.start().await;
+        election.start(state.clone()).await;
     });
 
     thread::sleep(Duration::from_millis(30));

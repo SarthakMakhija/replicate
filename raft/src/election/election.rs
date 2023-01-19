@@ -16,23 +16,22 @@ use crate::net::rpc::grpc::RequestVoteResponse;
 use crate::state::State;
 
 pub struct Election {
-    state: Arc<State>,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
 }
 
 impl Election {
-    pub fn new(state: Arc<State>) -> Self {
-        return Election { state, service_request_factory: Arc::new(BuiltInServiceRequestFactory::new()) };
+    pub fn new() -> Self {
+        return Election { service_request_factory: Arc::new(BuiltInServiceRequestFactory::new()) };
     }
 
-    fn new_with(state: Arc<State>, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Self {
-        return Election { state, service_request_factory };
+    fn new_with(service_request_factory: Arc<dyn ServiceRequestFactory>) -> Self {
+        return Election { service_request_factory };
     }
 
-    pub async fn start(&self) {
-        let replica = self.state.get_replica();
+    pub async fn start(&self, state: Arc<State>) {
+        let replica = state.get_replica();
         let inner_replica = replica.clone();
-        let (inner_state, response_state) = (self.state.clone(), self.state.clone());
+        let (inner_state, response_state) = (state.clone(), state.clone());
         let service_request_factory = self.service_request_factory.clone();
 
         let async_quorum_callback = AsyncQuorumCallback::<RequestVoteResponse>::new_with_success_condition(
@@ -237,7 +236,6 @@ mod tests {
         });
 
         let election = Election::new_with(
-            state.clone(),
             Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
                 client_type: Success,
@@ -245,8 +243,9 @@ mod tests {
         );
 
         let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+        let inner_state = state.clone();
         let handle = election_runtime.spawn(async move {
-            election.start().await;
+            election.start(inner_state).await;
         });
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -281,7 +280,6 @@ mod tests {
         });
 
         let election = Election::new_with(
-            state.clone(),
             Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                 base_correlation_id: RwLock::new(AtomicU64::new(0)),
                 client_type: Failure,
@@ -289,8 +287,9 @@ mod tests {
         );
 
         let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+        let inner_state = state.clone();
         let handle = election_runtime.spawn(async move {
-            election.start().await;
+            election.start(inner_state).await;
         });
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();

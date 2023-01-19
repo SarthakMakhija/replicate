@@ -270,7 +270,7 @@ impl State {
             inner_state.get_heartbeat_checker(
                 heartbeat_timeout,
                 async {
-                    Election::new(election_state).start().await;
+                    Election::new().start(election_state).await;
                 },
             )
         });
