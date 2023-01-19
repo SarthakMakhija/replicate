@@ -2,8 +2,9 @@ use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::ReplicaId;
-use crate::net::builder::request_vote::RequestVoteBuilder;
 
+use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
+use crate::net::builder::request_vote::RequestVoteBuilder;
 use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, RequestVoteClient};
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::AppendEntriesResponse;
@@ -26,7 +27,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 term,
                 correlation_id,
                 last_log_index,
-                last_log_term
+                last_log_term,
             ),
             Box::new(RequestVoteClient {}),
             correlation_id,
@@ -38,15 +39,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
         let correlation_id = correlation_id_generator.generate();
 
         return ServiceRequest::new(
-            AppendEntries {
-                term,
-                leader_id,
-                correlation_id,
-                entry: None,
-                previous_log_index: None,
-                previous_log_term: None,
-                leader_commit_index: None,
-            },
+            HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id),
             Box::new(HeartbeatClient {}),
             correlation_id,
         );

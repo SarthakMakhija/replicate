@@ -995,6 +995,7 @@ mod tests {
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
         use replicate::net::replica::ReplicaId;
+        use crate::net::builder::heartbeat::{HeartbeatRequestBuilder, HeartbeatResponseBuilder};
 
         use crate::net::factory::service_request::ServiceRequestFactory;
         use crate::net::rpc::grpc::AppendEntries;
@@ -1028,15 +1029,7 @@ mod tests {
                 };
 
                 return ServiceRequest::new(
-                    AppendEntries {
-                        term,
-                        leader_id,
-                        correlation_id,
-                        entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
-                        leader_commit_index: None,
-                    },
+                    HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id),
                     client,
                     correlation_id,
                 );
@@ -1049,7 +1042,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatSuccessClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 1, success: true, correlation_id: 10, log_entry_index: None })
+                    Response::new(HeartbeatResponseBuilder::success_response(1, 10))
                 );
             }
         }
@@ -1060,7 +1053,7 @@ mod tests {
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatFailureClient {
             async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(AppendEntriesResponse { term: 5, success: false, correlation_id: 20, log_entry_index: None })
+                    Response::new(HeartbeatResponseBuilder::failure_response(5, 20))
                 );
             }
         }

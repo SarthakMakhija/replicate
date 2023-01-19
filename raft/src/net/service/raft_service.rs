@@ -7,6 +7,7 @@ use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
 use replicate::callback::single_response_completion_callback::SingleResponseCompletionCallback;
 
 use crate::follower_state::FollowerState;
+use crate::net::builder::heartbeat::HeartbeatResponseBuilder;
 use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 use crate::net::factory::service_request::BuiltInServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
@@ -79,12 +80,12 @@ impl Raft for RaftService {
                 (false, term)
             };
 
-            let _ = sender.send(AppendEntriesResponse {
-                success,
-                term: response_term,
-                correlation_id: append_entries.correlation_id,
-                log_entry_index: None,
-            }).await;
+            let response = if success {
+                HeartbeatResponseBuilder::success_response(response_term, append_entries.correlation_id)
+            } else {
+                HeartbeatResponseBuilder::failure_response(response_term, append_entries.correlation_id)
+            };
+            let _ = sender.send(response).await;
         };
 
         let _ = replica.add_to_queue(handler).await;
@@ -187,6 +188,7 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
+    use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
     use crate::net::builder::request_vote::RequestVoteBuilder;
     use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
     use crate::net::rpc::grpc::raft_server::Raft;
@@ -420,15 +422,7 @@ mod tests {
             let raft_service = RaftService::new(inner_state.clone());
             let _ = raft_service.acknowledge_heartbeat(
                 Request::new(
-                    AppendEntries {
-                        term: 1,
-                        leader_id: 10,
-                        correlation_id: 20,
-                        entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
-                        leader_commit_index: None,
-                    }
+                    HeartbeatRequestBuilder::heartbeat_request(1, 10, 20)
                 )
             ).await;
 
@@ -459,15 +453,7 @@ mod tests {
             let raft_service = RaftService::new(inner_state.clone());
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
-                    AppendEntries {
-                        term: 2,
-                        leader_id: 10,
-                        correlation_id: 20,
-                        entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
-                        leader_commit_index: None,
-                    }
+                    HeartbeatRequestBuilder::heartbeat_request(2, 10, 20)
                 )
             ).await;
 
@@ -501,15 +487,7 @@ mod tests {
 
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
-                    AppendEntries {
-                        term: 0,
-                        leader_id: 10,
-                        correlation_id: 20,
-                        entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
-                        leader_commit_index: None,
-                    }
+                    HeartbeatRequestBuilder::heartbeat_request(0, 10, 20)
                 )
             ).await;
 
@@ -544,15 +522,7 @@ mod tests {
             let raft_service = RaftService::new(inner_state.clone());
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
-                    AppendEntries {
-                        term: 0,
-                        leader_id: 10,
-                        correlation_id: 20,
-                        entry: None,
-                        previous_log_index: None,
-                        previous_log_term: None,
-                        leader_commit_index: None,
-                    }
+                    HeartbeatRequestBuilder::heartbeat_request(0, 10, 20)
                 )
             ).await;
 
