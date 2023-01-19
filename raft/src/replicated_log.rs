@@ -55,7 +55,7 @@ impl ReplicatedLog {
         return entry.is_replicated(self.majority_quorum);
     }
 
-    pub(crate) fn commit<F>(&self, commit_execution_block: F)
+    pub(crate) fn commit<F>(&self, commit_execution_block: F) //apply
         where F: Fn(u64) -> () {
         let commit_indices = {
             let starting_commit_index: usize = match self.get_commit_index() {

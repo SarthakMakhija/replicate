@@ -300,7 +300,7 @@ mod tests {
 
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::net::builder::request_vote::RequestVoteBuilder;
-    use crate::net::rpc::grpc::{Command, RequestVote};
+    use crate::net::rpc::grpc::Command;
     use crate::state::{ReplicaRole, State};
     use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
 

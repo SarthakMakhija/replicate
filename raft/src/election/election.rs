@@ -9,6 +9,7 @@ use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::replica::Replica;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
+use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::RequestVoteResponse;
@@ -58,11 +59,9 @@ impl Election {
                 || Some(inner_async_quorum_callback.clone() as Arc<dyn ResponseCallback>),
             );
 
-            inner_async_quorum_callback.on_response(replica.get_self_address(), Ok(Box::new(RequestVoteResponse {
-                term,
-                voted: true,
-                correlation_id: RESERVED_CORRELATION_ID,
-            })));
+            inner_async_quorum_callback.on_response(replica.get_self_address(), Ok(Box::new(
+                RequestVoteResponseBuilder::voted_response(term, RESERVED_CORRELATION_ID)
+            )));
             let _ = sender.send(term).await;
         };
 
@@ -73,6 +72,7 @@ impl Election {
         let _ = replica.add_to_queue(async move {
             if quorum_completion_response.is_success() {
                 response_state.change_to_leader();
+                //reset follower state -
             } else {
                 response_state.change_to_follower(election_term);
             }
@@ -134,7 +134,7 @@ mod tests {
         use replicate::net::replica::ReplicaId;
 
         use crate::election::election::tests::setup::ClientType::Success;
-        use crate::net::builder::request_vote::RequestVoteBuilder;
+        use crate::net::builder::request_vote::{RequestVoteBuilder, RequestVoteResponseBuilder};
         use crate::net::factory::service_request::ServiceRequestFactory;
         use crate::net::rpc::grpc::RequestVote;
         use crate::net::rpc::grpc::RequestVoteResponse;
@@ -196,11 +196,9 @@ mod tests {
         impl ServiceClientProvider<RequestVote, RequestVoteResponse> for VotedRequestVoteClient {
             async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(RequestVoteResponse {
-                        voted: true,
-                        term: 1,
-                        correlation_id: self.correlation_id,
-                    })
+                    Response::new(
+                        RequestVoteResponseBuilder::voted_response(1, self.correlation_id)
+                    )
                 );
             }
         }
@@ -209,11 +207,9 @@ mod tests {
         impl ServiceClientProvider<RequestVote, RequestVoteResponse> for NotVotedRequestVoteClient {
             async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(RequestVoteResponse {
-                        voted: false,
-                        term: 1,
-                        correlation_id: self.correlation_id,
-                    })
+                    Response::new(
+                        RequestVoteResponseBuilder::not_voted_response(1, self.correlation_id)
+                    )
                 );
             }
         }

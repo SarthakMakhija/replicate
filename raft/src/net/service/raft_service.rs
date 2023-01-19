@@ -7,6 +7,7 @@ use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
 use replicate::callback::single_response_completion_callback::SingleResponseCompletionCallback;
 
 use crate::follower_state::FollowerState;
+use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 use crate::net::factory::service_request::BuiltInServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
@@ -41,10 +42,12 @@ impl Raft for RaftService {
         let handler = async move {
             let term = state.get_term();
             let should_vote = state.should_vote(&request);
-            if should_vote {
+            let response = if should_vote {
                 state.voted_for(request.replica_id);
-            }
-            let response = RequestVoteResponse { term, voted: should_vote, correlation_id };
+                RequestVoteResponseBuilder::voted_response(term, correlation_id)
+            } else {
+                RequestVoteResponseBuilder::not_voted_response(term, correlation_id)
+            };
             let _ = sender.send(response).await;
         };
         let _ = replica.add_to_queue(handler).await;
