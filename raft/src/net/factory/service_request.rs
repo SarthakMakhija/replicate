@@ -2,6 +2,7 @@ use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::ReplicaId;
+use crate::net::builder::request_vote::RequestVoteBuilder;
 
 use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, RequestVoteClient};
 use crate::net::rpc::grpc::AppendEntries;
@@ -20,13 +21,13 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
         return ServiceRequest::new(
-            RequestVote {
+            RequestVoteBuilder::new().request_vote_with_log(
                 replica_id,
                 term,
                 correlation_id,
                 last_log_index,
                 last_log_term
-            },
+            ),
             Box::new(RequestVoteClient {}),
             correlation_id,
         );

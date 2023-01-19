@@ -255,7 +255,7 @@ impl State {
             replica.send_to_replicas_with_handler_hook(
                 service_request_constructor,
                 Arc::new(response_handler_generator),
-                || None
+                || None,
             );
             return Ok(());
         };
@@ -299,9 +299,10 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
+    use crate::net::builder::request_vote::RequestVoteBuilder;
+    use crate::net::rpc::grpc::{Command, RequestVote};
     use crate::state::{ReplicaRole, State};
     use crate::state::tests::setup::{HeartbeatResponseClientType, IncrementingCorrelationIdServiceRequestFactory};
-    use crate::net::rpc::grpc::{RequestVote, Command};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn change_to_candidate() {
@@ -716,13 +717,12 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVote {
-                term: 10,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            };
+            let request_vote = RequestVoteBuilder::new().request_vote(
+                30,
+                10,
+                20,
+            );
+
             assert!(inner_state.should_vote(&request_vote));
         });
     }
@@ -759,13 +759,11 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVote {
-                term: 0,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            };
+            let request_vote = RequestVoteBuilder::new().request_vote(
+                30,
+                0,
+                20,
+            );
             assert_eq!(false, inner_state.should_vote(&request_vote));
         });
     }
@@ -802,13 +800,11 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVote {
-                term: 10,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            };
+            let request_vote = RequestVoteBuilder::new().request_vote(
+                30,
+                10,
+                20,
+            );
             assert_eq!(false, inner_state.should_vote(&request_vote));
         });
     }
@@ -845,13 +841,11 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVote {
-                term: 10,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            };
+            let request_vote = RequestVoteBuilder::new().request_vote(
+                30,
+                10,
+                20,
+            );
             assert_eq!(false, inner_state.should_vote(&request_vote));
         });
     }
@@ -888,13 +882,11 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVote {
-                term: 10,
-                replica_id: 10,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            };
+            let request_vote = RequestVoteBuilder::new().request_vote(
+                10,
+                10,
+                20,
+            );
             assert!(inner_state.should_vote(&request_vote));
         });
     }
@@ -925,7 +917,7 @@ mod tests {
             );
             state.get_replicated_log_reference().append(
                 &Command { command: String::from("content").as_bytes().to_vec() },
-                1
+                1,
             );
             state.heartbeat_check_scheduler.stop();
             state.heartbeat_send_scheduler.stop();
@@ -934,13 +926,13 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVote {
-                term: 10,
-                replica_id: 10,
-                correlation_id: 20,
-                last_log_index: Some(0),
-                last_log_term: Some(1),
-            };
+            let request_vote = RequestVoteBuilder::new().request_vote_with_log(
+                10,
+                10,
+                20,
+                Some(0),
+                Some(1),
+            );
             assert!(inner_state.should_vote(&request_vote));
         });
     }
@@ -971,7 +963,7 @@ mod tests {
             );
             state.get_replicated_log_reference().append(
                 &Command { command: String::from("content").as_bytes().to_vec() },
-                1
+                1,
             );
             state.heartbeat_check_scheduler.stop();
             state.heartbeat_send_scheduler.stop();
@@ -980,13 +972,13 @@ mod tests {
 
         let inner_state = state.clone();
         blocking_runtime.block_on(async move {
-            let request_vote = RequestVote {
-                term: 10,
-                replica_id: 10,
-                correlation_id: 20,
-                last_log_index: Some(0),
-                last_log_term: Some(0),
-            };
+            let request_vote = RequestVoteBuilder::new().request_vote_with_log(
+                10,
+                10,
+                20,
+                Some(0),
+                Some(0)
+            );
             assert_eq!(false, inner_state.should_vote(&request_vote));
         });
     }

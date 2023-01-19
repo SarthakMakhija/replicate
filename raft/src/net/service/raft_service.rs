@@ -184,7 +184,8 @@ mod tests {
     use replicate::net::replica::Replica;
 
     use crate::heartbeat_config::HeartbeatConfig;
-    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry, RequestVote};
+    use crate::net::builder::request_vote::RequestVoteBuilder;
+    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
     use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::service::raft_service::RaftService;
     use crate::state::{ReplicaRole, State};
@@ -210,13 +211,9 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
-            let mut request = Request::new(RequestVote {
-                term: 10,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            });
+            let mut request = Request::new(
+                RequestVoteBuilder::new().request_vote(30, 10, 20)
+            );
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -251,13 +248,9 @@ mod tests {
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
 
-            let mut request = Request::new(RequestVote {
-                term: 10,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            });
+            let mut request = Request::new(
+                RequestVoteBuilder::new().request_vote(30, 10, 20)
+            );
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -291,14 +284,9 @@ mod tests {
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
-
-            let mut request = Request::new(RequestVote {
-                term: 10,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            });
+            let mut request = Request::new(
+                RequestVoteBuilder::new().request_vote(30, 10, 20)
+            );
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -328,14 +316,9 @@ mod tests {
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
-
-            let mut request = Request::new(RequestVote {
-                term: 0,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: None,
-                last_log_term: None,
-            });
+            let mut request = Request::new(
+                RequestVoteBuilder::new().request_vote(30, 0, 20)
+            );
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -367,14 +350,9 @@ mod tests {
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
-
-            let mut request = Request::new(RequestVote {
-                term: 0,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: Some(0),
-                last_log_term: Some(0),
-            });
+            let mut request = Request::new(
+                RequestVoteBuilder::new().request_vote_with_log(30, 0, 20, Some(0), Some(0))
+            );
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;
@@ -406,14 +384,9 @@ mod tests {
         let inner_state = state.clone();
         let _ = runtime.block_on(async move {
             let raft_service = RaftService::new(inner_state.clone());
-
-            let mut request = Request::new(RequestVote {
-                term: 1,
-                replica_id: 30,
-                correlation_id: 20,
-                last_log_index: Some(0),
-                last_log_term: Some(1),
-            });
+            let mut request = Request::new(
+                RequestVoteBuilder::new().request_vote_with_log(30, 1, 20, Some(0), Some(1))
+            );
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_request_vote(request).await;

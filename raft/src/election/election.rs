@@ -134,6 +134,7 @@ mod tests {
         use replicate::net::replica::ReplicaId;
 
         use crate::election::election::tests::setup::ClientType::Success;
+        use crate::net::builder::request_vote::RequestVoteBuilder;
         use crate::net::factory::service_request::ServiceRequestFactory;
         use crate::net::rpc::grpc::RequestVote;
         use crate::net::rpc::grpc::RequestVoteResponse;
@@ -170,13 +171,13 @@ mod tests {
                 };
 
                 return ServiceRequest::new(
-                    RequestVote {
+                    RequestVoteBuilder::new().request_vote_with_log(
                         replica_id,
                         term,
                         correlation_id,
                         last_log_index,
                         last_log_term
-                    },
+                    ),
                     client,
                     correlation_id,
                 );

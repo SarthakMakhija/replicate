@@ -52,22 +52,16 @@ mod tests {
 
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceClientProvider;
+    use crate::net::builder::request_vote::RequestVoteBuilder;
 
     use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, RequestVoteClient};
     use crate::net::rpc::grpc::AppendEntries;
-    use crate::net::rpc::grpc::RequestVote;
 
     #[tokio::test]
     async fn request_vote_client_with_connection_error() {
         let client = RequestVoteClient {};
         let request = Request::new(
-            RequestVote {
-                term: 1,
-                replica_id: 10,
-                correlation_id: 10,
-                last_log_index: None,
-                last_log_term: None,
-            }
+            RequestVoteBuilder::new().request_vote(10, 1, 10)
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
 
