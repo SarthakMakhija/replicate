@@ -52,7 +52,7 @@ impl FollowerState {
 
         for peer in &self.peers {
             let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
-            if next_log_index_by_peer.1 >= latest_log_entry_index {
+            if latest_log_entry_index >= next_log_index_by_peer.1  {
                 (&self).replicate_to(peer, next_log_index_by_peer, term)
             }
         }
