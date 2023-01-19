@@ -8,6 +8,7 @@ use replicate::callback::single_response_completion_callback::SingleResponseComp
 
 use crate::follower_state::FollowerState;
 use crate::net::builder::heartbeat::HeartbeatResponseBuilder;
+use crate::net::builder::log::ReplicateLogResponseBuilder;
 use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 use crate::net::factory::service_request::BuiltInServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
@@ -113,23 +114,18 @@ impl Raft for RaftService {
                 state.clone().change_to_follower(append_entries.term);
             }
             let should_accept = state.should_accept(&append_entries);
-            let log_entry_index = if should_accept {
+            let response = if should_accept {
                 let replicated_log = state.get_replicated_log_reference();
                 let entry = append_entries.entry.unwrap();
 
                 replicated_log.maybe_append(&entry);
                 replicated_log.maybe_advance_commit_index_to(append_entries.leader_commit_index);
-                Some(entry.index)
+                ReplicateLogResponseBuilder::success_response(term, append_entries.correlation_id, entry.index)
             } else {
-                None
+                ReplicateLogResponseBuilder::failure_response(term, append_entries.correlation_id)
             };
 
-            let _ = sender.send(AppendEntriesResponse {
-                term,
-                success: should_accept,
-                log_entry_index,
-                correlation_id: append_entries.correlation_id
-            }).await;
+            let _ = sender.send(response).await;
         };
 
         let _ = replica.add_to_queue(handler).await;
@@ -189,8 +185,9 @@ mod tests {
 
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
+    use crate::net::builder::log::ReplicateLogRequestBuilder;
     use crate::net::builder::request_vote::RequestVoteBuilder;
-    use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
+    use crate::net::rpc::grpc::{AppendEntriesResponse, Command, Entry};
     use crate::net::rpc::grpc::raft_server::Raft;
     use crate::net::service::raft_service::RaftService;
     use crate::state::{ReplicaRole, State};
@@ -607,19 +604,13 @@ mod tests {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
-            let mut request = Request::new(AppendEntries {
-                term: 0,
-                leader_id: 30,
-                correlation_id: 10,
-                entry: Some(Entry {
+            let mut request = Request::new(ReplicateLogRequestBuilder::replicate_log_request_with_no_previous_log_reference(
+                0, 30, 10, Some(Entry {
                     term: 0,
                     index: 1,
                     command: Some(command),
                 }),
-                previous_log_index: None,
-                previous_log_term: None,
-                leader_commit_index: None,
-            });
+            ));
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_replicate_log(request).await;
@@ -655,19 +646,13 @@ mod tests {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
-            let mut request = Request::new(AppendEntries {
-                term: 3,
-                leader_id: 30,
-                correlation_id: 10,
-                entry: Some(Entry {
+            let mut request = Request::new(ReplicateLogRequestBuilder::replicate_log_request_with_no_previous_log_reference(
+                3, 30, 10, Some(Entry {
                     term: 3,
                     index: 1,
                     command: Some(command),
                 }),
-                previous_log_index: None,
-                previous_log_term: None,
-                leader_commit_index: None,
-            });
+            ));
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_replicate_log(request).await;
@@ -700,19 +685,14 @@ mod tests {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
-            let mut request = Request::new(AppendEntries {
-                term: 1,
-                leader_id: 30,
-                correlation_id: 10,
-                entry: Some(Entry {
+            let mut request = Request::new(ReplicateLogRequestBuilder::replicate_log_request(
+                1, 30, 10, Some(0), Some(0), None,
+                Some(Entry {
                     term: 1,
                     index: 1,
                     command: Some(command),
                 }),
-                previous_log_index: Some(0),
-                previous_log_term: Some(0),
-                leader_commit_index: None,
-            });
+            ));
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_replicate_log(request).await;
@@ -751,19 +731,14 @@ mod tests {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
-            let mut request = Request::new(AppendEntries {
-                term: 1,
-                leader_id: 30,
-                correlation_id: 10,
-                entry: Some(Entry {
+            let mut request = Request::new(ReplicateLogRequestBuilder::replicate_log_request(
+                1, 30, 10, Some(0), Some(0), None,
+                Some(Entry {
                     term: 1,
                     index: 1,
                     command: Some(command),
                 }),
-                previous_log_index: Some(0),
-                previous_log_term: Some(0),
-                leader_commit_index: None,
-            });
+            ));
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_replicate_log(request).await;
@@ -808,19 +783,14 @@ mod tests {
             let content = String::from("Content");
             let command = Command { command: content.as_bytes().to_vec() };
 
-            let mut request = Request::new(AppendEntries {
-                term: 1,
-                leader_id: 30,
-                correlation_id: 10,
-                entry: Some(Entry {
+            let mut request = Request::new(ReplicateLogRequestBuilder::replicate_log_request(
+                1, 30, 10, Some(0), Some(0), Some(0),
+                Some(Entry {
                     term: 1,
                     index: 1,
                     command: Some(command),
-                }),
-                previous_log_index: Some(0),
-                previous_log_term: Some(0),
-                leader_commit_index: Some(0),
-            });
+                })
+            ));
             request.add_host_port(self_host_and_port);
 
             let _ = raft_service.acknowledge_replicate_log(request).await;

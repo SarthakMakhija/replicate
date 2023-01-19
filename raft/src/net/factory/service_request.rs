@@ -4,6 +4,7 @@ use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::ReplicaId;
 
 use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
+use crate::net::builder::log::ReplicateLogRequestBuilder;
 use crate::net::builder::request_vote::RequestVoteBuilder;
 use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, RequestVoteClient};
 use crate::net::rpc::grpc::AppendEntries;
@@ -57,15 +58,9 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
         let correlation_id = correlation_id_generator.generate();
 
         return ServiceRequest::new(
-            AppendEntries {
-                term,
-                leader_id,
-                correlation_id,
-                entry,
-                previous_log_index,
-                previous_log_term,
-                leader_commit_index,
-            },
+            ReplicateLogRequestBuilder::replicate_log_request(
+                term, leader_id, correlation_id, previous_log_index, previous_log_term, leader_commit_index, entry,
+            ),
             Box::new(ReplicateLogClient {}),
             correlation_id,
         );

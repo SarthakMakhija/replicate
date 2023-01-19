@@ -52,11 +52,11 @@ mod tests {
 
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceClientProvider;
-    use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
-    use crate::net::builder::request_vote::RequestVoteBuilder;
 
+    use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
+    use crate::net::builder::log::ReplicateLogRequestBuilder;
+    use crate::net::builder::request_vote::RequestVoteBuilder;
     use crate::net::factory::client_provider::{HeartbeatClient, ReplicateLogClient, RequestVoteClient};
-    use crate::net::rpc::grpc::AppendEntries;
 
     #[tokio::test]
     async fn request_vote_client_with_connection_error() {
@@ -93,15 +93,11 @@ mod tests {
     async fn replicate_log_client_with_connection_error() {
         let client = ReplicateLogClient {};
         let request = Request::new(
-            AppendEntries {
-                term: 1,
-                leader_id: 30,
-                correlation_id: 10,
-                previous_log_index: None,
-                previous_log_term: None,
-                entry: None,
-                leader_commit_index: None,
-            }
+            ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
+                1,
+                10,
+                10,
+            )
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
 

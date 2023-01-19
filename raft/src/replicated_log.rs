@@ -217,7 +217,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use crate::log_entry::LogEntry;
-    use crate::net::rpc::grpc::AppendEntries;
+    use crate::net::builder::log::ReplicateLogRequestBuilder;
     use crate::net::rpc::grpc::Command;
     use crate::net::rpc::grpc::Entry;
     use crate::replicated_log::ReplicatedLog;
@@ -504,45 +504,27 @@ mod tests {
     #[test]
     fn accepts_an_entry_with_higher_term() {
         let replicated_log = ReplicatedLog::new(1);
-        let append_entries = AppendEntries {
-            term: 10,
-            leader_id: 30,
-            correlation_id: 100,
-            entry: None,
-            previous_log_index: None,
-            previous_log_term: None,
-            leader_commit_index: None,
-        };
+        let append_entries = ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
+            10, 30, 100
+        );
         assert!(replicated_log.should_accept(&append_entries, 4));
     }
 
     #[test]
     fn does_not_accept_an_entry_with_lower_term() {
         let replicated_log = ReplicatedLog::new(1);
-        let append_entries = AppendEntries {
-            term: 4,
-            leader_id: 30,
-            correlation_id: 100,
-            entry: None,
-            previous_log_index: None,
-            previous_log_term: None,
-            leader_commit_index: None,
-        };
+        let append_entries = ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
+            4, 30, 100
+        );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 10));
     }
 
     #[test]
     fn accepts_an_entry_with_no_previous_log_index() {
         let replicated_log = ReplicatedLog::new(1);
-        let append_entries = AppendEntries {
-            term: 1,
-            leader_id: 30,
-            correlation_id: 100,
-            entry: None,
-            previous_log_index: None,
-            previous_log_term: None,
-            leader_commit_index: None,
-        };
+        let append_entries = ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
+            1, 30, 100
+        );
         assert!(replicated_log.should_accept(&append_entries, 1));
     }
 
@@ -558,16 +540,9 @@ mod tests {
                 &Command { command: String::from("Content").as_bytes().to_vec() },
             ));
         }
-
-        let append_entries = AppendEntries {
-            term: 1,
-            leader_id: 30,
-            correlation_id: 100,
-            entry: None,
-            previous_log_index: Some(0),
-            previous_log_term: Some(0),
-            leader_commit_index: None,
-        };
+        let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
+            1, 30, 100, Some(0), Some(0), None, None
+        );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
     }
 
@@ -583,16 +558,9 @@ mod tests {
                 &Command { command: String::from("Content").as_bytes().to_vec() },
             ));
         }
-
-        let append_entries = AppendEntries {
-            term: 1,
-            leader_id: 30,
-            correlation_id: 100,
-            entry: None,
-            previous_log_index: Some(0),
-            previous_log_term: Some(1),
-            leader_commit_index: None,
-        };
+        let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
+            1, 30, 100, Some(0), Some(1), None, None
+        );
         assert!(replicated_log.should_accept(&append_entries, 1));
     }
 
@@ -609,15 +577,9 @@ mod tests {
             ));
         }
 
-        let append_entries = AppendEntries {
-            term: 1,
-            leader_id: 30,
-            correlation_id: 100,
-            entry: None,
-            previous_log_index: Some(5),
-            previous_log_term: Some(1),
-            leader_commit_index: None,
-        };
+        let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
+            1, 30, 100, Some(5), Some(1), None, None
+        );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
     }
 
@@ -634,15 +596,9 @@ mod tests {
             ));
         }
 
-        let append_entries = AppendEntries {
-            term: 1,
-            leader_id: 30,
-            correlation_id: 100,
-            entry: None,
-            previous_log_index: Some(1),
-            previous_log_term: Some(1),
-            leader_commit_index: None,
-        };
+        let append_entries = ReplicateLogRequestBuilder::replicate_log_request(
+            1, 30, 100, Some(1), Some(1), None, None
+        );
         assert_eq!(false, replicated_log.should_accept(&append_entries, 1));
     }
 
