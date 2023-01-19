@@ -60,33 +60,25 @@ impl Raft for RaftService {
         println!("received heartbeat on {:?}", self.state.get_replica_reference().get_self_address());
         let state = self.state.clone();
         let replica = self.state.get_replica_reference();
-
         let append_entries = request.into_inner();
 
         let (sender, mut receiver) = mpsc::channel::<AppendEntriesResponse>(1);
         let handler = async move {
             state.mark_heartbeat_received();
             let term = state.get_term();
-            if append_entries.term > term {
+
+            let (success, response_term) = if append_entries.term > term {
                 state.change_to_follower(append_entries.term);
-                let _ = sender.send(AppendEntriesResponse {
-                    success: true,
-                    term: append_entries.term,
-                    correlation_id: append_entries.correlation_id,
-                    log_entry_index: None,
-                }).await;
-            }
-            if append_entries.term == term {
-                let _ = sender.send(AppendEntriesResponse {
-                    success: true,
-                    term,
-                    correlation_id: append_entries.correlation_id,
-                    log_entry_index: None,
-                }).await;
-            }
+                (true, append_entries.term)
+            } else if append_entries.term == term {
+                (true, term)
+            } else {
+                (false, term)
+            };
+
             let _ = sender.send(AppendEntriesResponse {
-                success: false,
-                term,
+                success,
+                term: response_term,
                 correlation_id: append_entries.correlation_id,
                 log_entry_index: None,
             }).await;
@@ -481,7 +473,9 @@ mod tests {
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = runtime.block_on(async move {
-            return State::new(Arc::new(replica), HeartbeatConfig::default());
+            let state = State::new(Arc::new(replica), HeartbeatConfig::default());
+            state.change_to_candidate();
+            return state;
         });
 
         let inner_state = state.clone();
@@ -490,7 +484,7 @@ mod tests {
             let result: Result<Response<AppendEntriesResponse>, tonic::Status> = raft_service.acknowledge_heartbeat(
                 Request::new(
                     AppendEntries {
-                        term: 1,
+                        term: 2,
                         leader_id: 10,
                         correlation_id: 20,
                         entry: None,
@@ -503,8 +497,9 @@ mod tests {
 
             let response = result.unwrap().into_inner();
             assert_eq!(true, response.success);
-            assert_eq!(1, response.term);
-            assert_eq!(1, inner_state.get_term());
+            assert_eq!(2, response.term);
+            assert_eq!(2, inner_state.get_term());
+            assert_eq!(ReplicaRole::Follower, inner_state.get_role());
         });
     }
 
