@@ -158,7 +158,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
     );
 
     let state = runtime.block_on(async move {
-        return State::new(Arc::new(replica), HeartbeatConfig::default());
+        return State::temp_new(replica, HeartbeatConfig::default());
     });
     let inner_state = state.clone();
     runtime.spawn(async move {
@@ -180,7 +180,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         Arc::new(SystemClock::new()),
     );
     let state = runtime.block_on(async move {
-        return State::new(Arc::new(replica), HeartbeatConfig::default());
+        return State::temp_new(replica, HeartbeatConfig::default());
     });
     let inner_state = state.clone();
     runtime.spawn(async move {
@@ -203,7 +203,7 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
     );
 
     let state = runtime.block_on(async move {
-        return State::new(Arc::new(replica), HeartbeatConfig::default());
+        return State::temp_new(replica, HeartbeatConfig::default());
     });
     let inner_state = state.clone();
     runtime.spawn(async move {
