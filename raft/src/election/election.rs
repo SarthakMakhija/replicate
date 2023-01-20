@@ -228,7 +228,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::temp_new(some_replica, HeartbeatConfig::default());
+            return State::new(some_replica, HeartbeatConfig::default());
         });
 
         let election = Election::new_with(
@@ -269,7 +269,7 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::temp_new(some_replica, HeartbeatConfig::default());
+            return State::new(some_replica, HeartbeatConfig::default());
         });
 
         let election = Election::new_with(

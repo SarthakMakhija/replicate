@@ -18,7 +18,7 @@ use crate::replicated_log::ReplicatedLog;
 
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
-    replica: Arc<Replica>,
+    replica: Replica,
     follower_state: Arc<FollowerState>,
     clock: Arc<dyn Clock>,
     heartbeat_config: HeartbeatConfig,
@@ -45,15 +45,11 @@ pub enum ReplicaRole {
 }
 
 impl State {
-    pub fn new(replica: Arc<Replica>, heartbeat_config: HeartbeatConfig) -> Arc<State> {
+    pub fn new(replica: Replica, heartbeat_config: HeartbeatConfig) -> Arc<State> {
         return Self::new_with(replica, heartbeat_config, Arc::new(BuiltInServiceRequestFactory::new()));
     }
 
-    pub fn temp_new(replica: Replica, heartbeat_config: HeartbeatConfig) -> Arc<State> {
-        return Self::new_with(Arc::new(replica), heartbeat_config, Arc::new(BuiltInServiceRequestFactory::new()));
-    }
-
-    fn new_with(replica: Arc<Replica>, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
+    fn new_with(replica: Replica, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
         let clock_clone = clock.clone();
         let heartbeat_config = heartbeat_config;
@@ -175,7 +171,7 @@ impl State {
         };
     }
 
-    pub(crate) fn get_replica_reference(&self) -> &Arc<Replica> {
+    pub(crate) fn get_replica_reference(&self) -> &Replica {
         return &self.replica;
     }
 
@@ -344,7 +340,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.change_to_candidate();
 
         assert_eq!(1, state.get_term());
@@ -363,7 +359,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_leader();
@@ -384,7 +380,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_leader();
 
@@ -403,7 +399,7 @@ mod tests {
             vec![peer_one, peer_other],
             Arc::new(SystemClock::new()),
         );
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.get_replicated_log_reference().append(
             &Command { command: String::from("first").as_bytes().to_vec() },
             1
@@ -432,7 +428,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_follower(2);
@@ -453,7 +449,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.get_replicated_log_reference().append(
             &Command { command: String::from("second").as_bytes().to_vec() },
             1
@@ -482,7 +478,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
 
         assert_eq!(None, state.get_voted_for());
     }
@@ -498,7 +494,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
 
         assert_eq!(true, state.has_not_voted_for_or_matches(10));
     }
@@ -514,7 +510,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.voted_for(15);
 
         assert_eq!(true, state.has_not_voted_for_or_matches(15));
@@ -531,7 +527,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.voted_for(10);
 
         assert_eq!(false, state.has_not_voted_for_or_matches(15));
@@ -548,7 +544,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.mark_heartbeat_received();
         state.heartbeat_check_scheduler.stop();
         state.heartbeat_send_scheduler.stop();
@@ -582,7 +578,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.heartbeat_check_scheduler.stop();
         state.heartbeat_send_scheduler.stop();
 
@@ -616,7 +612,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
 
         let heartbeat_timeout = Duration::from_millis(10);
         let count = Arc::new(RwLock::new(0));
@@ -656,7 +652,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::temp_new(some_replica, HeartbeatConfig::default());
+        let state = State::new(some_replica, HeartbeatConfig::default());
         state.mark_heartbeat_received();
         state.heartbeat_check_scheduler.stop();
         state.heartbeat_send_scheduler.stop();
@@ -690,13 +686,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             return State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -723,13 +716,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -761,13 +751,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -803,13 +790,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -844,13 +828,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -885,13 +866,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -926,13 +904,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -967,13 +942,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -1008,13 +980,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
@@ -1054,13 +1023,10 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
-        let inner_replica = some_replica.clone();
-
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             let state = State::new_with(
-                inner_replica,
+                some_replica,
                 HeartbeatConfig::default(),
                 Arc::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),

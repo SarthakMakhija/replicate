@@ -196,7 +196,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            return State::temp_new(replica, HeartbeatConfig::default());
+            return State::new(replica, HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -229,7 +229,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             let state_clone = state.clone();
 
             state_clone.change_to_leader();
@@ -266,7 +266,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             let state_clone = state.clone();
 
             state_clone.voted_for(20);
@@ -302,7 +302,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            return State::temp_new(replica, HeartbeatConfig::default());
+            return State::new(replica, HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -334,7 +334,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             state.get_replicated_log_reference().append(&Command { command: String::from("Content").as_bytes().to_vec() }, 1);
             return state;
         });
@@ -368,7 +368,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             state.get_replicated_log_reference().append(&Command { command: String::from("Content").as_bytes().to_vec() }, 1);
             return state;
         });
@@ -401,7 +401,7 @@ mod tests {
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = runtime.block_on(async move {
-            return State::temp_new(replica, HeartbeatConfig::default());
+            return State::new(replica, HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -430,7 +430,7 @@ mod tests {
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             state.change_to_candidate();
             return state;
         });
@@ -465,7 +465,7 @@ mod tests {
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = runtime.block_on(async move {
-            return State::temp_new(replica, HeartbeatConfig::default());
+            return State::new(replica, HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -499,7 +499,7 @@ mod tests {
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             state.change_to_candidate();
             return state;
         });
@@ -535,7 +535,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            return State::temp_new(replica, HeartbeatConfig::default());
+            return State::new(replica, HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -582,7 +582,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             state.change_to_candidate();
 
             return state;
@@ -624,7 +624,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             state.change_to_candidate();
 
             return state;
@@ -666,7 +666,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            return State::temp_new(replica, HeartbeatConfig::default());
+            return State::new(replica, HeartbeatConfig::default());
         });
 
         let inner_state = state.clone();
@@ -706,7 +706,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             let content = String::from("anything");
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
@@ -758,7 +758,7 @@ mod tests {
         );
 
         let state = runtime.block_on(async move {
-            let state = State::temp_new(replica, HeartbeatConfig::default());
+            let state = State::new(replica, HeartbeatConfig::default());
             let content = String::from("anything");
             let command = Command { command: content.as_bytes().to_vec() };
             let term = state.get_term();
