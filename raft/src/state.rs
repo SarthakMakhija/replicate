@@ -49,6 +49,10 @@ impl State {
         return Self::new_with(replica, heartbeat_config, Arc::new(BuiltInServiceRequestFactory::new()));
     }
 
+    pub fn temp_new(replica: Replica, heartbeat_config: HeartbeatConfig) -> Arc<State> {
+        return Self::new_with(Arc::new(replica), heartbeat_config, Arc::new(BuiltInServiceRequestFactory::new()));
+    }
+
     fn new_with(replica: Arc<Replica>, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
         let clock_clone = clock.clone();

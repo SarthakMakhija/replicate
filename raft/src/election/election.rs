@@ -226,12 +226,9 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-
-        let inner_replica = some_replica.clone();
         let state = blocking_runtime.block_on(async move {
-            return State::new(inner_replica, HeartbeatConfig::default());
+            return State::temp_new(some_replica, HeartbeatConfig::default());
         });
 
         let election = Election::new_with(
@@ -270,12 +267,9 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let some_replica = Arc::new(some_replica);
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-
-        let inner_replica = some_replica.clone();
         let state = blocking_runtime.block_on(async move {
-            return State::new(inner_replica, HeartbeatConfig::default());
+            return State::temp_new(some_replica, HeartbeatConfig::default());
         });
 
         let election = Election::new_with(
