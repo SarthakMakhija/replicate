@@ -344,7 +344,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.change_to_candidate();
 
         assert_eq!(1, state.get_term());
@@ -363,7 +363,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_leader();
@@ -384,7 +384,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_leader();
 
@@ -403,7 +403,7 @@ mod tests {
             vec![peer_one, peer_other],
             Arc::new(SystemClock::new()),
         );
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.get_replicated_log_reference().append(
             &Command { command: String::from("first").as_bytes().to_vec() },
             1
@@ -432,7 +432,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         let clone = state.clone();
         clone.change_to_candidate();
         clone.change_to_follower(2);
@@ -453,7 +453,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.get_replicated_log_reference().append(
             &Command { command: String::from("second").as_bytes().to_vec() },
             1
@@ -482,7 +482,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
 
         assert_eq!(None, state.get_voted_for());
     }
@@ -498,7 +498,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
 
         assert_eq!(true, state.has_not_voted_for_or_matches(10));
     }
@@ -514,7 +514,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.voted_for(15);
 
         assert_eq!(true, state.has_not_voted_for_or_matches(15));
@@ -531,7 +531,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.voted_for(10);
 
         assert_eq!(false, state.has_not_voted_for_or_matches(15));
@@ -548,7 +548,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.mark_heartbeat_received();
         state.heartbeat_check_scheduler.stop();
         state.heartbeat_send_scheduler.stop();
@@ -582,7 +582,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.heartbeat_check_scheduler.stop();
         state.heartbeat_send_scheduler.stop();
 
@@ -616,7 +616,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
 
         let heartbeat_timeout = Duration::from_millis(10);
         let count = Arc::new(RwLock::new(0));
@@ -656,7 +656,7 @@ mod tests {
             Arc::new(SystemClock::new()),
         );
 
-        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let state = State::temp_new(some_replica, HeartbeatConfig::default());
         state.mark_heartbeat_received();
         state.heartbeat_check_scheduler.stop();
         state.heartbeat_send_scheduler.stop();
