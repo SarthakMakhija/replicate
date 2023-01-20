@@ -123,6 +123,7 @@ impl State {
         consensus_state.role = ReplicaRole::Leader;
 
         self.heartbeat_check_scheduler.stop();
+        self.reset_next_log_index();
         Self::restart_heartbeat_sender(self.clone(), &self.heartbeat_send_scheduler);
     }
 
@@ -296,6 +297,16 @@ impl State {
             inner_state.get_heartbeat_sender()
         });
     }
+
+    fn reset_next_log_index(&self) {
+        let (last_log_index, _) = self.get_replicated_log_reference().get_last_log_index_and_term();
+        let log_index = match last_log_index {
+            None => 0,
+            Some(index) => index
+        };
+
+        self.follower_state.reset_next_log_index_to(log_index);
+    }
 }
 
 #[cfg(test)]
@@ -356,6 +367,50 @@ mod tests {
         assert_eq!(1, state.get_term());
         assert_eq!(ReplicaRole::Leader, state.get_role());
         assert_eq!(Some(10), state.get_voted_for());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn change_to_leader_and_reset_next_log_index_to_0() {
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297);
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        let clone = state.clone();
+        clone.change_to_leader();
+
+        assert_eq!(ReplicaRole::Leader, state.get_role());
+        assert_eq!(0, state.follower_state.get_next_log_index_for(&peer))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn change_to_leader_and_reset_next_log_index_to_latest_log_index() {
+        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297);
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![peer],
+            Arc::new(SystemClock::new()),
+        );
+        let state = State::new(Arc::new(some_replica), HeartbeatConfig::default());
+        state.get_replicated_log_reference().append(
+            &Command { command: String::from("first").as_bytes().to_vec() },
+            1
+        );
+        state.get_replicated_log_reference().append(
+            &Command { command: String::from("second").as_bytes().to_vec() },
+            1
+        );
+
+        let clone = state.clone();
+        clone.change_to_leader();
+
+        assert_eq!(ReplicaRole::Leader, state.get_role());
+        assert_eq!(1, state.follower_state.get_next_log_index_for(&peer))
     }
 
     #[tokio::test(flavor = "multi_thread")]

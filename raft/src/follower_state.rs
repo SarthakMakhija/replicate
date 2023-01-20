@@ -59,11 +59,15 @@ impl FollowerState {
         self.retry_reducing_log_index(state,from);
     }
 
-    pub(crate) fn reset_next_index(&self, latest_log_index: u64) {
+    pub(crate) fn reset_next_log_index_to(&self, latest_log_index: u64) {
         self.peers.iter().for_each(|host_and_port| {
             self.next_log_index_by_peer.entry(host_and_port.clone())
                 .and_modify(|next_log_index| *next_log_index = latest_log_index);
         });
+    }
+
+    pub(crate) fn get_next_log_index_for(&self, peer: &HostAndPort) -> NextLogIndex {
+        return *(self.next_log_index_by_peer.get(peer).unwrap().value());
     }
 
     fn replicate_to(self: &Arc<FollowerState>, state: Arc<State>, peer: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
@@ -917,7 +921,7 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        follower_state.reset_next_index(0);
+        follower_state.reset_next_log_index_to(0);
 
         let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer_host_and_port).unwrap();
         let next_log_index = next_log_index_ref.value();
@@ -948,7 +952,7 @@ mod tests {
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
-        follower_state.reset_next_index(5);
+        follower_state.reset_next_log_index_to(5);
 
         let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer_host_and_port).unwrap();
         let next_log_index = next_log_index_ref.value();
