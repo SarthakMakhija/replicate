@@ -22,11 +22,11 @@ pub struct RaftService {
 
 impl RaftService {
     pub fn new(state: Arc<State>) -> Self {
-        let inner_state = state.clone();
         let service_request_factory = Arc::new(BuiltInServiceRequestFactory::new());
+        let replica = state.get_replica_reference();
         return RaftService {
-            state,
-            follower_state: Arc::new(FollowerState::new(inner_state, service_request_factory)),
+            state: state.clone(),
+            follower_state: Arc::new(FollowerState::new(replica, service_request_factory)),
         };
     }
 }

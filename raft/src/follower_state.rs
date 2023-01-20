@@ -6,6 +6,7 @@ use dashmap::DashMap;
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
+use replicate::net::replica::Replica;
 
 use crate::net::factory::service_request::ServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
@@ -21,10 +22,9 @@ pub(crate) struct FollowerState {
 
 impl FollowerState {
     pub(crate) fn new(
-        state: Arc<State>,
+        replica: &Replica,
         service_request_factory: Arc<dyn ServiceRequestFactory>,
     ) -> Self {
-        let replica = state.get_replica_reference();
         let peers = replica.get_peers();
 
         let next_log_index_by_peer = DashMap::new();
@@ -238,7 +238,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -273,7 +273,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -319,7 +319,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -354,7 +354,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -390,7 +390,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -433,7 +433,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -469,7 +469,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -511,7 +511,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -548,7 +548,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -581,7 +581,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state.clone(),
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -615,9 +615,8 @@ mod tests {
             return state;
         });
 
-        let inner_state = state.clone();
         let follower_state = Arc::new(FollowerState::new(
-            inner_state,
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -662,9 +661,8 @@ mod tests {
             return state;
         });
 
-        let inner_state = state.clone();
         let follower_state = Arc::new(FollowerState::new(
-            inner_state,
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -723,9 +721,8 @@ mod tests {
             return state;
         });
 
-        let inner_state = state.clone();
         let follower_state = Arc::new(FollowerState::new(
-            inner_state,
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -768,9 +765,8 @@ mod tests {
             return state;
         });
 
-        let inner_state = state.clone();
         let follower_state = Arc::new(FollowerState::new(
-            inner_state,
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -811,9 +807,8 @@ mod tests {
             return state;
         });
 
-        let inner_state = state.clone();
         let follower_state = Arc::new(FollowerState::new(
-            inner_state,
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -861,9 +856,8 @@ mod tests {
             return state;
         });
 
-        let inner_state = state.clone();
         let follower_state = Arc::new(FollowerState::new(
-            inner_state,
+            state.get_replica_reference(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
