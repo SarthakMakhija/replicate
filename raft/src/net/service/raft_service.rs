@@ -29,7 +29,6 @@ impl Raft for RaftService {
         let state = self.state.clone();
         let request = request.into_inner();
         let correlation_id = request.correlation_id;
-        let replica = self.state.get_replica();
 
         println!("received RequestVote with term {}", request.term);
         let (sender, mut receiver) = mpsc::channel(1);
@@ -44,7 +43,7 @@ impl Raft for RaftService {
             };
             let _ = sender.send(response).await;
         };
-        let _ = replica.add_to_queue(handler).await;
+        let _ = self.state.get_replica_reference().add_to_queue(handler).await;
         return match receiver.recv().await {
             Some(request_vote_response) =>
                 Ok(Response::new(request_vote_response)),

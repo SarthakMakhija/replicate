@@ -7,10 +7,9 @@ use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::correlation_id::RESERVED_CORRELATION_ID;
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
-use replicate::net::replica::Replica;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
-use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 
+use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::RequestVoteResponse;
 use crate::state::State;
@@ -29,36 +28,35 @@ impl Election {
     }
 
     pub async fn start(&self, state: Arc<State>) {
-        let replica = state.get_replica();
-        let inner_replica = replica.clone();
+        let replica = state.get_replica_reference();
         let (inner_state, response_state) = (state.clone(), state.clone());
         let service_request_factory = self.service_request_factory.clone();
 
         let async_quorum_callback = AsyncQuorumCallback::<RequestVoteResponse>::new_with_success_condition(
-            inner_replica.cluster_size(),
+            replica.cluster_size(),
             replica.cluster_size(),
             Box::new(|response: &RequestVoteResponse| response.voted),
         );
 
         let inner_async_quorum_callback = async_quorum_callback.clone();
-
         let (sender, mut receiver) = mpsc::channel(1);
+
         let request_vote_handler = async move {
             let term = inner_state.change_to_candidate();
             println!("starting election with term {}", term);
+            let state = inner_state.clone();
+            let replica_reference = state.get_replica_reference();
+            let (last_log_index, last_log_term) = inner_state.get_replicated_log_reference().get_last_log_index_and_term();
 
-            let replica_id = inner_replica.get_id();
-            let replica = inner_replica.clone();
-            let (last_log_index, last_log_term): (Option<u64>, Option<u64>) = inner_state.get_replicated_log_reference().get_last_log_index_and_term();
-            replica.send_to_replicas_with_handler_hook(
-                || { service_request_factory.request_vote(replica_id, term, last_log_index, last_log_term) },
+            replica_reference.send_to_replicas_with_handler_hook(
+                || { service_request_factory.request_vote(replica_reference.get_id(), term, last_log_index, last_log_term) },
                 Arc::new(move |peer, response: Result<RequestVoteResponse, ServiceResponseError>| {
-                    return Self::request_vote_response_handler(inner_replica.clone(), peer, response);
+                    return Self::request_vote_response_handler(inner_state.clone(), peer, response);
                 }),
                 || Some(inner_async_quorum_callback.clone() as Arc<dyn ResponseCallback>),
             );
 
-            inner_async_quorum_callback.on_response(replica.get_self_address(), Ok(Box::new(
+            inner_async_quorum_callback.on_response(replica_reference.get_self_address(), Ok(Box::new(
                 RequestVoteResponseBuilder::voted_response(term, RESERVED_CORRELATION_ID)
             )));
             let _ = sender.send(term).await;
@@ -78,7 +76,7 @@ impl Election {
     }
 
     fn request_vote_response_handler(
-        replica: Arc<Replica>,
+        state: Arc<State>,
         peer: HostAndPort,
         response: Result<RequestVoteResponse, ServiceResponseError>,
     ) -> Option<impl Future<Output=()>> {
@@ -87,7 +85,9 @@ impl Election {
                 match response {
                     Ok(request_vote_response) => {
                         println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
-                        let _ = replica.register_response(request_vote_response.correlation_id, peer, Ok(Box::new(request_vote_response)));
+                        let _ = state
+                            .get_replica_reference()
+                            .register_response(request_vote_response.correlation_id, peer, Ok(Box::new(request_vote_response)));
                     }
                     Err(_err) => {
                         eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
@@ -153,7 +153,7 @@ mod tests {
                             replica_id: ReplicaId,
                             term: u64,
                             last_log_index: Option<u64>,
-                            last_log_term: Option<u64>
+                            last_log_term: Option<u64>,
             ) -> ServiceRequest<RequestVote, RequestVoteResponse> {
                 {
                     let write_guard = self.base_correlation_id.write().unwrap();
@@ -174,7 +174,7 @@ mod tests {
                         term,
                         correlation_id,
                         last_log_index,
-                        last_log_term
+                        last_log_term,
                     ),
                     client,
                     correlation_id,

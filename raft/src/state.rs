@@ -171,10 +171,6 @@ impl State {
         };
     }
 
-    pub(crate) fn get_replica(&self) -> Arc<Replica> {
-        return self.replica.clone();
-    }
-
     pub(crate) fn get_replica_reference(&self) -> &Arc<Replica> {
         return &self.replica;
     }
@@ -252,7 +248,7 @@ impl State {
     pub fn get_heartbeat_sender(self: Arc<State>) -> impl Future<Output=Result<(), AnyError>> {
         let term = self.get_term();
         let leader_id = self.replica.get_id();
-        let replica = self.replica.clone();
+        let state = self.clone();
         let service_request_factory = self.service_request_factory.clone();
 
         return async move {
@@ -268,7 +264,7 @@ impl State {
                     }
                 };
 
-            replica.send_to_replicas_with_handler_hook(
+            state.get_replica_reference().send_to_replicas_with_handler_hook(
                 service_request_constructor,
                 Arc::new(response_handler_generator),
                 || None,
