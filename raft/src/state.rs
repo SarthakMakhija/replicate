@@ -56,7 +56,7 @@ impl State {
         let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
         let heartbeat_timeout = heartbeat_config.get_heartbeat_timeout();
         let follower_state = Arc::new(
-            FollowerState::new(&replica, service_request_factory.clone())
+            FollowerState::new(&replica)
         );
 
         let majority_quorum = (replica.cluster_size() / 2) + 1;

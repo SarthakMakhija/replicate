@@ -8,7 +8,6 @@ use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::replica::Replica;
 
-use crate::net::factory::service_request::ServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
 use crate::state::{ReplicaRole, State};
 
@@ -17,13 +16,11 @@ type NextLogIndex = u64;
 pub(crate) struct FollowerState {
     peers: Vec<HostAndPort>,
     next_log_index_by_peer: DashMap<HostAndPort, NextLogIndex>,
-    service_request_factory: Arc<dyn ServiceRequestFactory>,
 }
 
 impl FollowerState {
     pub(crate) fn new(
         replica: &Replica,
-        service_request_factory: Arc<dyn ServiceRequestFactory>,
     ) -> Self {
         let peers = replica.get_peers();
 
@@ -35,7 +32,6 @@ impl FollowerState {
         let follower_state = FollowerState {
             peers,
             next_log_index_by_peer,
-            service_request_factory,
         };
         return follower_state;
     }
@@ -136,7 +132,7 @@ impl FollowerState {
                 )
             }
         };
-        return self.service_request_factory.replicate_log(
+        return state.get_service_request_factory_reference().replicate_log(
             term,
             state.get_replica_reference().get_id(),
             previous_log_index,
@@ -225,7 +221,6 @@ mod tests {
     use crate::follower_state::{FollowerState, NextLogIndex};
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::net::builder::log::ReplicateLogResponseBuilder;
-    use crate::net::factory::service_request::BuiltInServiceRequestFactory;
     use crate::net::rpc::grpc::Command;
     use crate::state::{ReplicaRole, State};
 
@@ -250,7 +245,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 1;
@@ -285,7 +279,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 1;
@@ -331,7 +324,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 1;
@@ -366,7 +358,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 0;
@@ -402,7 +393,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 1;
@@ -445,7 +435,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 1;
@@ -481,7 +470,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 1;
@@ -523,7 +511,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let next_log_index: NextLogIndex = 0;
@@ -560,7 +547,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         runtime.block_on(async {
@@ -593,7 +579,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         runtime.block_on(async {
@@ -628,7 +613,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let handler = FollowerState::append_entries_response_handler(
@@ -674,7 +658,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let handler = FollowerState::append_entries_response_handler(
@@ -734,7 +717,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let handler = FollowerState::append_entries_response_handler(
@@ -778,7 +760,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         let handler = FollowerState::append_entries_response_handler(
@@ -820,7 +801,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         runtime.block_on(async {
@@ -869,7 +849,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         runtime.block_on(async {
@@ -918,7 +897,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         follower_state.reset_next_log_index_to(0);
@@ -949,7 +927,6 @@ mod tests {
 
         let follower_state = Arc::new(FollowerState::new(
             state.get_replica_reference(),
-            Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
         follower_state.reset_next_log_index_to(5);
