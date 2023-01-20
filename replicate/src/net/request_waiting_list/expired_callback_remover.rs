@@ -12,12 +12,12 @@ use crate::net::request_waiting_list::response_callback::TimestampedCallback;
 pub(crate) struct ExpiredCallbackRemover {
     pending_requests: Arc<DashMap<CorrelationId, TimestampedCallback>>,
     expiry_after: Duration,
-    clock: Arc<dyn Clock>,
+    clock: Box<dyn Clock>
 }
 
 impl ExpiredCallbackRemover {
     pub(crate) fn start(pending_requests: Arc<DashMap<CorrelationId, TimestampedCallback>>,
-                        clock: Arc<dyn Clock>,
+                        clock: Box<dyn Clock>,
                         config: RequestWaitingListConfig) {
 
         let remover = ExpiredCallbackRemover { pending_requests, expiry_after: config.get_request_expiry_after(), clock };
@@ -51,6 +51,7 @@ mod tests {
     use std::time::{Duration, SystemTime};
 
     use dashmap::DashMap;
+    use crate::clock::clock::Clock;
     use crate::net::connect::correlation_id::CorrelationId;
     use crate::net::connect::host_and_port::HostAndPort;
 
@@ -70,6 +71,7 @@ mod tests {
         use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
         use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
+        #[derive(Clone)]
         pub struct FutureClock {
             pub duration_to_add: Duration,
         }
@@ -97,7 +99,7 @@ mod tests {
     #[test]
     fn error_response_on_expired_key() {
         let correlation_id: CorrelationId = 1;
-        let clock = Arc::new(FutureClock { duration_to_add: Duration::from_secs(5) });
+        let clock: Box<dyn Clock> = Box::new(FutureClock { duration_to_add: Duration::from_secs(5) });
         let pending_requests = Arc::new(DashMap::new());
 
         let error_response_callback = Arc::new(RequestTimeoutErrorResponseCallback {

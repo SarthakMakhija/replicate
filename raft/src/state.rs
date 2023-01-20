@@ -2,7 +2,7 @@ use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
-use replicate::clock::clock::Clock;
+use replicate::clock::clock::{Clock, SystemClock};
 use replicate::heartbeat::heartbeat_scheduler::SingleThreadedHeartbeatScheduler;
 use replicate::net::connect::error::{AnyError, ServiceResponseError};
 use replicate::net::replica::{Replica, ReplicaId};
@@ -51,7 +51,6 @@ impl State {
 
     fn new_with(replica: Replica, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
-        let clock_clone = clock.clone();
         let heartbeat_config = heartbeat_config;
         let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
         let heartbeat_timeout = heartbeat_config.get_heartbeat_timeout();
@@ -77,7 +76,7 @@ impl State {
             service_request_factory,
             replicated_log: ReplicatedLog::new(majority_quorum),
             pending_committed_log_entries: RequestWaitingList::new(
-                clock_clone,
+                Box::new(SystemClock::new()),
                 RequestWaitingListConfig::default(),
             ),
         };

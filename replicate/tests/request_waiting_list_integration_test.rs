@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
 use std::time::Duration;
 
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
@@ -13,9 +12,9 @@ use replicate::net::request_waiting_list::request_waiting_list_config::RequestWa
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handle_single_response_type() {
-    let clock = Arc::new(SystemClock::new());
+    let clock = Box::new(SystemClock::new());
     let request_waiting_list = RequestWaitingList::new(
-        clock.clone(),
+        clock,
         RequestWaitingListConfig::new(
             Duration::from_millis(3),
             Duration::from_millis(2),
@@ -53,9 +52,9 @@ async fn handle_single_response_type() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handle_multiple_response_types() {
-    let clock = Arc::new(SystemClock::new());
+    let clock = Box::new(SystemClock::new());
     let request_waiting_list = RequestWaitingList::new(
-        clock.clone(),
+        clock,
         RequestWaitingListConfig::new(
             Duration::from_millis(3),
             Duration::from_millis(2),
@@ -116,9 +115,9 @@ async fn handle_multiple_response_types() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handle_multiple_response_types_with_error() {
-    let clock = Arc::new(SystemClock::new());
+    let clock = Box::new(SystemClock::new());
     let request_waiting_list = RequestWaitingList::new(
-        clock.clone(),
+        clock,
         RequestWaitingListConfig::new(
             Duration::from_millis(3),
             Duration::from_millis(2),

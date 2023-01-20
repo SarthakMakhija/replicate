@@ -1,8 +1,13 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[derive(Clone)]
 pub struct SystemClock {}
 
-pub trait Clock: Send + Sync {
+pub trait BoxedClockClone {
+    fn clone_box(&self) -> Box<dyn Clock>;
+}
+
+pub trait Clock: Send + Sync + BoxedClockClone {
     fn now(&self) -> SystemTime;
 
     fn now_seconds(&self) -> u64 {
@@ -11,6 +16,20 @@ pub trait Clock: Send + Sync {
 
     fn duration_since(&self, time: SystemTime) -> Duration {
         return self.now().duration_since(time).unwrap();
+    }
+}
+
+impl<T> BoxedClockClone for T
+    where
+        T: 'static + Clock + Clone {
+    fn clone_box(&self) -> Box<dyn Clock> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn Clock> {
+    fn clone(&self) -> Box<dyn Clock> {
+        self.clone_box()
     }
 }
 

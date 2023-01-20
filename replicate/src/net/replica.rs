@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::task::JoinHandle;
 
-use crate::clock::clock::Clock;
+use crate::clock::clock::{Clock, SystemClock};
 use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::error::ServiceResponseError;
@@ -48,7 +48,7 @@ impl Replica {
                                         clock: Arc<dyn Clock>,
                                         request_waiting_list_config: RequestWaitingListConfig) -> Self {
         let request_waiting_list = RequestWaitingList::new(
-            clock.clone(),
+            Box::new(SystemClock::new()),
             request_waiting_list_config,
         );
 

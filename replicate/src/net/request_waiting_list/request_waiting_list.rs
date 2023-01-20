@@ -11,20 +11,20 @@ use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseC
 
 pub struct RequestWaitingList {
     pending_requests: Arc<DashMap<CorrelationId, TimestampedCallback>>,
-    clock: Arc<dyn Clock>,
+    clock: Box<dyn Clock>,
 }
 
 impl RequestWaitingList {
-    pub fn new(clock: Arc<dyn Clock>, config: RequestWaitingListConfig) -> Self <> {
+    pub fn new(clock: Box<dyn Clock>, config: RequestWaitingListConfig) -> Self <> {
         return Self::new_with_capacity(0, clock, config);
     }
 
     pub fn new_with_capacity(
         capacity: usize,
-        clock: Arc<dyn Clock>,
+        clock: Box<dyn Clock>,
         config: RequestWaitingListConfig) -> Self <> {
         let pending_requests = Arc::new(DashMap::with_capacity(capacity));
-        let request_waiting_list = RequestWaitingList { pending_requests, clock: clock.clone() };
+        let request_waiting_list = RequestWaitingList { pending_requests, clock };
 
         request_waiting_list.spin_expired_callbacks_remover(config);
         return request_waiting_list;
@@ -132,9 +132,9 @@ mod tests {
     #[test]
     fn success_response() {
         let correlation_id: CorrelationId = 1;
-        let clock = Arc::new(SystemClock::new());
+        let clock = Box::new(SystemClock::new());
         let request_waiting_list = RequestWaitingList::new(
-            clock.clone(),
+            clock,
             RequestWaitingListConfig::new(
                 Duration::from_secs(100),
                 Duration::from_secs(10),
@@ -155,10 +155,10 @@ mod tests {
     #[test]
     fn success_response_with_capacity_of_request_waiting_list() {
         let correlation_id: CorrelationId = 1;
-        let clock = Arc::new(SystemClock::new());
+        let clock = Box::new(SystemClock::new());
         let request_waiting_list = RequestWaitingList::new_with_capacity(
             1,
-            clock.clone(),
+            clock,
             RequestWaitingListConfig::new(
                 Duration::from_secs(100),
                 Duration::from_secs(10),
@@ -179,9 +179,9 @@ mod tests {
     #[test]
     fn error_response() {
         let correlation_id: CorrelationId = 1;
-        let clock = Arc::new(SystemClock::new());
+        let clock = Box::new(SystemClock::new());
         let request_waiting_list = RequestWaitingList::new(
-            clock.clone(),
+            clock,
             RequestWaitingListConfig::new(
                 Duration::from_secs(100),
                 Duration::from_secs(10),
@@ -202,9 +202,9 @@ mod tests {
     #[test]
     fn error_response_on_expired_key() {
         let correlation_id: CorrelationId = 1;
-        let clock = Arc::new(SystemClock::new());
+        let clock = Box::new(SystemClock::new());
         let request_waiting_list = RequestWaitingList::new(
-            clock.clone(),
+            clock,
             RequestWaitingListConfig::new(
                 Duration::from_millis(3),
                 Duration::from_millis(2),

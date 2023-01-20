@@ -44,7 +44,7 @@ impl TimestampedCallback {
         })));
     }
 
-    pub(crate) fn has_expired(&self, clock: &Arc<dyn Clock>, expiry_after: &Duration) -> bool {
+    pub(crate) fn has_expired(&self, clock: &Box<dyn Clock>, expiry_after: &Duration) -> bool {
         return clock.duration_since(self.creation_time).ge(expiry_after);
     }
 }
@@ -68,6 +68,7 @@ mod tests {
         use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallback, ResponseErrorType};
 
+        #[derive(Clone)]
         pub struct FutureClock {
             pub duration_to_add: Duration,
         }
@@ -88,8 +89,8 @@ mod tests {
     #[test]
     fn has_expired() {
         let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), target_address,SystemTime::now());
-        let clock: Arc<dyn Clock> = Arc::new(FutureClock { duration_to_add: Duration::from_secs(5) });
+        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), target_address, SystemTime::now());
+        let clock: Box<dyn Clock> = Box::new(FutureClock { duration_to_add: Duration::from_secs(5) });
 
         let has_expired = timestamped_callback.has_expired(&clock, &Duration::from_secs(2));
         assert!(has_expired);
@@ -98,8 +99,8 @@ mod tests {
     #[test]
     fn has_not_expired() {
         let target_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
-        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), target_address,SystemTime::now());
-        let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+        let timestamped_callback = TimestampedCallback::new(Arc::new(NothingCallback {}), target_address, SystemTime::now());
+        let clock: Box<dyn Clock> = Box::new(SystemClock::new());
 
         let has_expired = timestamped_callback.has_expired(&clock, &Duration::from_secs(100));
         assert_eq!(false, has_expired);
