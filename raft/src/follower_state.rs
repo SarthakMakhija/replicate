@@ -15,7 +15,6 @@ type NextLogIndex = u64;
 
 pub(crate) struct FollowerState {
     peers: Vec<HostAndPort>,
-    state: Arc<State>,
     next_log_index_by_peer: DashMap<HostAndPort, NextLogIndex>,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
 }
@@ -35,41 +34,43 @@ impl FollowerState {
 
         let follower_state = FollowerState {
             peers,
-            state,
             next_log_index_by_peer,
             service_request_factory,
         };
         return follower_state;
     }
 
-    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, latest_log_entry_index: u64) {
-        let term = self.state.get_term();
+    pub(crate) fn replicate_log_at(self: Arc<FollowerState>, state: Arc<State>, latest_log_entry_index: u64) {
+        let term = state.get_term();
 
         for peer in &self.peers {
             let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
             if latest_log_entry_index >= next_log_index_by_peer.1 {
-                (&self).replicate_to(peer, next_log_index_by_peer, term)
+                (&self).replicate_to(state.clone(), peer, next_log_index_by_peer, term)
             }
         }
     }
 
-    pub(crate) fn register(self: Arc<FollowerState>, response: AppendEntriesResponse, from: HostAndPort) {
+    pub(crate) fn register(self: Arc<FollowerState>, state: Arc<State>, response: AppendEntriesResponse, from: HostAndPort) {
         if response.success {
             self.acknowledge_log_index(from);
             return;
         }
-        self.retry_reducing_log_index(from);
+        self.retry_reducing_log_index(state,from);
     }
 
-    fn replicate_to(self: &Arc<FollowerState>, peer: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
+    fn replicate_to(self: &Arc<FollowerState>, state: Arc<State>, peer: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
         println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
 
         let follower_state = self.clone();
-        self.state.get_replica_reference().send_to_with_handler_hook(
+        let handler_hook_state = state.clone();
+        let service_request_state = state.clone();
+
+        handler_hook_state.get_replica_reference().send_to_with_handler_hook(
             &vec![peer.clone()],
-            || self.service_request(next_log_index_by_peer.1, term),
+            move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
             Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
-                return Self::append_entries_response_handler(follower_state.clone(), peer, response);
+                return Self::append_entries_response_handler(follower_state.clone(), state.clone(), peer, response);
             }),
             || None,
         )
@@ -80,9 +81,9 @@ impl FollowerState {
             .and_modify(|next_log_index| *next_log_index = *next_log_index + 1);
     }
 
-    fn retry_reducing_log_index(self: Arc<FollowerState>, peer: HostAndPort) {
+    fn retry_reducing_log_index(self: Arc<FollowerState>, state: Arc<State>, peer: HostAndPort) {
         let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
-        let (previous_log_index, _) = self.previous_log_index_term(next_log_index_by_peer.1);
+        let (previous_log_index, _) = self.previous_log_index_term(&state,next_log_index_by_peer.1);
 
         if let Some(previous_log_index) = previous_log_index {
             {
@@ -90,26 +91,29 @@ impl FollowerState {
                     .and_modify(|next_log_index| *next_log_index = previous_log_index);
             }
 
-            let term = self.state.get_term();
+            let term = state.get_term();
             let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
 
             println!("retrying log replication at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
             let follower_state = self.clone();
-            self.state.get_replica_reference().send_to_with_handler_hook(
+            let handler_hook_state = state.clone();
+            let service_request_state = state.clone();
+
+            handler_hook_state.get_replica_reference().send_to_with_handler_hook(
                 &vec![peer.clone()],
-                || self.service_request(next_log_index_by_peer.1, term),
+                move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
                 Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
-                    return Self::append_entries_response_handler(follower_state.clone(), peer, response);
+                    return Self::append_entries_response_handler(follower_state.clone(), state.clone(), peer, response);
                 }),
                 || None,
             )
         }
     }
 
-    fn service_request(&self, next_log_index: NextLogIndex, term: u64) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
-        let (previous_log_index, previous_log_term) = self.previous_log_index_term(next_log_index);
+    fn service_request(&self, state: &Arc<State>, next_log_index: NextLogIndex, term: u64) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
+        let (previous_log_index, previous_log_term) = self.previous_log_index_term(state, next_log_index);
 
-        let entry = match self.state.get_replicated_log_reference().get_log_entry_at(next_log_index as usize) {
+        let entry = match state.get_replicated_log_reference().get_log_entry_at(next_log_index as usize) {
             None => None,
             Some(entry) => {
                 Some(
@@ -123,15 +127,15 @@ impl FollowerState {
         };
         return self.service_request_factory.replicate_log(
             term,
-            self.state.get_replica_reference().get_id(),
+            state.get_replica_reference().get_id(),
             previous_log_index,
             previous_log_term,
-            self.state.get_replicated_log_reference().get_commit_index(),
+            state.get_replicated_log_reference().get_commit_index(),
             entry,
         );
     }
 
-    fn previous_log_index_term(&self, next_log_index: NextLogIndex) -> (Option<u64>, Option<u64>) {
+    fn previous_log_index_term(&self, state: &Arc<State>, next_log_index: NextLogIndex) -> (Option<u64>, Option<u64>) {
         let previous_log_index = if next_log_index >= 1 {
             Some(next_log_index - 1)
         } else {
@@ -140,7 +144,7 @@ impl FollowerState {
 
         let previous_log_term = match previous_log_index {
             None => None,
-            Some(index) => self.state.get_replicated_log_reference().get_log_term_at(index as usize)
+            Some(index) => state.get_replicated_log_reference().get_log_term_at(index as usize)
         };
         return (previous_log_index, previous_log_term);
     }
@@ -153,6 +157,7 @@ impl FollowerState {
     }
 
     fn append_entries_response_handler(follower_state: Arc<FollowerState>,
+                                       state: Arc<State>,
                                        peer: HostAndPort,
                                        response: Result<AppendEntriesResponse, ServiceResponseError>,
     ) -> Option<impl Future<Output=()>> {
@@ -161,7 +166,7 @@ impl FollowerState {
             async move {
                 match response {
                     Ok(append_entries_response) => {
-                        let state = inner_follower_state.state.clone();
+                        let state = state.clone();
                         let term = state.get_term();
                         if append_entries_response.term > term {
                             state.clone().change_to_follower(append_entries_response.term);
@@ -183,7 +188,7 @@ impl FollowerState {
                                     });
                                 }
                             }
-                            inner_follower_state.register(append_entries_response, peer);
+                            inner_follower_state.register(state, append_entries_response, peer);
                         }
                     }
                     Err(_err) => {
@@ -233,7 +238,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -241,6 +246,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -267,7 +273,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -275,6 +281,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -312,7 +319,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -320,6 +327,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -346,7 +354,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -354,6 +362,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -381,7 +390,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -389,6 +398,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -423,7 +433,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -431,6 +441,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -458,7 +469,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -466,6 +477,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -499,7 +511,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -507,6 +519,7 @@ mod tests {
         let term = 1;
 
         let service_request = follower_state.service_request(
+            &state,
             next_log_index,
             term,
         );
@@ -535,7 +548,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -543,7 +556,7 @@ mod tests {
             let response = ReplicateLogResponseBuilder::success_response(
                 1, 10, 5,
             );
-            follower_state.clone().register(response, peer.clone());
+            follower_state.clone().register(state, response, peer.clone());
         });
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
@@ -568,7 +581,7 @@ mod tests {
         });
 
         let follower_state = Arc::new(FollowerState::new(
-            state,
+            state.clone(),
             Arc::new(BuiltInServiceRequestFactory::new()),
         ));
 
@@ -576,7 +589,7 @@ mod tests {
             let response = ReplicateLogResponseBuilder::success_response(
                 1, 10, 5,
             );
-            follower_state.clone().register(response, peer.clone());
+            follower_state.clone().register(state, response, peer.clone());
         });
 
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
@@ -610,6 +623,7 @@ mod tests {
 
         let handler = FollowerState::append_entries_response_handler(
             follower_state,
+            state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
             Ok(ReplicateLogResponseBuilder::failure_response(3, 10)),
         );
@@ -656,6 +670,7 @@ mod tests {
 
         let handler = FollowerState::append_entries_response_handler(
             follower_state.clone(),
+            state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
             Ok(ReplicateLogResponseBuilder::failure_response(3, 10)),
         );
@@ -665,12 +680,14 @@ mod tests {
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
+                state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
                 Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
+                state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
                 Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
             ).unwrap().await;
@@ -714,6 +731,7 @@ mod tests {
 
         let handler = FollowerState::append_entries_response_handler(
             follower_state.clone(),
+            state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
             Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
         );
@@ -758,6 +776,7 @@ mod tests {
 
         let handler = FollowerState::append_entries_response_handler(
             follower_state.clone(),
+            state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
             Ok(ReplicateLogResponseBuilder::failure_response(1, 10)),
         );
@@ -801,12 +820,14 @@ mod tests {
         runtime.block_on(async {
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
+                state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
                 Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
+                state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
                 Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
             ).unwrap().await;
@@ -849,18 +870,21 @@ mod tests {
         runtime.block_on(async {
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
+                state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
                 Ok(ReplicateLogResponseBuilder::failure_response(0, 10)),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
+                state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
                 Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
+                state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
                 Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
             ).unwrap().await;

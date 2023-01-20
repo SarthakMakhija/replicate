@@ -148,7 +148,7 @@ impl Raft for RaftService {
         let handler = async move {
             let term: u64 = state.get_term();
             let log_entry_index = state.get_replicated_log_reference().append(&command, term);
-            let _ = follower_state.replicate_log_at(log_entry_index);
+            let _ = follower_state.replicate_log_at(state,log_entry_index);
             let _ = sender.send(log_entry_index).await;
         };
 
