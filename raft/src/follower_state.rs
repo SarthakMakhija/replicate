@@ -59,6 +59,13 @@ impl FollowerState {
         self.retry_reducing_log_index(state,from);
     }
 
+    pub(crate) fn reset_next_index(&self, latest_log_index: u64) {
+        self.peers.iter().for_each(|host_and_port| {
+            self.next_log_index_by_peer.entry(host_and_port.clone())
+                .and_modify(|next_log_index| *next_log_index = latest_log_index);
+        });
+    }
+
     fn replicate_to(self: &Arc<FollowerState>, state: Arc<State>, peer: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
         println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
 
@@ -885,5 +892,67 @@ mod tests {
 
             assert_eq!(0, state.get_replicated_log_reference().get_commit_index().unwrap());
         });
+    }
+
+    #[test]
+    fn reset_next_index_to_0() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_host_and_port];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let follower_state = Arc::new(FollowerState::new(
+            state.get_replica_reference(),
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        follower_state.reset_next_index(0);
+
+        let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer_host_and_port).unwrap();
+        let next_log_index = next_log_index_ref.value();
+
+        assert_eq!(0, *next_log_index);
+    }
+
+    #[test]
+    fn reset_next_index_to_5() {
+        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
+        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_host_and_port];
+
+        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let replica = Replica::new(
+            30,
+            self_host_and_port.clone(),
+            peers,
+            Arc::new(SystemClock::new()),
+        );
+
+        let state = runtime.block_on(async move {
+            return State::new(Arc::new(replica), HeartbeatConfig::default());
+        });
+
+        let follower_state = Arc::new(FollowerState::new(
+            state.get_replica_reference(),
+            Arc::new(BuiltInServiceRequestFactory::new()),
+        ));
+
+        follower_state.reset_next_index(5);
+
+        let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer_host_and_port).unwrap();
+        let next_log_index = next_log_index_ref.value();
+
+        assert_eq!(5, *next_log_index);
     }
 }

@@ -6,7 +6,6 @@ use tonic::{Request, Response};
 use replicate::callback::quorum_completion_response::QuorumCompletionResponse;
 use replicate::callback::single_response_completion_callback::SingleResponseCompletionCallback;
 
-use crate::follower_state::FollowerState;
 use crate::net::builder::heartbeat::HeartbeatResponseBuilder;
 use crate::net::builder::log::ReplicateLogResponseBuilder;
 use crate::net::builder::request_vote::RequestVoteResponseBuilder;

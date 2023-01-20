@@ -71,7 +71,6 @@ impl Election {
         let _ = replica.add_to_queue(async move {
             if quorum_completion_response.is_success() {
                 response_state.change_to_leader();
-                //reset follower state -
             } else {
                 response_state.change_to_follower(election_term);
             }
