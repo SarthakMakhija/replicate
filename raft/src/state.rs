@@ -23,7 +23,7 @@ pub struct State {
     heartbeat_config: HeartbeatConfig,
     heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler,
     heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler,
-    service_request_factory: Arc<dyn ServiceRequestFactory>,
+    service_request_factory: Box<dyn ServiceRequestFactory>,
     replicated_log: ReplicatedLog,
     pending_committed_log_entries: RequestWaitingList,
     clock: Box<dyn Clock>,
@@ -46,10 +46,10 @@ pub enum ReplicaRole {
 
 impl State {
     pub fn new(replica: Replica, heartbeat_config: HeartbeatConfig) -> Arc<State> {
-        return Self::new_with(replica, heartbeat_config, Arc::new(BuiltInServiceRequestFactory::new()));
+        return Self::new_with(replica, heartbeat_config, Box::new(BuiltInServiceRequestFactory::new()));
     }
 
-    pub(crate) fn new_with(replica: Replica, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
+    pub(crate) fn new_with(replica: Replica, heartbeat_config: HeartbeatConfig, service_request_factory: Box<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
         let pending_log_entries_clock = clock.clone();
         let heartbeat_config = heartbeat_config;
@@ -226,7 +226,7 @@ impl State {
         return false;
     }
 
-    pub(crate) fn get_service_request_factory_reference(&self) -> &Arc<dyn ServiceRequestFactory> {
+    pub(crate) fn get_service_request_factory_reference(&self) -> &Box<dyn ServiceRequestFactory> {
         return &self.service_request_factory;
     }
 
@@ -695,7 +695,7 @@ mod tests {
             return State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Success,
                 }),
@@ -725,7 +725,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Success,
                 }),
@@ -760,7 +760,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
@@ -799,7 +799,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
@@ -837,7 +837,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
@@ -875,7 +875,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
@@ -913,7 +913,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
@@ -951,7 +951,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
@@ -989,7 +989,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
@@ -1032,7 +1032,7 @@ mod tests {
             let state = State::new_with(
                 some_replica,
                 HeartbeatConfig::default(),
-                Arc::new(IncrementingCorrelationIdServiceRequestFactory {
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
                     base_correlation_id: RwLock::new(AtomicU64::new(0)),
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),

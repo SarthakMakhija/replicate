@@ -94,7 +94,7 @@ impl Election {
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
-    use std::sync::{Arc, RwLock};
+    use std::sync::RwLock;
     use std::sync::atomic::AtomicU64;
     use std::thread;
     use std::time::Duration;
@@ -223,7 +223,7 @@ mod tests {
         let state = blocking_runtime.block_on(async move {
             return State::new_with(some_replica,
                                    HeartbeatConfig::default(),
-                                   Arc::new(
+                                   Box::new(
                                        IncrementingCorrelationIdServiceRequestFactory {
                                            base_correlation_id: RwLock::new(AtomicU64::new(0)),
                                            client_type: Success,
@@ -266,7 +266,7 @@ mod tests {
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
             return State::new_with(some_replica, HeartbeatConfig::default(),
-                                   Arc::new(
+                                   Box::new(
                                        IncrementingCorrelationIdServiceRequestFactory {
                                            base_correlation_id: RwLock::new(AtomicU64::new(0)),
                                            client_type: Failure,
