@@ -10,27 +10,19 @@ use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
 
 use crate::net::builder::request_vote::RequestVoteResponseBuilder;
-use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::RequestVoteResponse;
 use crate::state::State;
 
-pub struct Election {
-    service_request_factory: Arc<dyn ServiceRequestFactory>,
-}
+pub struct Election {}
 
 impl Election {
     pub fn new() -> Self {
-        return Election { service_request_factory: Arc::new(BuiltInServiceRequestFactory::new()) };
-    }
-
-    fn new_with(service_request_factory: Arc<dyn ServiceRequestFactory>) -> Self {
-        return Election { service_request_factory };
+        return Election {};
     }
 
     pub async fn start(&self, state: Arc<State>) {
         let replica = state.get_replica_reference();
         let (inner_state, response_state) = (state.clone(), state.clone());
-        let service_request_factory = self.service_request_factory.clone();
 
         let async_quorum_callback = AsyncQuorumCallback::<RequestVoteResponse>::new_with_success_condition(
             replica.cluster_size(),
@@ -45,6 +37,7 @@ impl Election {
             let term = inner_state.change_to_candidate();
             println!("starting election with term {}", term);
             let state = inner_state.clone();
+            let service_request_factory = state.get_service_request_factory_reference();
             let replica_reference = state.get_replica_reference();
             let (last_log_index, last_log_term) = inner_state.get_replicated_log_reference().get_last_log_index_and_term();
 
@@ -228,15 +221,18 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::new(some_replica, HeartbeatConfig::default());
+            return State::new_with(some_replica,
+                                   HeartbeatConfig::default(),
+                                   Arc::new(
+                                       IncrementingCorrelationIdServiceRequestFactory {
+                                           base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                                           client_type: Success,
+                                       }
+                                   ),
+            );
         });
 
-        let election = Election::new_with(
-            Arc::new(IncrementingCorrelationIdServiceRequestFactory {
-                base_correlation_id: RwLock::new(AtomicU64::new(0)),
-                client_type: Success,
-            }),
-        );
+        let election = Election::new();
 
         let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
         let inner_state = state.clone();
@@ -269,15 +265,17 @@ mod tests {
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let state = blocking_runtime.block_on(async move {
-            return State::new(some_replica, HeartbeatConfig::default());
+            return State::new_with(some_replica, HeartbeatConfig::default(),
+                                   Arc::new(
+                                       IncrementingCorrelationIdServiceRequestFactory {
+                                           base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                                           client_type: Failure,
+                                       }
+                                   ),
+            );
         });
 
-        let election = Election::new_with(
-            Arc::new(IncrementingCorrelationIdServiceRequestFactory {
-                base_correlation_id: RwLock::new(AtomicU64::new(0)),
-                client_type: Failure,
-            }),
-        );
+        let election = Election::new();
 
         let election_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
         let inner_state = state.clone();

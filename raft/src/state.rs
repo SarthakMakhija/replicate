@@ -49,7 +49,7 @@ impl State {
         return Self::new_with(replica, heartbeat_config, Arc::new(BuiltInServiceRequestFactory::new()));
     }
 
-    fn new_with(replica: Replica, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
+    pub(crate) fn new_with(replica: Replica, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
         let pending_log_entries_clock = clock.clone();
         let heartbeat_config = heartbeat_config;
@@ -226,6 +226,10 @@ impl State {
         return false;
     }
 
+    pub(crate) fn get_service_request_factory_reference(&self) -> &Arc<dyn ServiceRequestFactory> {
+        return &self.service_request_factory;
+    }
+
     pub fn get_replicated_log_reference(&self) -> &ReplicatedLog {
         return &self.replicated_log;
     }
@@ -249,9 +253,9 @@ impl State {
         let term = self.get_term();
         let leader_id = self.replica.get_id();
         let state = self.clone();
-        let service_request_factory = self.service_request_factory.clone();
 
         return async move {
+            let service_request_factory = &state.service_request_factory;
             let service_request_constructor = || {
                 service_request_factory.heartbeat(term, leader_id)
             };
