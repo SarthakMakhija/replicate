@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tonic::{Request, Response, Status};
 
-use replicate::clock::clock::{Clock, SystemClock};
+use replicate::clock::clock::Clock;
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::replica::Replica;
 
@@ -95,7 +95,7 @@ impl QuorumKeyValueReplicaService {
         return QuorumKeyValueReplicaService {
             replica: replica.clone(),
             key_value_store: KeyValueStore::new(replica.clone()),
-            clock: Box::new(SystemClock::new()),
+            clock: replica.get_clock(),
         };
     }
 

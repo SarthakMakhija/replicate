@@ -192,7 +192,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -225,7 +225,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -262,7 +262,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -298,7 +298,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -330,7 +330,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -364,7 +364,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -396,7 +396,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -425,7 +425,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -460,7 +460,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -494,7 +494,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -531,7 +531,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -578,7 +578,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -620,7 +620,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -662,7 +662,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -702,7 +702,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {
@@ -754,7 +754,7 @@ mod tests {
             30,
             self_host_and_port.clone(),
             peers,
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = runtime.block_on(async move {

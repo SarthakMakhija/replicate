@@ -48,7 +48,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         10,
         self_host_and_port.clone(),
         peers,
-        Arc::new(SystemClock::new()),
+        Box::new(SystemClock::new()),
     );
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -72,7 +72,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         20,
         self_host_and_port.clone(),
         peers,
-        Arc::new(SystemClock::new()),
+        Box::new(SystemClock::new()),
     );
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -95,7 +95,7 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
         30,
         self_host_and_port.clone(),
         peers,
-        Arc::new(SystemClock::new()),
+        Box::new(SystemClock::new()),
     );
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();

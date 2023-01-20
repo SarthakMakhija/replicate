@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::task::JoinHandle;
 
-use crate::clock::clock::{Clock, SystemClock};
+use crate::clock::clock::Clock;
 use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::error::ServiceResponseError;
@@ -25,14 +25,13 @@ pub struct Replica {
     peer_addresses: Vec<HostAndPort>,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: Arc<SingularUpdateQueue>,
-    clock: Arc<dyn Clock>,
 }
 
 impl Replica {
     pub fn new(id: ReplicaId,
                self_address: HostAndPort,
                peer_addresses: Vec<HostAndPort>,
-               clock: Arc<dyn Clock>) -> Self {
+               clock: Box<dyn Clock>) -> Self {
         return Self::new_with_waiting_list_config(
             id,
             self_address,
@@ -45,10 +44,10 @@ impl Replica {
     pub fn new_with_waiting_list_config(id: ReplicaId,
                                         self_address: HostAndPort,
                                         peer_addresses: Vec<HostAndPort>,
-                                        clock: Arc<dyn Clock>,
+                                        clock: Box<dyn Clock>,
                                         request_waiting_list_config: RequestWaitingListConfig) -> Self {
         let request_waiting_list = RequestWaitingList::new(
-            Box::new(SystemClock::new()),
+            clock.clone(),
             request_waiting_list_config,
         );
 
@@ -58,7 +57,6 @@ impl Replica {
             peer_addresses,
             request_waiting_list,
             singular_update_queue: Arc::new(SingularUpdateQueue::new()),
-            clock,
         };
     }
 
@@ -200,8 +198,8 @@ impl Replica {
         return self.id;
     }
 
-    pub fn get_clock(&self) -> Arc<dyn Clock> {
-        return self.clock.clone();
+    pub fn get_clock(&self) -> Box<dyn Clock> {
+        return self.request_waiting_list.get_clock().clone();
     }
 
     fn send<Payload, Response>(&self,
@@ -332,7 +330,7 @@ mod tests {
                     HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
                     HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
                 ],
-                Arc::new(SystemClock::new()),
+                Box::new(SystemClock::new()),
             );
         });
 
@@ -367,7 +365,7 @@ mod tests {
                 vec![
                     HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
                 ],
-                Arc::new(SystemClock::new()),
+                Box::new(SystemClock::new()),
             );
         });
 
@@ -407,7 +405,7 @@ mod tests {
                     HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
                     HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
                 ],
-                Arc::new(SystemClock::new()),
+                Box::new(SystemClock::new()),
             );
         });
 
@@ -443,7 +441,7 @@ mod tests {
                 vec![
                     HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
                 ],
-                Arc::new(SystemClock::new()),
+                Box::new(SystemClock::new()),
             );
         });
 
@@ -475,7 +473,7 @@ mod tests {
                 vec![
                     HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
                 ],
-                Arc::new(SystemClock::new()),
+                Box::new(SystemClock::new()),
             );
         });
 
@@ -517,7 +515,7 @@ mod tests {
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let total_peer_count = replica.total_peer_count();
@@ -534,7 +532,7 @@ mod tests {
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let total_peer_count = replica.total_peer_count();
@@ -551,7 +549,7 @@ mod tests {
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let all_peers = replica.get_peers();
@@ -571,7 +569,7 @@ mod tests {
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let all_peers = replica.get_peers();
@@ -591,7 +589,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
         let inner_replica = replica.clone();
@@ -638,7 +636,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
         let inner_replica = replica.clone();
@@ -684,7 +682,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
         let inner_replica = replica.clone();
@@ -734,7 +732,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
         let replica = Arc::new(replica);
         let inner_replica = replica.clone();

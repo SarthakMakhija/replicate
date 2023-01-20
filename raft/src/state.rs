@@ -2,7 +2,7 @@ use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
-use replicate::clock::clock::{Clock, SystemClock};
+use replicate::clock::clock::Clock;
 use replicate::heartbeat::heartbeat_scheduler::SingleThreadedHeartbeatScheduler;
 use replicate::net::connect::error::{AnyError, ServiceResponseError};
 use replicate::net::replica::{Replica, ReplicaId};
@@ -20,13 +20,13 @@ pub struct State {
     consensus_state: RwLock<ConsensusState>,
     replica: Replica,
     follower_state: Arc<FollowerState>,
-    clock: Arc<dyn Clock>,
     heartbeat_config: HeartbeatConfig,
     heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler,
     heartbeat_check_scheduler: SingleThreadedHeartbeatScheduler,
     service_request_factory: Arc<dyn ServiceRequestFactory>,
     replicated_log: ReplicatedLog,
     pending_committed_log_entries: RequestWaitingList,
+    clock: Box<dyn Clock>,
 }
 
 struct ConsensusState {
@@ -51,6 +51,7 @@ impl State {
 
     fn new_with(replica: Replica, heartbeat_config: HeartbeatConfig, service_request_factory: Arc<dyn ServiceRequestFactory>) -> Arc<State> {
         let clock = replica.get_clock();
+        let pending_log_entries_clock = clock.clone();
         let heartbeat_config = heartbeat_config;
         let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
         let heartbeat_timeout = heartbeat_config.get_heartbeat_timeout();
@@ -76,7 +77,7 @@ impl State {
             service_request_factory,
             replicated_log: ReplicatedLog::new(majority_quorum),
             pending_committed_log_entries: RequestWaitingList::new(
-                Box::new(SystemClock::new()),
+                pending_log_entries_clock,
                 RequestWaitingListConfig::default(),
             ),
         };
@@ -139,11 +140,11 @@ impl State {
     pub(crate) fn get_heartbeat_checker<F>(self: Arc<State>, heartbeat_timeout: Duration, election_starter: F) -> impl Future<Output=Result<(), AnyError>>
         where F: Future<Output=()> + Send + 'static {
         let inner_self = self.clone();
-        let clock = self.clock.clone();
 
         return async move {
             let should_start_election: bool;
             {
+                let clock = inner_self.clock.as_ref();
                 let guard = inner_self.consensus_state.read().unwrap();
                 let consensus_state = &*guard;
                 match consensus_state.heartbeat_received_time {
@@ -336,7 +337,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -355,7 +356,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -376,7 +377,7 @@ mod tests {
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
             vec![peer_one, peer_other],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -396,7 +397,7 @@ mod tests {
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
             vec![peer_one, peer_other],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
         let state = State::new(some_replica, HeartbeatConfig::default());
         state.get_replicated_log_reference().append(
@@ -424,7 +425,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -445,7 +446,7 @@ mod tests {
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
             vec![peer_one, peer_other],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -474,7 +475,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -490,7 +491,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -506,7 +507,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -523,7 +524,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -540,7 +541,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -574,7 +575,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -608,7 +609,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -648,7 +649,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
@@ -682,7 +683,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -712,7 +713,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -747,7 +748,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -786,7 +787,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -824,7 +825,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -862,7 +863,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -900,7 +901,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -938,7 +939,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -976,7 +977,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
@@ -1019,7 +1020,7 @@ mod tests {
             vec![
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
             ],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();

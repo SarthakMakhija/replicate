@@ -108,7 +108,7 @@ fn spin_self(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         10,
         self_host_and_port.clone(),
         peers,
-        Arc::new(SystemClock::new()),
+        Box::new(SystemClock::new()),
     );
 
     let state = runtime.block_on(async move {
@@ -131,7 +131,7 @@ fn spin_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Vec<Host
         20,
         self_host_and_port.clone(),
         peers,
-        Arc::new(SystemClock::new()),
+        Box::new(SystemClock::new()),
     );
     let state = runtime.block_on(async move {
         return State::new(replica, HeartbeatConfig::default());
@@ -153,7 +153,7 @@ fn spin_other_peer(runtime: &Runtime, self_host_and_port: HostAndPort, peers: Ve
         30,
         self_host_and_port.clone(),
         peers,
-        Arc::new(SystemClock::new()),
+        Box::new(SystemClock::new()),
     );
 
     let state = runtime.block_on(async move {

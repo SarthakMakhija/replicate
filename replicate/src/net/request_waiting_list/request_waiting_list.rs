@@ -43,6 +43,10 @@ impl RequestWaitingList {
         }
     }
 
+    pub(crate) fn get_clock(&self) -> &Box<dyn Clock> {
+        return &self.clock;
+    }
+
     fn spin_expired_callbacks_remover(&self, config: RequestWaitingListConfig) {
         ExpiredCallbackRemover::start(
             self.pending_requests.clone(),

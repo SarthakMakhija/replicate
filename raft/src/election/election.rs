@@ -223,7 +223,7 @@ mod tests {
             10,
             self_host,
             vec![peer_host, peer_other_host],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -264,7 +264,7 @@ mod tests {
             10,
             self_host,
             vec![peer_host, peer_other_host],
-            Arc::new(SystemClock::new()),
+            Box::new(SystemClock::new()),
         );
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
