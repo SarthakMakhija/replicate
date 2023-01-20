@@ -10,24 +10,17 @@ use crate::follower_state::FollowerState;
 use crate::net::builder::heartbeat::HeartbeatResponseBuilder;
 use crate::net::builder::log::ReplicateLogResponseBuilder;
 use crate::net::builder::request_vote::RequestVoteResponseBuilder;
-use crate::net::factory::service_request::BuiltInServiceRequestFactory;
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::raft_server::Raft;
 use crate::state::State;
 
 pub struct RaftService {
     state: Arc<State>,
-    follower_state: Arc<FollowerState>,
 }
 
 impl RaftService {
     pub fn new(state: Arc<State>) -> Self {
-        let service_request_factory = Arc::new(BuiltInServiceRequestFactory::new());
-        let replica = state.get_replica_reference();
-        return RaftService {
-            state: state.clone(),
-            follower_state: Arc::new(FollowerState::new(replica, service_request_factory)),
-        };
+        return RaftService { state };
     }
 }
 
@@ -142,13 +135,12 @@ impl Raft for RaftService {
         let state = self.state.clone();
         let replica = self.state.get_replica_reference();
         let command = request.into_inner();
-        let follower_state = self.follower_state.clone();
 
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term: u64 = state.get_term();
             let log_entry_index = state.get_replicated_log_reference().append(&command, term);
-            let _ = follower_state.replicate_log_at(state,log_entry_index);
+            let _ = state.replicate_log_at(log_entry_index);
             let _ = sender.send(log_entry_index).await;
         };
 
@@ -789,7 +781,7 @@ mod tests {
                     term: 1,
                     index: 1,
                     command: Some(command),
-                })
+                }),
             ));
             request.add_host_port(self_host_and_port);
 

@@ -10,6 +10,7 @@ use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingLi
 use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 
 use crate::election::election::Election;
+use crate::follower_state::FollowerState;
 use crate::heartbeat_config::HeartbeatConfig;
 use crate::net::factory::service_request::{BuiltInServiceRequestFactory, ServiceRequestFactory};
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, RequestVote};
@@ -18,6 +19,7 @@ use crate::replicated_log::ReplicatedLog;
 pub struct State {
     consensus_state: RwLock<ConsensusState>,
     replica: Arc<Replica>,
+    follower_state: Arc<FollowerState>,
     clock: Arc<dyn Clock>,
     heartbeat_config: HeartbeatConfig,
     heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler,
@@ -53,6 +55,9 @@ impl State {
         let heartbeat_config = heartbeat_config;
         let heartbeat_interval = heartbeat_config.get_heartbeat_interval();
         let heartbeat_timeout = heartbeat_config.get_heartbeat_timeout();
+        let follower_state = Arc::new(
+            FollowerState::new(&replica, service_request_factory.clone())
+        );
 
         let majority_quorum = (replica.cluster_size() / 2) + 1;
         let state = State {
@@ -64,6 +69,7 @@ impl State {
                 creation_time: clock.now(),
             }),
             replica,
+            follower_state,
             clock,
             heartbeat_config,
             heartbeat_send_scheduler: SingleThreadedHeartbeatScheduler::new(heartbeat_interval),
@@ -194,6 +200,14 @@ impl State {
 
     pub(crate) fn get_pending_committed_log_entries_reference(&self) -> &RequestWaitingList {
         return &self.pending_committed_log_entries;
+    }
+
+    pub(crate) fn replicate_log_at(self: Arc<State>, latest_log_entry_index: u64) {
+        let state = self.clone();
+        self.follower_state.clone().replicate_log_at(
+            state,
+            latest_log_entry_index,
+        );
     }
 
     pub(crate) fn should_accept(&self, entry: &AppendEntries) -> bool {
@@ -977,7 +991,7 @@ mod tests {
                 10,
                 20,
                 Some(0),
-                Some(0)
+                Some(0),
             );
             assert_eq!(false, inner_state.should_vote(&request_vote));
         });
@@ -995,8 +1009,8 @@ mod tests {
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
         use replicate::net::replica::ReplicaId;
-        use crate::net::builder::heartbeat::{HeartbeatRequestBuilder, HeartbeatResponseBuilder};
 
+        use crate::net::builder::heartbeat::{HeartbeatRequestBuilder, HeartbeatResponseBuilder};
         use crate::net::factory::service_request::ServiceRequestFactory;
         use crate::net::rpc::grpc::AppendEntries;
         use crate::net::rpc::grpc::AppendEntriesResponse;
