@@ -34,9 +34,9 @@ impl Raft for RaftService {
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term = state.get_term();
-            let should_vote = state.should_vote(&request);
+            let should_vote = state.should_vote_for(&request);
             let response = if should_vote {
-                state.voted_for(request.replica_id);
+                state.vote_for(request.replica_id);
                 RequestVoteResponseBuilder::voted_response(term, correlation_id)
             } else {
                 RequestVoteResponseBuilder::not_voted_response(term, correlation_id)
@@ -269,7 +269,7 @@ mod tests {
             let state = State::new(replica, HeartbeatConfig::default());
             let state_clone = state.clone();
 
-            state_clone.voted_for(20);
+            state_clone.vote_for(20);
             return state;
         });
 

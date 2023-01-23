@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::AtomicPtr;
 use std::time::{Duration, SystemTime};
 
 use replicate::clock::clock::Clock;
@@ -175,7 +176,7 @@ impl State {
         return &self.replica;
     }
 
-    pub(crate) fn voted_for(&self, replica_id: ReplicaId) {
+    pub(crate) fn vote_for(&self, replica_id: ReplicaId) {
         let mut write_guard = self.consensus_state.write().unwrap();
         let mut consensus_state = &mut *write_guard;
         consensus_state.voted_for = Some(replica_id);
@@ -213,7 +214,7 @@ impl State {
         return self.get_replicated_log_reference().should_accept(entry, term);
     }
 
-    pub(crate) fn should_vote(&self, request_vote: &RequestVote) -> bool {
+    pub(crate) fn should_vote_for(&self, request_vote: &RequestVote) -> bool {
         let term = self.get_term();
         let role = self.get_role();
 
@@ -515,7 +516,7 @@ mod tests {
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
-        state.voted_for(15);
+        state.vote_for(15);
 
         assert_eq!(true, state.has_not_voted_for_or_matches(15));
     }
@@ -532,7 +533,7 @@ mod tests {
         );
 
         let state = State::new(some_replica, HeartbeatConfig::default());
-        state.voted_for(10);
+        state.vote_for(10);
 
         assert_eq!(false, state.has_not_voted_for_or_matches(15));
     }
@@ -817,7 +818,7 @@ mod tests {
                 20,
             );
 
-            assert!(inner_state.should_vote(&request_vote));
+            assert!(inner_state.should_vote_for(&request_vote));
         });
     }
 
@@ -855,7 +856,7 @@ mod tests {
                 0,
                 20,
             );
-            assert_eq!(false, inner_state.should_vote(&request_vote));
+            assert_eq!(false, inner_state.should_vote_for(&request_vote));
         });
     }
 
@@ -893,7 +894,7 @@ mod tests {
                 10,
                 20,
             );
-            assert_eq!(false, inner_state.should_vote(&request_vote));
+            assert_eq!(false, inner_state.should_vote_for(&request_vote));
         });
     }
 
@@ -918,7 +919,7 @@ mod tests {
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
             );
-            state.voted_for(50);
+            state.vote_for(50);
             state.heartbeat_check_scheduler.stop();
             state.heartbeat_send_scheduler.stop();
             return state;
@@ -931,7 +932,7 @@ mod tests {
                 10,
                 20,
             );
-            assert_eq!(false, inner_state.should_vote(&request_vote));
+            assert_eq!(false, inner_state.should_vote_for(&request_vote));
         });
     }
 
@@ -956,7 +957,7 @@ mod tests {
                     heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
                 }),
             );
-            state.voted_for(10);
+            state.vote_for(10);
             state.heartbeat_check_scheduler.stop();
             state.heartbeat_send_scheduler.stop();
             return state;
@@ -969,7 +970,7 @@ mod tests {
                 10,
                 20,
             );
-            assert!(inner_state.should_vote(&request_vote));
+            assert!(inner_state.should_vote_for(&request_vote));
         });
     }
 
@@ -1012,7 +1013,7 @@ mod tests {
                 Some(0),
                 Some(1),
             );
-            assert!(inner_state.should_vote(&request_vote));
+            assert!(inner_state.should_vote_for(&request_vote));
         });
     }
 
@@ -1055,7 +1056,7 @@ mod tests {
                 Some(0),
                 Some(0),
             );
-            assert_eq!(false, inner_state.should_vote(&request_vote));
+            assert_eq!(false, inner_state.should_vote_for(&request_vote));
         });
     }
 
