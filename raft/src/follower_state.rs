@@ -6,6 +6,7 @@ use dashmap::DashMap;
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
+use replicate::net::peers::Peers;
 use replicate::net::replica::Replica;
 
 use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
@@ -72,9 +73,10 @@ impl FollowerState {
         let follower_state = self.clone();
         let handler_hook_state = state.clone();
         let service_request_state = state.clone();
+        let peers = Peers::new(vec![peer.clone()]);
 
         handler_hook_state.get_replica_reference().send_to_with_handler_hook(
-            &vec![peer.clone()],
+            &peers,
             move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
             Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
                 return Self::append_entries_response_handler(follower_state.clone(), state.clone(), peer, response);
@@ -105,9 +107,10 @@ impl FollowerState {
             let follower_state = self.clone();
             let handler_hook_state = state.clone();
             let service_request_state = state.clone();
+            let peers = Peers::new(vec![peer.clone()]);
 
             handler_hook_state.get_replica_reference().send_to_with_handler_hook(
-                &vec![peer.clone()],
+                &peers,
                 move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
                 Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
                     return Self::append_entries_response_handler(follower_state.clone(), state.clone(), peer, response);

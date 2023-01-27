@@ -114,7 +114,7 @@ impl Replica {
               T: Future<Output=()> + Send + 'static,
               U: Fn() -> Option<ResponseCallbackType> {
         self.send_to_with_handler_hook(
-            &self.peers.get_peer_addresses(),
+            &self.peers,
             service_request_constructor,
             response_handler_generator,
             response_callback_generator,
@@ -122,7 +122,7 @@ impl Replica {
     }
 
     pub fn send_to_with_handler_hook<Payload, S, Response, F, T, U>(&self,
-                                                                    hosts: &Vec<HostAndPort>,
+                                                                    peers: &Peers,
                                                                     service_request_constructor: S,
                                                                     response_handler_generator: Arc<F>,
                                                                     response_callback_generator: U)
@@ -132,7 +132,7 @@ impl Replica {
               F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
               T: Future<Output=()> + Send + 'static,
               U: Fn() -> Option<ResponseCallbackType> {
-        for peer_address in hosts {
+        for peer_address in peers.get_peer_addresses() {
             if peer_address.eq(&self.self_address) {
                 continue;
             }
@@ -762,8 +762,9 @@ mod tests {
                 });
             };
             let callback = AsyncQuorumCallback::<String>::new(1, 1);
+            let peers = Peers::new(vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989)]);
             replica.send_to_with_handler_hook(
-                &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989)],
+                &peers,
                 service_request_constructor,
                 Arc::new(response_handler_generator),
                 || Some(callback.clone()),
