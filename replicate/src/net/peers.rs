@@ -4,7 +4,7 @@ use tonic::transport::Endpoint;
 
 use crate::net::connect::host_and_port::HostAndPort;
 
-pub(crate) struct Peers {
+pub struct Peers {
     peers: Vec<Peer>,
 }
 
@@ -13,9 +13,9 @@ pub(crate) struct Peer {
 }
 
 impl Peers {
-    pub(crate) fn new(peer_addresses: Vec<HostAndPort>) -> Self {
+    pub fn new(addresses: Vec<HostAndPort>) -> Self {
         return Peers {
-            peers: peer_addresses.iter().map(|addr| Peer { address: addr.clone() }).collect()
+            peers: addresses.iter().map(|addr| Peer { address: addr.clone() }).collect()
         };
     }
 

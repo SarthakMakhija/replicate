@@ -67,18 +67,18 @@ impl Replica {
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response> {
-        return self.send_to(&self.peers.get_peer_addresses(), service_request_constructor, response_callback).await;
+        return self.send_to(&self.peers, service_request_constructor, response_callback).await;
     }
 
     pub async fn send_to<Payload, S, Response>(&self,
-                                               hosts: &Vec<HostAndPort>,
+                                               peers: &Peers,
                                                service_request_constructor: S,
                                                response_callback: ResponseCallbackType) -> TotalFailedSends
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response> {
         let mut send_task_handles = Vec::new();
-        for address in hosts {
+        for address in peers.get_peer_addresses() {
             if address.eq(&self.self_address) {
                 continue;
             }
@@ -240,6 +240,7 @@ mod tests {
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
+    use crate::net::peers::Peers;
     use crate::net::replica::Replica;
     use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse, ResponseCounter};
 
@@ -380,9 +381,10 @@ mod tests {
         };
 
         blocking_runtime.block_on(async {
+            let peers = Peers::new(vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)]);
             let total_failed_sends =
                 replica.send_to(
-                    &vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)],
+                    &peers,
                     service_request_constructor,
                     async_quorum_callback.clone(),
                 ).await;

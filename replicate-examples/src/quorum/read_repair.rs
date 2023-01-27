@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::peers::Peers;
 use replicate::net::replica::Replica;
 use crate::quorum::factory::client_response::ClientResponse;
 
@@ -51,8 +52,9 @@ impl<'a> ReadRepair<'a> {
             expected_responses
         );
 
+        let peers = Peers::new(hosts_with_stale_values);
         let _ = &self.replica
-            .send_to(&hosts_with_stale_values, service_request_constructor, async_quorum_callback.clone())
+            .send_to(&peers, service_request_constructor, async_quorum_callback.clone())
             .await;
 
         let _ = async_quorum_callback.handle().await;
