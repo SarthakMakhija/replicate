@@ -10,6 +10,7 @@ use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::ServiceRequest;
+use crate::net::peers::Peers;
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType};
@@ -22,7 +23,7 @@ pub type ReplicaId = u64;
 pub struct Replica {
     id: ReplicaId,
     self_address: HostAndPort,
-    peer_addresses: Vec<HostAndPort>,
+    peers: Peers,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: Arc<SingularUpdateQueue>,
 }
@@ -54,7 +55,7 @@ impl Replica {
         return Replica {
             id,
             self_address,
-            peer_addresses,
+            peers: Peers::new(peer_addresses),
             request_waiting_list,
             singular_update_queue: Arc::new(SingularUpdateQueue::new()),
         };
@@ -66,7 +67,7 @@ impl Replica {
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response> {
-        return self.send_to(&self.peer_addresses, service_request_constructor, response_callback).await;
+        return self.send_to(&self.peers.get_peer_addresses(), service_request_constructor, response_callback).await;
     }
 
     pub async fn send_to<Payload, S, Response>(&self,
@@ -103,18 +104,17 @@ impl Replica {
     }
 
     pub fn send_to_replicas_with_handler_hook<Payload, S, Response, F, T, U>(&self,
-                                                                                   service_request_constructor: S,
-                                                                                   response_handler_generator: Arc<F>,
-                                                                                   response_callback_generator: U)
+                                                                             service_request_constructor: S,
+                                                                             response_handler_generator: Arc<F>,
+                                                                             response_callback_generator: U)
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response>,
               F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
               T: Future<Output=()> + Send + 'static,
               U: Fn() -> Option<ResponseCallbackType> {
-
         self.send_to_with_handler_hook(
-            &self.peer_addresses,
+            &self.peers.get_peer_addresses(),
             service_request_constructor,
             response_handler_generator,
             response_callback_generator,
@@ -122,10 +122,10 @@ impl Replica {
     }
 
     pub fn send_to_with_handler_hook<Payload, S, Response, F, T, U>(&self,
-                                                                          hosts: &Vec<HostAndPort>,
-                                                                          service_request_constructor: S,
-                                                                          response_handler_generator: Arc<F>,
-                                                                          response_callback_generator: U)
+                                                                    hosts: &Vec<HostAndPort>,
+                                                                    service_request_constructor: S,
+                                                                    response_handler_generator: Arc<F>,
+                                                                    response_callback_generator: U)
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response>,
@@ -178,7 +178,7 @@ impl Replica {
 
     pub fn total_peer_count(&self) -> usize {
         let self_address = self.self_address;
-        return self.peer_addresses.iter().filter(|peer_address| peer_address.ne(&&self_address)).count();
+        return self.peers.get_peer_addresses().iter().filter(|peer_address| peer_address.ne(&&self_address)).count();
     }
 
     pub fn get_self_address(&self) -> HostAndPort {
@@ -187,7 +187,7 @@ impl Replica {
 
     pub fn get_peers(&self) -> Vec<HostAndPort> {
         let self_address = self.self_address;
-        return self.peer_addresses
+        return self.peers.get_peer_addresses()
             .iter()
             .filter(|peer_address| peer_address.ne(&&self_address))
             .map(|peer_address| peer_address.clone())
