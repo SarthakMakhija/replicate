@@ -19,7 +19,7 @@ impl Peers {
         };
     }
 
-    pub(crate) fn get_peer_addresses(&self) -> Vec<HostAndPort> {
+    pub fn get_peer_addresses(&self) -> Vec<HostAndPort> {
         return self.peers.iter().map(|peer| peer.address).collect();
     }
 }

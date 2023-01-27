@@ -15,7 +15,7 @@ use crate::state::{ReplicaRole, State};
 type NextLogIndex = u64;
 
 pub(crate) struct FollowerState {
-    peers: Vec<HostAndPort>,
+    peers: Peers,
     next_log_index_by_peer: DashMap<HostAndPort, NextLogIndex>,
 }
 
@@ -23,15 +23,15 @@ impl FollowerState {
     pub(crate) fn new(
         replica: &Replica,
     ) -> Self {
-        let peers = replica.get_peers();
+        let addresses = replica.get_peers();
 
         let next_log_index_by_peer = DashMap::new();
-        peers.iter().for_each(|host_and_port| {
+        addresses.iter().for_each(|host_and_port| {
             next_log_index_by_peer.insert(host_and_port.clone(), 0);
         });
 
         let follower_state = FollowerState {
-            peers,
+            peers: Peers::new(addresses),
             next_log_index_by_peer,
         };
         return follower_state;
@@ -40,10 +40,10 @@ impl FollowerState {
     pub(crate) fn replicate_log_at(self: Arc<FollowerState>, state: Arc<State>, latest_log_entry_index: u64) {
         let term = state.get_term();
 
-        for peer in &self.peers {
-            let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
+        for peer_address in &self.peers.get_peer_addresses() {
+            let next_log_index_by_peer = self.next_log_index_by_peer_for(peer_address);
             if latest_log_entry_index >= next_log_index_by_peer.1 {
-                (&self).replicate_to(state.clone(), peer, next_log_index_by_peer, term)
+                (&self).replicate_to(state.clone(), peer_address, next_log_index_by_peer, term)
             }
         }
     }
@@ -57,23 +57,23 @@ impl FollowerState {
     }
 
     pub(crate) fn reset_next_log_index_to(&self, latest_log_index: u64) {
-        self.peers.iter().for_each(|host_and_port| {
+        self.peers.get_peer_addresses().iter().for_each(|host_and_port| {
             self.next_log_index_by_peer.entry(host_and_port.clone())
                 .and_modify(|next_log_index| *next_log_index = latest_log_index);
         });
     }
 
-    pub(crate) fn get_next_log_index_for(&self, peer: &HostAndPort) -> NextLogIndex {
-        return *(self.next_log_index_by_peer.get(peer).unwrap().value());
+    pub(crate) fn get_next_log_index_for(&self, peer_address: &HostAndPort) -> NextLogIndex {
+        return *(self.next_log_index_by_peer.get(peer_address).unwrap().value());
     }
 
-    fn replicate_to(self: &Arc<FollowerState>, state: Arc<State>, peer: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
-        println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
+    fn replicate_to(self: &Arc<FollowerState>, state: Arc<State>, peer_address: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
+        println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer_address);
 
         let follower_state = self.clone();
         let handler_hook_state = state.clone();
         let service_request_state = state.clone();
-        let peers = Peers::new(vec![peer.clone()]);
+        let peers = Peers::new(vec![peer_address.clone()]);
 
         handler_hook_state.get_replica_reference().send_to_with_handler_hook(
             &peers,
@@ -159,9 +159,9 @@ impl FollowerState {
         return (previous_log_index, previous_log_term);
     }
 
-    fn next_log_index_by_peer_for(&self, peer: &HostAndPort) -> (HostAndPort, NextLogIndex) {
+    fn next_log_index_by_peer_for(&self, peer_address: &HostAndPort) -> (HostAndPort, NextLogIndex) {
         return {
-            let next_log_index_by_peer = self.next_log_index_by_peer.get(peer).unwrap();
+            let next_log_index_by_peer = self.next_log_index_by_peer.get(peer_address).unwrap();
             (next_log_index_by_peer.key().clone(), *next_log_index_by_peer.value())
         };
     }
