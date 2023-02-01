@@ -251,6 +251,7 @@ mod tests {
 
         use async_trait::async_trait;
         use tonic::{Request, Response};
+        use tonic::transport::Channel;
 
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
         use crate::net::connect::error::ServiceResponseError;
@@ -276,14 +277,14 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<GetValueRequest, ()> for GetValueRequestSuccessClient {
-            async fn call(&self, _: Request<GetValueRequest>, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+            async fn call(&self, _: Request<GetValueRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<()>, ServiceResponseError> {
                 return Ok(Response::new(()));
             }
         }
 
         #[async_trait]
         impl ServiceClientProvider<GetValueRequest, ()> for GetValueRequestFailureClient {
-            async fn call(&self, _: Request<GetValueRequest>, _: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+            async fn call(&self, _: Request<GetValueRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<()>, ServiceResponseError> {
                 return Err(Box::new(TestError { message: "Test error".to_string() }));
             }
         }

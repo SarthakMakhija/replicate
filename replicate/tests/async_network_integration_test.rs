@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use tonic::{Request, Response};
+use tonic::transport::Channel;
 
 use replicate::net::connect::async_network::AsyncNetwork;
 use replicate::net::connect::correlation_id::CorrelationIdGenerator;
@@ -36,7 +37,7 @@ struct EchoServiceClient {}
 
 #[async_trait]
 impl ServiceClientProvider<EchoRequest, EchoResponse> for EchoServiceClient {
-    async fn call(&self, request: Request<EchoRequest>, address: HostAndPort) -> Result<Response<EchoResponse>, ServiceResponseError> {
+    async fn call(&self, request: Request<EchoRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<EchoResponse>, ServiceResponseError> {
         let mut client = EchoClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_echo(request).await?;
         return Ok(response);

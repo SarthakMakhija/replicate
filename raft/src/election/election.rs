@@ -117,6 +117,7 @@ mod tests {
 
         use async_trait::async_trait;
         use tonic::{Request, Response};
+        use tonic::transport::Channel;
 
         use replicate::net::connect::correlation_id::CorrelationId;
         use replicate::net::connect::error::ServiceResponseError;
@@ -185,7 +186,7 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<RequestVote, RequestVoteResponse> for VotedRequestVoteClient {
-            async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
+            async fn call(&self, _: Request<RequestVote>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(
                         RequestVoteResponseBuilder::voted_response(1, self.correlation_id)
@@ -196,7 +197,7 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<RequestVote, RequestVoteResponse> for NotVotedRequestVoteClient {
-            async fn call(&self, _: Request<RequestVote>, _: HostAndPort) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
+            async fn call(&self, _: Request<RequestVote>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(
                         RequestVoteResponseBuilder::not_voted_response(1, self.correlation_id)

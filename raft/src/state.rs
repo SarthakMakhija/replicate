@@ -1065,6 +1065,7 @@ mod tests {
 
         use async_trait::async_trait;
         use tonic::{Request, Response};
+        use tonic::transport::Channel;
 
         use replicate::net::connect::correlation_id::CorrelationId;
         use replicate::net::connect::error::ServiceResponseError;
@@ -1116,7 +1117,7 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatSuccessClient {
-            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
+            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(HeartbeatResponseBuilder::success_response(1, 10))
                 );
@@ -1127,7 +1128,7 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatFailureClient {
-            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
+            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(HeartbeatResponseBuilder::failure_response(5, 20))
                 );

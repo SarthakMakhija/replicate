@@ -35,7 +35,7 @@ impl AsyncNetwork {
             request.add_host_port(address);
         }
 
-        let result = client.call(request, target_address).await;
+        let result = client.call(request, target_address, None).await;
         return match result {
             Ok(response) => { Ok(response.into_inner()) }
             Err(e) => { Err(e) }
@@ -75,6 +75,7 @@ mod tests {
     mod setup {
         use async_trait::async_trait;
         use tonic::{Request, Response};
+        use tonic::transport::Channel;
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
@@ -106,21 +107,21 @@ mod tests {
 
         #[async_trait]
         impl ServiceClientProvider<TestRequest, TestResponse> for SuccessTestClient {
-            async fn call(&self, request: Request<TestRequest>, _: HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
+            async fn call(&self, request: Request<TestRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<TestResponse>, ServiceResponseError> {
                 return Ok(Response::new(TestResponse { correlation_id: request.into_inner().id }));
             }
         }
 
         #[async_trait]
         impl ServiceClientProvider<TestRequest, TestResponse> for FailureTestClient {
-            async fn call(&self, _: Request<TestRequest>, _: HostAndPort) -> Result<Response<TestResponse>, ServiceResponseError> {
+            async fn call(&self, _: Request<TestRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<TestResponse>, ServiceResponseError> {
                 return Err(Box::new(TestError { message: "test error".to_string() }));
             }
         }
 
         #[async_trait]
         impl<'a> ServiceClientProvider<TestRequest, ResponseWithSourceFootprint> for FootprintTestClient {
-            async fn call(&self, request: Request<TestRequest>, _: HostAndPort) -> Result<Response<ResponseWithSourceFootprint>, ServiceResponseError> {
+            async fn call(&self, request: Request<TestRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<ResponseWithSourceFootprint>, ServiceResponseError> {
                 let response = ResponseWithSourceFootprint {
                     host: request.get_referral_host(),
                     port: request.get_referral_port(),

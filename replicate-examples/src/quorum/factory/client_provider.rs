@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use tonic::{Request, Response};
+use tonic::transport::Channel;
 
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceClientProvider;
@@ -22,7 +23,7 @@ pub(crate) struct PutKeyValueResponseClient {}
 
 #[async_trait]
 impl ServiceClientProvider<CorrelatingGetValueByKeyRequest, ()> for CorrelatingGetValueByKeyRequestClient {
-    async fn call(&self, request: Request<CorrelatingGetValueByKeyRequest>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn call(&self, request: Request<CorrelatingGetValueByKeyRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<()>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_get(request).await?;
         return Ok(response);
@@ -31,7 +32,7 @@ impl ServiceClientProvider<CorrelatingGetValueByKeyRequest, ()> for CorrelatingG
 
 #[async_trait]
 impl ServiceClientProvider<GetValueByKeyResponse, ()> for GetValueByKeyResponseClient {
-    async fn call(&self, request: Request<GetValueByKeyResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn call(&self, request: Request<GetValueByKeyResponse>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<()>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
         let response = client.finish_get(request).await?;
         return Ok(response);
@@ -40,7 +41,7 @@ impl ServiceClientProvider<GetValueByKeyResponse, ()> for GetValueByKeyResponseC
 
 #[async_trait]
 impl ServiceClientProvider<VersionedPutKeyValueRequest, ()> for VersionedPutKeyValueRequestClient {
-    async fn call(&self, request: Request<VersionedPutKeyValueRequest>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn call(&self, request: Request<VersionedPutKeyValueRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<()>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_put(request).await?;
         return Ok(response);
@@ -49,7 +50,7 @@ impl ServiceClientProvider<VersionedPutKeyValueRequest, ()> for VersionedPutKeyV
 
 #[async_trait]
 impl ServiceClientProvider<PutKeyValueResponse, ()> for PutKeyValueResponseClient {
-    async fn call(&self, request: Request<PutKeyValueResponse>, address: HostAndPort) -> Result<Response<()>, ServiceResponseError> {
+    async fn call(&self, request: Request<PutKeyValueResponse>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<()>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
         let response = client.finish_put(request).await?;
         return Ok(response);

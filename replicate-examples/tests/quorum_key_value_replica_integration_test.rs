@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinHandle;
 use tonic::{Request, Response};
+use tonic::transport::Channel;
 
 use replicate::clock::clock::SystemClock;
 use replicate::net::connect::async_network::AsyncNetwork;
@@ -30,7 +31,7 @@ struct PutKeyValueRequestClient {}
 
 #[async_trait]
 impl ServiceClientProvider<GetValueByKeyRequest, GetValueByKeyResponse> for GetValueByKeyRequestClient {
-    async fn call(&self, request: Request<GetValueByKeyRequest>, address: HostAndPort) -> Result<Response<GetValueByKeyResponse>, ServiceResponseError> {
+    async fn call(&self, request: Request<GetValueByKeyRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<GetValueByKeyResponse>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
         let response = client.get_by(request).await?;
         return Ok(response);
@@ -39,7 +40,7 @@ impl ServiceClientProvider<GetValueByKeyRequest, GetValueByKeyResponse> for GetV
 
 #[async_trait]
 impl ServiceClientProvider<PutKeyValueRequest, PutKeyValueResponse> for PutKeyValueRequestClient {
-    async fn call(&self, request: Request<PutKeyValueRequest>, address: HostAndPort) -> Result<Response<PutKeyValueResponse>, ServiceResponseError> {
+    async fn call(&self, request: Request<PutKeyValueRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PutKeyValueResponse>, ServiceResponseError> {
         let mut client = QuorumKeyValueClient::connect(address.as_string_with_http()).await?;
         let response = client.put(request).await?;
         return Ok(response);

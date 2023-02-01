@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use tonic::{Request, Response};
+use tonic::transport::Channel;
 
 use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::error::ServiceResponseError;
@@ -33,5 +34,5 @@ impl<Payload: Send, Response> ServiceRequest<Payload, Response>
 
 #[async_trait]
 pub trait ServiceClientProvider<Payload: Send, R>: Send + Sync {
-    async fn call(&self, request: Request<Payload>, address: HostAndPort) -> Result<Response<R>, ServiceResponseError>;
+    async fn call(&self, request: Request<Payload>, address: HostAndPort, channel: Option<Channel>) -> Result<Response<R>, ServiceResponseError>;
 }

@@ -109,6 +109,7 @@ mod tests {
     use tokio::sync::mpsc;
     use tokio::sync::mpsc::Receiver;
     use tonic::{Request, Response};
+    use tonic::transport::Channel;
 
     use crate::net::connect::error::ServiceResponseError;
     use crate::net::connect::host_and_port::HostAndPort;
@@ -140,7 +141,7 @@ mod tests {
 
     #[async_trait]
     impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for SuccessTestClient {
-        async fn call(&self, request: Request<PipelinedRequest>, _address: HostAndPort) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+        async fn call(&self, request: Request<PipelinedRequest>, _address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
             let request = request.into_inner();
             let test_request = request.downcast::<TestRequest>().unwrap();
 
@@ -150,7 +151,7 @@ mod tests {
 
     #[async_trait]
     impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for SuccessGetValueClient {
-        async fn call(&self, request: Request<PipelinedRequest>, _address: HostAndPort) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+        async fn call(&self, request: Request<PipelinedRequest>, _address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
             let request = request.into_inner();
             let get_value = request.downcast::<GetValueRequest>().unwrap();
 
