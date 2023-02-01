@@ -10,6 +10,8 @@ pub(crate) struct Task {
     block: Pin<Box<dyn Future<Output=()> + Send>>,
 }
 
+pub(crate) type AsyncBlock = Pin<Box<dyn Future<Output=()> + Send + 'static>>;
+
 pub(crate) struct SingularUpdateQueue {
     sender: Sender<Task>,
     single_thread_pool: Runtime,
@@ -38,6 +40,10 @@ impl SingularUpdateQueue {
             F: Future<Output=()> + Send + 'static {
         let block = Box::pin(handler);
         return self.sender.clone().send(Task { block }).await;
+    }
+
+    pub(crate) async fn submit(&self, handler: AsyncBlock) -> Result<(), SendError<Task>> {
+        return self.sender.clone().send(Task { block: handler }).await;
     }
 
     pub(crate) fn shutdown(self) {
@@ -141,6 +147,26 @@ mod tests {
 
         let read_storage = readable_storage.read().unwrap();
         assert_eq!(vec!["WAL".to_string(), "consensus".to_string()], *read_storage);
+
+        singular_update_queue.shutdown();
+    }
+
+    #[tokio::test]
+    async fn submit_a_pinned_handler() {
+        let storage = Arc::new(RwLock::new(HashMap::new()));
+        let readable_storage = storage.clone();
+        let singular_update_queue = SingularUpdateQueue::new();
+
+        let (sender, mut receiver) = mpsc::channel(1);
+        let _ = singular_update_queue.submit(Box::pin(async move {
+            storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
+            sender.send(()).await.unwrap();
+        })).await;
+
+        let _ = receiver.recv().await.unwrap();
+        let read_storage = readable_storage.read().unwrap();
+
+        assert_eq!("write-ahead log", read_storage.get("WAL").unwrap());
 
         singular_update_queue.shutdown();
     }

@@ -2,8 +2,6 @@ use std::any::Any;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Debug;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use tokio::runtime::{Builder, Runtime};
@@ -15,12 +13,12 @@ use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::ServiceRequest;
 use crate::net::peers::Peer;
+use crate::singular_update_queue::singular_update_queue::{AsyncBlock, SingularUpdateQueue};
 
 pub(crate) type PipelinedRequest = Box<dyn Any + Send>;
 pub(crate) type PipelinedResponse = Box<dyn Any + Send>;
 
 type ResponseHandlerGenerator = Box<dyn Fn(HostAndPort, Result<PipelinedResponse, ServiceResponseError>) -> Option<AsyncBlock> + Send + Sync + 'static>;
-type AsyncBlock = Pin<Box<dyn Future<Output=()> + Send + 'static>>;
 
 struct ResponseHandlerByRequest {
     service_request: ServiceRequest<PipelinedRequest, PipelinedResponse>,
@@ -35,7 +33,7 @@ struct Pipeline {
 }
 
 impl Pipeline {
-    pub(crate) fn new(peer: Peer, self_address: HostAndPort) -> Self {
+    pub(crate) fn new(peer: Peer, self_address: HostAndPort, singular_update_queue: Arc<SingularUpdateQueue>) -> Self {
         let (sender, receiver) = mpsc::channel(100);
         let pipeline = Pipeline {
             peer,
@@ -44,7 +42,7 @@ impl Pipeline {
             runtime: Self::single_threaded_runtime(),
         };
 
-        pipeline.start(receiver, pipeline.peer, pipeline.self_address);
+        pipeline.start(receiver, pipeline.peer, pipeline.self_address, singular_update_queue);
         return pipeline;
     }
 
@@ -62,7 +60,8 @@ impl Pipeline {
     fn start(&self,
              mut receiver: Receiver<ResponseHandlerByRequest>,
              peer: Peer,
-             source_address: HostAndPort) {
+             source_address: HostAndPort,
+             singular_update_queue: Arc<SingularUpdateQueue>) {
 
         let peer_address = peer.get_address().clone();
         self.runtime.spawn(async move {
@@ -77,7 +76,7 @@ impl Pipeline {
                 ).await;
 
                 if let Some(handler) = response_handler_generator(peer_address, response) {
-                    handler.await;
+                    let _ = singular_update_queue.submit(handler).await;
                 }
             }
         });
@@ -116,6 +115,7 @@ mod tests {
     use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
     use crate::net::peers::Peer;
     use crate::net::pipeline::{Pipeline, PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator};
+    use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
     pub(crate) struct TestRequest {
         pub(crate) id: u8,
@@ -166,7 +166,7 @@ mod tests {
         let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
 
         let pipeline = runtime.block_on(async {
-            Pipeline::new(peer, self_address)
+            Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()))
         });
 
         Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
@@ -183,7 +183,7 @@ mod tests {
         let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
 
         let pipeline = runtime.block_on(async {
-            Pipeline::new(peer, self_address)
+            Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()))
         });
 
         Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
