@@ -8,6 +8,7 @@ pub struct Peers {
     peers: Vec<Peer>,
 }
 
+#[derive(Copy, Clone)]
 pub(crate) struct Peer {
     address: HostAndPort,
 }
@@ -25,6 +26,12 @@ impl Peers {
 }
 
 impl Peer {
+    pub fn new(address: HostAndPort) -> Self {
+        return Peer {
+            address
+        };
+    }
+
     pub(crate) fn get_endpoint(&self) -> Endpoint {
         let result = Endpoint::from_str(self.address.as_string_with_http().as_str());
         return match result {
