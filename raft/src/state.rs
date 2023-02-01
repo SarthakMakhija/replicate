@@ -1,6 +1,5 @@
 use std::future::Future;
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::AtomicPtr;
 use std::time::{Duration, SystemTime};
 
 use replicate::clock::clock::Clock;
