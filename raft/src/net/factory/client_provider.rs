@@ -64,7 +64,7 @@ mod tests {
 
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceClientProvider;
-    use replicate::net::pipeline::PipelinedRequest;
+    use replicate::net::pipeline::{ToPipelinedRequest};
 
     use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
     use crate::net::builder::log::ReplicateLogRequestBuilder;
@@ -74,8 +74,8 @@ mod tests {
     #[tokio::test]
     async fn request_vote_client_with_connection_error() {
         let client = RequestVoteClient {};
-        let request: Request<PipelinedRequest> = Request::new(
-            Box::new(RequestVoteBuilder::request_vote(10, 1, 10))
+        let request = Request::new(
+            RequestVoteBuilder::request_vote(10, 1, 10).pipeline_request()
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
 
@@ -90,8 +90,8 @@ mod tests {
     #[tokio::test]
     async fn append_entries_client_with_connection_error() {
         let client = HeartbeatClient {};
-        let request: Request<PipelinedRequest> = Request::new(
-            Box::new(HeartbeatRequestBuilder::heartbeat_request(1, 10, 10))
+        let request = Request::new(
+            HeartbeatRequestBuilder::heartbeat_request(1, 10, 10).pipeline_request()
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
 
@@ -105,12 +105,12 @@ mod tests {
     #[tokio::test]
     async fn replicate_log_client_with_connection_error() {
         let client = ReplicateLogClient {};
-        let request: Request<PipelinedRequest> = Request::new(
-            Box::new(ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
+        let request = Request::new(
+            ReplicateLogRequestBuilder::replicate_log_request_with_no_log_reference(
                 1,
                 10,
                 10,
-            ))
+            ).pipeline_request()
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
 

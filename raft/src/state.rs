@@ -1074,7 +1074,7 @@ mod tests {
         use replicate::net::connect::error::ServiceResponseError;
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
-        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
+        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest};
         use replicate::net::replica::ReplicaId;
 
         use crate::net::builder::heartbeat::{HeartbeatRequestBuilder, HeartbeatResponseBuilder};
@@ -1107,9 +1107,8 @@ mod tests {
                     Box::new(TestHeartbeatFailureClient {})
                 };
 
-                let payload: PipelinedRequest = Box::new(HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id));
                 return ServiceRequest::new(
-                    payload,
+                    HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id).pipeline_request(),
                     client,
                     correlation_id,
                 );

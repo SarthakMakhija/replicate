@@ -1,7 +1,7 @@
 use replicate::net::connect::correlation_id::CorrelationIdGenerator;
 use replicate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
 use replicate::net::connect::service_client::ServiceRequest;
-use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
+use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest};
 use replicate::net::replica::ReplicaId;
 
 use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
@@ -19,15 +19,15 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
     ) -> ServiceRequest<PipelinedRequest, PipelinedResponse> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
-        let payload: PipelinedRequest = Box::new(RequestVoteBuilder::request_vote_with_log(
-            replica_id,
-            term,
-            correlation_id,
-            last_log_index,
-            last_log_term,
-        ));
+
         return ServiceRequest::new(
-            payload,
+            RequestVoteBuilder::request_vote_with_log(
+                replica_id,
+                term,
+                correlation_id,
+                last_log_index,
+                last_log_term,
+            ).pipeline_request(),
             Box::new(RequestVoteClient {}),
             correlation_id,
         );
@@ -37,9 +37,8 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
 
-        let payload: PipelinedRequest = Box::new(HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id));
         return ServiceRequest::new(
-            payload,
+            HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id).pipeline_request(),
             Box::new(HeartbeatClient {}),
             correlation_id,
         );
@@ -56,11 +55,10 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
 
-        let payload: PipelinedRequest = Box::new(ReplicateLogRequestBuilder::replicate_log_request(
-            term, leader_id, correlation_id, previous_log_index, previous_log_term, leader_commit_index, entry,
-        ));
         return ServiceRequest::new(
-            payload,
+            ReplicateLogRequestBuilder::replicate_log_request(
+                term, leader_id, correlation_id, previous_log_index, previous_log_term, leader_commit_index, entry,
+            ).pipeline_request(),
             Box::new(ReplicateLogClient {}),
             correlation_id,
         );

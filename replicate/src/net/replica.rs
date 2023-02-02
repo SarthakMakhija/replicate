@@ -236,7 +236,7 @@ mod tests {
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::peers::Peers;
-    use crate::net::pipeline::{PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator};
+    use crate::net::pipeline::{PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest};
     use crate::net::replica::Replica;
     use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse, ResponseCounter};
     use crate::singular_update_queue::singular_update_queue::AsyncBlock;
@@ -612,9 +612,8 @@ mod tests {
 
             let correlation_id_generator = RandomCorrelationIdGenerator::new();
             let service_request_constructor = move || {
-                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    payload,
+                    GetValueRequest {}.pipeline_request(),
                     Box::new(GetValueRequestSuccessClient {}),
                     correlation_id_generator.generate(),
                 )
@@ -660,9 +659,8 @@ mod tests {
 
             let correlation_id_generator = RandomCorrelationIdGenerator::new();
             let service_request_constructor = move || {
-                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    payload,
+                    GetValueRequest {}.pipeline_request(),
                     Box::new(GetValueRequestFailureClient {}),
                     correlation_id_generator.generate(),
                 )
@@ -707,9 +705,8 @@ mod tests {
         runtime.block_on(async move {
             let correlation_id_generator = FixedCorrelationIdGenerator::new(30);
             let service_request_constructor = move || {
-                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    payload,
+                    GetValueRequest {}.pipeline_request(),
                     Box::new(GetValueRequestSuccessClient {}),
                     correlation_id_generator.generate(),
                 )
@@ -760,9 +757,8 @@ mod tests {
         runtime.block_on(async move {
             let correlation_id_generator = FixedCorrelationIdGenerator::new(30);
             let service_request_constructor = move || {
-                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    payload,
+                    GetValueRequest {}.pipeline_request(),
                     Box::new(GetValueRequestSuccessClient {}),
                     correlation_id_generator.generate(),
                 )

@@ -22,6 +22,16 @@ pub type PipelinedResponse = Box<dyn Any + Send>;
 
 pub type ResponseHandlerGenerator = Box<dyn Fn(HostAndPort, Result<PipelinedResponse, ServiceResponseError>) -> Option<AsyncBlock> + Send + Sync + 'static>;
 
+pub trait ToPipelinedRequest{
+    fn pipeline_request(self) -> PipelinedRequest;
+}
+
+impl<T: Any + Send>  ToPipelinedRequest for T {
+    fn pipeline_request(self) -> PipelinedRequest {
+        return Box::new(self);
+    }
+}
+
 struct ResponseHandlerByRequest {
     service_request: ServiceRequest<PipelinedRequest, PipelinedResponse>,
     response_handler_generator: Arc<ResponseHandlerGenerator>,
@@ -141,7 +151,7 @@ mod tests {
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
     use crate::net::peers::Peer;
-    use crate::net::pipeline::{Pipeline, PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator};
+    use crate::net::pipeline::{Pipeline, PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest};
     use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
     pub(crate) struct TestRequest {
@@ -223,9 +233,8 @@ mod tests {
     }
 
     async fn submit_test_request(pipeline: &Pipeline) -> Receiver<Box<TestResponse>> {
-        let payload: PipelinedRequest = Box::new(TestRequest { id: 10 });
         let service_request = ServiceRequest::new(
-            payload,
+            TestRequest { id: 10 }.pipeline_request(),
             Box::new(SuccessTestClient {}),
             100,
         );
@@ -248,9 +257,8 @@ mod tests {
     }
 
     async fn submit_get_value_request(pipeline: &Pipeline) -> Receiver<Box<GetValueResponse>> {
-        let payload: PipelinedRequest = Box::new(GetValueRequest { key: 80 });
         let service_request = ServiceRequest::new(
-            payload,
+            GetValueRequest { key: 80 }.pipeline_request(),
             Box::new(SuccessGetValueClient {}),
             14,
         );

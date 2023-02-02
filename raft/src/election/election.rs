@@ -127,7 +127,7 @@ mod tests {
         use replicate::net::connect::error::ServiceResponseError;
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
-        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
+        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest};
         use replicate::net::replica::ReplicaId;
 
         use crate::election::election::tests::setup::ClientType::Success;
@@ -165,15 +165,14 @@ mod tests {
                     Box::new(NotVotedRequestVoteClient { correlation_id })
                 };
 
-                let payload: PipelinedRequest = Box::new(RequestVoteBuilder::request_vote_with_log(
-                    replica_id,
-                    term,
-                    correlation_id,
-                    last_log_index,
-                    last_log_term,
-                ));
                 return ServiceRequest::new(
-                    payload,
+                    RequestVoteBuilder::request_vote_with_log(
+                        replica_id,
+                        term,
+                        correlation_id,
+                        last_log_index,
+                        last_log_term,
+                    ).pipeline_request(),
                     client,
                     correlation_id,
                 );
