@@ -39,6 +39,7 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
             self.replica.total_peer_count()
         );
         let _ = &self.replica
+            .non_pipeline_mode()
             .send_to_replicas(service_request_constructor, async_quorum_callback.clone())
             .await;
 
@@ -65,6 +66,7 @@ impl QuorumKeyValue for QuorumKeyValueReplicaService {
             self.replica.total_peer_count()
         );
         let _ = &self.replica
+            .non_pipeline_mode()
             .send_to_replicas(service_request_constructor, async_quorum_callback.clone())
             .await;
 

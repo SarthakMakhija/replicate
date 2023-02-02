@@ -54,6 +54,7 @@ impl<'a> ReadRepair<'a> {
 
         let peers = Peers::new(hosts_with_stale_values);
         let _ = &self.replica
+            .non_pipeline_mode()
             .send_to(&peers, service_request_constructor, async_quorum_callback.clone())
             .await;
 

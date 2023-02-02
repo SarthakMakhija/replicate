@@ -4,3 +4,4 @@ pub mod replica;
 pub mod peers;
 pub mod pipeline;
 mod pipeline_mode;
+mod non_pipeline_mode;

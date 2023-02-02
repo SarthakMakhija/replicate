@@ -9,10 +9,10 @@ use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::response_callback::ResponseCallbackType;
 
 pub struct PipelineMode<'a> {
-    pub(crate) self_address: HostAndPort,
-    pub(crate) request_waiting_list: &'a RequestWaitingList,
-    pub(crate) pipeline_by_peer: &'a HashMap<Peer, Arc<Pipeline>>,
-    pub(crate) peers: &'a Peers,
+    self_address: HostAndPort,
+    request_waiting_list: &'a RequestWaitingList,
+    pipeline_by_peer: &'a HashMap<Peer, Arc<Pipeline>>,
+    peers: &'a Peers,
 }
 
 impl<'a> PipelineMode<'a> {

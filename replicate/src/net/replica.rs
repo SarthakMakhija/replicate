@@ -1,22 +1,17 @@
 use std::collections::HashMap;
-use std::fmt::Debug;
 use std::future::Future;
 use std::sync::Arc;
 
-use tokio::task::JoinHandle;
-
 use crate::clock::clock::Clock;
-use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::correlation_id::CorrelationId;
-use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_client::ServiceRequest;
+use crate::net::non_pipeline_mode::NonPipelineMode;
 use crate::net::peers::{Peer, Peers};
 use crate::net::pipeline::Pipeline;
 use crate::net::pipeline_mode::PipelineMode;
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
-use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType};
+use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseErrorType};
 use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
 pub type TotalFailedSends = usize;
@@ -74,50 +69,19 @@ impl Replica {
         };
     }
 
-    pub async fn send_to_replicas<Payload, S, Response>(&self,
-                                                        service_request_constructor: S,
-                                                        response_callback: ResponseCallbackType) -> TotalFailedSends
-        where Payload: Send + 'static,
-              Response: Send + Debug + 'static,
-              S: Fn() -> ServiceRequest<Payload, Response> {
-        return self.send_to(&self.peers, service_request_constructor, response_callback).await;
-    }
-
-    pub async fn send_to<Payload, S, Response>(&self,
-                                               peers: &Peers,
-                                               service_request_constructor: S,
-                                               response_callback: ResponseCallbackType) -> TotalFailedSends
-        where Payload: Send + 'static,
-              Response: Send + Debug + 'static,
-              S: Fn() -> ServiceRequest<Payload, Response> {
-
-        let mut send_task_handles = Vec::new();
-        for peer in peers.all_peers_excluding(Peer::new(self.self_address)) {
-            let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
-            send_task_handles.push(self.send(
-                &self.request_waiting_list,
-                service_request,
-                peer.get_address().clone(),
-                response_callback.clone(),
-            ));
-        }
-
-        let mut total_failed_sends: TotalFailedSends = 0;
-        for task_handle in send_task_handles {
-            let (result, correlation_id, target_address) = task_handle.await.unwrap();
-            if result.is_err() {
-                let _ = &self.request_waiting_list.handle_response(correlation_id, target_address, Err(result.unwrap_err()));
-                total_failed_sends = total_failed_sends + 1;
-            }
-        }
-        return total_failed_sends;
-    }
-
     pub fn pipeline_mode(&self) -> PipelineMode {
         return PipelineMode::new(
             self.self_address,
             &self.request_waiting_list,
             &self.pipeline_by_peer,
+            &self.peers
+        );
+    }
+
+    pub fn non_pipeline_mode(&self) -> NonPipelineMode {
+        return NonPipelineMode::new(
+            self.self_address,
+            &self.request_waiting_list,
             &self.peers
         );
     }
@@ -155,23 +119,6 @@ impl Replica {
 
     pub fn get_clock(&self) -> Box<dyn Clock> {
         return self.request_waiting_list.get_clock().clone();
-    }
-
-    fn send<Payload, Response>(&self,
-                               request_waiting_list: &RequestWaitingList,
-                               service_request: ServiceRequest<Payload, Response>,
-                               target_address: HostAndPort,
-                               response_callback: ResponseCallbackType) -> JoinHandle<(Result<Response, ServiceResponseError>, CorrelationId, HostAndPort)>
-        where Payload: Send + 'static,
-              Response: Send + Debug + 'static {
-        let correlation_id = service_request.correlation_id;
-        request_waiting_list.add(correlation_id, target_address.clone(), response_callback);
-
-        let source_address = self.self_address.clone();
-        return tokio::spawn(async move {
-            let result = AsyncNetwork::send_with_source_footprint(service_request, source_address, target_address.clone()).await;
-            return (result, correlation_id, target_address);
-        });
     }
 }
 
@@ -319,7 +266,7 @@ mod tests {
 
         blocking_runtime.block_on(async {
             let total_failed_sends =
-                replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+                replica.non_pipeline_mode().send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
             assert_eq!(0, total_failed_sends);
         })
@@ -355,7 +302,7 @@ mod tests {
         blocking_runtime.block_on(async {
             let peers = Peers::new(vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port)]);
             let total_failed_sends =
-                replica.send_to(
+                replica.non_pipeline_mode().send_to(
                     &peers,
                     service_request_constructor,
                     async_quorum_callback.clone(),
@@ -393,7 +340,7 @@ mod tests {
 
         blocking_runtime.block_on(async {
             let total_failed_sends =
-                replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+                replica.non_pipeline_mode().send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
             assert_eq!(2, total_failed_sends);
         });
@@ -461,7 +408,7 @@ mod tests {
 
         blocking_runtime.block_on(async {
             let total_failed_sends =
-                replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
+                replica.non_pipeline_mode().send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
             assert_eq!(0, total_failed_sends);
 
