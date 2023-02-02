@@ -236,7 +236,7 @@ mod tests {
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::peers::Peers;
-    use crate::net::pipeline::{PipelinedRequest, ResponseHandlerGenerator, ToPipelinedRequest};
+    use crate::net::pipeline::{PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest};
     use crate::net::replica::Replica;
     use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse, ResponseCounter};
     use crate::singular_update_queue::singular_update_queue::AsyncBlock;
