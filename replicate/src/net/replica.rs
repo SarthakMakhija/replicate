@@ -170,17 +170,12 @@ impl Replica {
         return self.peers.total_peer_count_excluding(Peer::new(self.self_address));
     }
 
-    pub fn get_self_address(&self) -> HostAndPort {
-        return self.self_address.clone();
+    pub fn get_peers(&self) -> Peers {
+        return Peers::from(self.peers.all_peers_excluding(Peer::new(self.self_address)));
     }
 
-    pub fn get_peers(&self) -> Vec<HostAndPort> {
-        let self_address = self.self_address;
-        return self.peers.get_peer_addresses()
-            .iter()
-            .filter(|peer_address| peer_address.ne(&&self_address))
-            .map(|peer_address| peer_address.clone())
-            .collect();
+    pub fn get_self_address(&self) -> HostAndPort {
+        return self.self_address.clone();
     }
 
     pub fn get_id(&self) -> ReplicaId {
@@ -509,47 +504,6 @@ mod tests {
             let quorum_completion_response = async_quorum_callback.handle().await;
             assert_eq!("some value".to_string(), quorum_completion_response.success_response().unwrap().get(&from).unwrap().value);
         });
-    }
-
-    #[test]
-    fn all_peers_excluding_self() {
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            ],
-            Box::new(SystemClock::new()),
-        );
-
-        let all_peers = replica.get_peers();
-        assert_eq!(vec![
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
-        ], all_peers);
-    }
-
-    #[test]
-    fn all_peers() {
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
-            ],
-            Box::new(SystemClock::new()),
-        );
-
-        let all_peers = replica.get_peers();
-        assert_eq!(vec![
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
-        ], all_peers);
     }
 
     #[test]

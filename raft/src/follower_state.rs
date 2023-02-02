@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
-use replicate::net::peers::Peers;
+use replicate::net::peers::{Peer, Peers};
 use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
 use replicate::net::replica::Replica;
 use replicate::singular_update_queue::singular_update_queue::{AsyncBlock, ToAsyncBlock};
@@ -17,22 +17,20 @@ type NextLogIndex = u64;
 
 pub(crate) struct FollowerState {
     peers: Peers,
-    next_log_index_by_peer: DashMap<HostAndPort, NextLogIndex>,
+    next_log_index_by_peer: DashMap<Peer, NextLogIndex>,
 }
 
 impl FollowerState {
     pub(crate) fn new(
         replica: &Replica,
     ) -> Self {
-        let addresses = replica.get_peers();
+        let peers = replica.get_peers();
 
         let next_log_index_by_peer = DashMap::new();
-        addresses.iter().for_each(|host_and_port| {
-            next_log_index_by_peer.insert(host_and_port.clone(), 0);
-        });
+        peers.all_peers().iter().for_each(|peer| { next_log_index_by_peer.insert(peer.clone(), 0); });
 
         let follower_state = FollowerState {
-            peers: Peers::new(addresses),
+            peers,
             next_log_index_by_peer,
         };
         return follower_state;
@@ -41,40 +39,41 @@ impl FollowerState {
     pub(crate) fn replicate_log_at(self: Arc<FollowerState>, state: Arc<State>, latest_log_entry_index: u64) {
         let term = state.get_term();
 
-        for peer_address in &self.peers.get_peer_addresses() {
-            let next_log_index_by_peer = self.next_log_index_by_peer_for(peer_address);
+        for peer in &self.peers.all_peers() {
+            let next_log_index_by_peer = self.next_log_index_by_peer_for(peer);
             if latest_log_entry_index >= next_log_index_by_peer.1 {
-                (&self).replicate_to(state.clone(), peer_address, next_log_index_by_peer, term)
+                (&self).replicate_to(state.clone(), peer, next_log_index_by_peer, term)
             }
         }
     }
 
     pub(crate) fn register(self: Arc<FollowerState>, state: Arc<State>, response: AppendEntriesResponse, from: HostAndPort) {
         if response.success {
-            self.acknowledge_log_index(from);
+            self.acknowledge_log_index(Peer::new(from));
             return;
         }
-        self.retry_reducing_log_index(state, from);
+        self.retry_reducing_log_index(state, Peer::new(from));
     }
 
     pub(crate) fn reset_next_log_index_to(&self, latest_log_index: u64) {
-        self.peers.get_peer_addresses().iter().for_each(|host_and_port| {
-            self.next_log_index_by_peer.entry(host_and_port.clone())
+        self.peers.all_peers().iter().for_each(|peer| {
+            self.next_log_index_by_peer.entry(peer.clone())
                 .and_modify(|next_log_index| *next_log_index = latest_log_index);
         });
     }
 
     pub(crate) fn get_next_log_index_for(&self, peer_address: &HostAndPort) -> NextLogIndex {
-        return *(self.next_log_index_by_peer.get(peer_address).unwrap().value());
+        let peer = Peer::new(peer_address.clone());
+        return *(self.next_log_index_by_peer.get(&peer).unwrap().value());
     }
 
-    fn replicate_to(self: &Arc<FollowerState>, state: Arc<State>, peer_address: &HostAndPort, next_log_index_by_peer: (HostAndPort, NextLogIndex), term: u64) {
-        println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer_address);
+    fn replicate_to(self: &Arc<FollowerState>, state: Arc<State>, peer: &Peer, next_log_index_by_peer: (Peer, NextLogIndex), term: u64) {
+        println!("replicating log at log index {} for the peer {:?}", next_log_index_by_peer.1, peer);
 
         let follower_state = self.clone();
         let handler_hook_state = state.clone();
         let service_request_state = state.clone();
-        let peers = Peers::new(vec![peer_address.clone()]);
+        let peers = Peers::from(vec![peer.clone()]);
 
         handler_hook_state.get_replica_reference().send_to_with_handler_hook(
             &peers,
@@ -86,12 +85,12 @@ impl FollowerState {
         )
     }
 
-    fn acknowledge_log_index(&self, peer: HostAndPort) {
+    fn acknowledge_log_index(&self, peer: Peer) {
         self.next_log_index_by_peer.entry(peer)
             .and_modify(|next_log_index| *next_log_index = *next_log_index + 1);
     }
 
-    fn retry_reducing_log_index(self: Arc<FollowerState>, state: Arc<State>, peer: HostAndPort) {
+    fn retry_reducing_log_index(self: Arc<FollowerState>, state: Arc<State>, peer: Peer) {
         let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
         let (previous_log_index, _) = self.previous_log_index_term(&state, next_log_index_by_peer.1);
 
@@ -108,7 +107,7 @@ impl FollowerState {
             let follower_state = self.clone();
             let handler_hook_state = state.clone();
             let service_request_state = state.clone();
-            let peers = Peers::new(vec![peer.clone()]);
+            let peers = Peers::from(vec![peer.clone()]);
 
             handler_hook_state.get_replica_reference().send_to_with_handler_hook(
                 &peers,
@@ -160,9 +159,9 @@ impl FollowerState {
         return (previous_log_index, previous_log_term);
     }
 
-    fn next_log_index_by_peer_for(&self, peer_address: &HostAndPort) -> (HostAndPort, NextLogIndex) {
+    fn next_log_index_by_peer_for(&self, peer: &Peer) -> (Peer, NextLogIndex) {
         return {
-            let next_log_index_by_peer = self.next_log_index_by_peer.get(peer_address).unwrap();
+            let next_log_index_by_peer = self.next_log_index_by_peer.get(peer).unwrap();
             (next_log_index_by_peer.key().clone(), *next_log_index_by_peer.value())
         };
     }
@@ -222,6 +221,7 @@ mod tests {
 
     use replicate::clock::clock::SystemClock;
     use replicate::net::connect::host_and_port::HostAndPort;
+    use replicate::net::peers::Peer;
     use replicate::net::replica::Replica;
 
     use crate::follower_state::{FollowerState, NextLogIndex};
@@ -538,13 +538,13 @@ mod tests {
     #[test]
     fn register_success_response_from_peer() {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peer_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
 
         let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
             30,
             self_host_and_port.clone(),
-            vec![peer],
+            vec![peer_address],
             Box::new(SystemClock::new()),
         );
 
@@ -560,9 +560,10 @@ mod tests {
             let response = ReplicateLogResponseBuilder::success_response(
                 1, 10, 5,
             );
-            follower_state.clone().register(state, response, peer.clone());
+            follower_state.clone().register(state, response, peer_address.clone());
         });
 
+        let peer = Peer::new(peer_address);
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         assert_eq!(1, *(next_log_index_by_peer.value()));
     }
@@ -570,13 +571,13 @@ mod tests {
     #[test]
     fn register_success_response_from_peer_and_increment_match_index_and_next_first_time() {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peer = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peer_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
 
         let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
             30,
             self_host_and_port.clone(),
-            vec![peer],
+            vec![peer_address],
             Box::new(SystemClock::new()),
         );
 
@@ -592,9 +593,10 @@ mod tests {
             let response = ReplicateLogResponseBuilder::success_response(
                 1, 10, 5,
             );
-            follower_state.clone().register(state, response, peer.clone());
+            follower_state.clone().register(state, response, peer_address.clone());
         });
 
+        let peer = Peer::new(peer_address);
         let next_log_index_by_peer = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         assert_eq!(1, *(next_log_index_by_peer.value()));
     }
@@ -887,8 +889,8 @@ mod tests {
     #[test]
     fn reset_next_index_to_0() {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
-        let peers = vec![peer_host_and_port];
+        let peer_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_address];
 
         let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
@@ -908,7 +910,8 @@ mod tests {
 
         follower_state.reset_next_log_index_to(0);
 
-        let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer_host_and_port).unwrap();
+        let peer = Peer::new(peer_address);
+        let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let next_log_index = next_log_index_ref.value();
 
         assert_eq!(0, *next_log_index);
@@ -917,8 +920,8 @@ mod tests {
     #[test]
     fn reset_next_index_to_5() {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peer_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
-        let peers = vec![peer_host_and_port];
+        let peer_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061);
+        let peers = vec![peer_address];
 
         let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         let replica = Replica::new(
@@ -938,7 +941,8 @@ mod tests {
 
         follower_state.reset_next_log_index_to(5);
 
-        let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer_host_and_port).unwrap();
+        let peer = Peer::new(peer_address);
+        let next_log_index_ref = follower_state.next_log_index_by_peer.get(&peer).unwrap();
         let next_log_index = next_log_index_ref.value();
 
         assert_eq!(5, *next_log_index);

@@ -9,7 +9,7 @@ pub struct Peers {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub(crate) struct Peer {
+pub struct Peer {
     address: HostAndPort,
 }
 
@@ -20,8 +20,12 @@ impl Peers {
         };
     }
 
-    pub fn get_peer_addresses(&self) -> Vec<HostAndPort> {
-        return self.peers.iter().map(|peer| peer.address).collect();
+    pub fn from(peers: Vec<Peer>) -> Self {
+        return Peers { peers };
+    }
+
+    pub fn all_peers(&self) -> Vec<Peer> {
+        return self.peers.clone();
     }
 
     pub(crate) fn all_peers_excluding(&self, peer: Peer) -> Vec<Peer> {
