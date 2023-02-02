@@ -5,7 +5,7 @@ use tonic::transport::Channel;
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceClientProvider;
-use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
+use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedResponse};
 
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::raft_client::RaftClient;
@@ -25,8 +25,7 @@ impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for RequestVoteC
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_request_vote(request).await?;
 
-        let request_vote_response: PipelinedResponse = Box::new(response.into_inner());
-        return Ok(Response::new(request_vote_response));
+        return Ok(Response::new(response.into_inner().pipeline_response()));
     }
 }
 
@@ -38,8 +37,7 @@ impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for HeartbeatCli
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_heartbeat(request).await?;
 
-        let heartbeat_response: PipelinedResponse = Box::new(response.into_inner());
-        return Ok(Response::new(heartbeat_response));
+        return Ok(Response::new(response.into_inner().pipeline_response()));
     }
 }
 
@@ -51,8 +49,7 @@ impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for ReplicateLog
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_replicate_log(request).await?;
 
-        let replicate_log_response: PipelinedResponse = Box::new(response.into_inner());
-        return Ok(Response::new(replicate_log_response));
+        return Ok(Response::new(response.into_inner().pipeline_response()));
     }
 }
 

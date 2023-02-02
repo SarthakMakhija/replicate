@@ -22,12 +22,22 @@ pub type PipelinedResponse = Box<dyn Any + Send>;
 
 pub type ResponseHandlerGenerator = Box<dyn Fn(HostAndPort, Result<PipelinedResponse, ServiceResponseError>) -> Option<AsyncBlock> + Send + Sync + 'static>;
 
-pub trait ToPipelinedRequest{
+pub trait ToPipelinedRequest {
     fn pipeline_request(self) -> PipelinedRequest;
 }
 
-impl<T: Any + Send>  ToPipelinedRequest for T {
+pub trait ToPipelinedResponse {
+    fn pipeline_response(self) -> PipelinedResponse;
+}
+
+impl<T: Any + Send> ToPipelinedRequest for T {
     fn pipeline_request(self) -> PipelinedRequest {
+        return Box::new(self);
+    }
+}
+
+impl<T: Any + Send> ToPipelinedResponse for T {
+    fn pipeline_response(self) -> PipelinedResponse {
         return Box::new(self);
     }
 }
@@ -61,7 +71,6 @@ impl Pipeline {
     pub(crate) async fn submit(&self,
                                service_request: ServiceRequest<PipelinedRequest, PipelinedResponse>,
                                response_handler_generator: Arc<ResponseHandlerGenerator>) -> Result<(), Box<dyn Error>> {
-
         match self.sender.clone().send(ResponseHandlerByRequest { service_request, response_handler_generator }).await {
             Ok(_) =>
                 Ok(()),
@@ -76,7 +85,6 @@ impl Pipeline {
              source_address: HostAndPort,
              singular_update_queue: Arc<SingularUpdateQueue>,
              channel_builder: impl ChannelBuilder) {
-
         let peer_address = peer.get_address().clone();
         self.runtime.spawn(async move {
             let mut channel: Option<Channel> = None;
@@ -151,7 +159,7 @@ mod tests {
     use crate::net::connect::host_and_port::HostAndPort;
     use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
     use crate::net::peers::Peer;
-    use crate::net::pipeline::{Pipeline, PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest};
+    use crate::net::pipeline::{Pipeline, PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest, ToPipelinedResponse};
     use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
     pub(crate) struct TestRequest {
@@ -182,7 +190,7 @@ mod tests {
             let request = request.into_inner();
             let test_request = request.downcast::<TestRequest>().unwrap();
 
-            return Ok(Response::new(Box::new(TestResponse { id: test_request.id })));
+            return Ok(Response::new(TestResponse { id: test_request.id }.pipeline_response()));
         }
     }
 
@@ -192,7 +200,7 @@ mod tests {
             let request = request.into_inner();
             let get_value = request.downcast::<GetValueRequest>().unwrap();
 
-            return Ok(Response::new(Box::new(GetValueResponse { value: get_value.key })));
+            return Ok(Response::new(GetValueResponse { value: get_value.key }.pipeline_response()));
         }
     }
 

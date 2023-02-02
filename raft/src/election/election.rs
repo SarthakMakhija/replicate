@@ -127,7 +127,7 @@ mod tests {
         use replicate::net::connect::error::ServiceResponseError;
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
-        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest};
+        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest, ToPipelinedResponse};
         use replicate::net::replica::ReplicaId;
 
         use crate::election::election::tests::setup::ClientType::Success;
@@ -192,7 +192,7 @@ mod tests {
             async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(
-                        Box::new(RequestVoteResponseBuilder::voted_response(1, self.correlation_id))
+                        RequestVoteResponseBuilder::voted_response(1, self.correlation_id).pipeline_response()
                     )
                 );
             }
@@ -203,7 +203,7 @@ mod tests {
             async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(
-                        Box::new(RequestVoteResponseBuilder::not_voted_response(1, self.correlation_id))
+                        RequestVoteResponseBuilder::not_voted_response(1, self.correlation_id).pipeline_response()
                     )
                 );
             }

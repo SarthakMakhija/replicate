@@ -236,7 +236,7 @@ mod tests {
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::peers::Peers;
-    use crate::net::pipeline::{PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest};
+    use crate::net::pipeline::{PipelinedRequest, ResponseHandlerGenerator, ToPipelinedRequest};
     use crate::net::replica::Replica;
     use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse, ResponseCounter};
     use crate::singular_update_queue::singular_update_queue::AsyncBlock;
@@ -254,7 +254,7 @@ mod tests {
         use crate::net::connect::error::ServiceResponseError;
         use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::connect::service_client::ServiceClientProvider;
-        use crate::net::pipeline::{PipelinedRequest, PipelinedResponse};
+        use crate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedResponse};
 
         #[derive(Debug)]
         pub struct GetValueRequest {}
@@ -276,7 +276,7 @@ mod tests {
         #[async_trait]
         impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for GetValueRequestSuccessClient {
             async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
-                return Ok(Response::new(Box::new(())));
+                return Ok(Response::new(().pipeline_response()));
             }
         }
 

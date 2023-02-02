@@ -1074,7 +1074,7 @@ mod tests {
         use replicate::net::connect::error::ServiceResponseError;
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
-        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest};
+        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest, ToPipelinedResponse};
         use replicate::net::replica::ReplicaId;
 
         use crate::net::builder::heartbeat::{HeartbeatRequestBuilder, HeartbeatResponseBuilder};
@@ -1121,7 +1121,7 @@ mod tests {
         impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for TestHeartbeatSuccessClient {
             async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(Box::new(HeartbeatResponseBuilder::success_response(1, 10)))
+                    Response::new(HeartbeatResponseBuilder::success_response(1, 10).pipeline_response())
                 );
             }
         }
@@ -1132,7 +1132,7 @@ mod tests {
         impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for TestHeartbeatFailureClient {
             async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(Box::new(HeartbeatResponseBuilder::failure_response(5, 20)))
+                    Response::new(HeartbeatResponseBuilder::failure_response(5, 20).pipeline_response())
                 );
             }
         }
