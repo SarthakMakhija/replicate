@@ -512,40 +512,6 @@ mod tests {
     }
 
     #[test]
-    fn total_peer_count_excluding_self() {
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            ],
-            Box::new(SystemClock::new()),
-        );
-
-        let total_peer_count = replica.total_peer_count();
-        assert_eq!(2, total_peer_count);
-    }
-
-    #[test]
-    fn total_peer_count() {
-        let replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8989),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090),
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9098),
-            ],
-            Box::new(SystemClock::new()),
-        );
-
-        let total_peer_count = replica.total_peer_count();
-        assert_eq!(3, total_peer_count);
-    }
-
-    #[test]
     fn all_peers_excluding_self() {
         let replica = Replica::new(
             10,
