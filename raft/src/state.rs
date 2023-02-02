@@ -271,7 +271,7 @@ impl State {
                     }
                 });
 
-            state.get_replica_reference().send_to_replicas_with_handler_hook(
+            state.get_replica_reference().pipeline_mode().send_to_replicas_with_handler_hook(
                 service_request_constructor,
                 Arc::new(response_handler_generator),
                 || None,

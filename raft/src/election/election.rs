@@ -42,7 +42,7 @@ impl Election {
             let replica_reference = state.get_replica_reference();
             let (last_log_index, last_log_term) = inner_state.get_replicated_log_reference().get_last_log_index_and_term();
 
-            replica_reference.send_to_replicas_with_handler_hook(
+            replica_reference.pipeline_mode().send_to_replicas_with_handler_hook(
                 || { service_request_factory.request_vote(replica_reference.get_id(), term, last_log_index, last_log_term) },
                 Arc::new(Box::new(move |peer, response: Result<PipelinedResponse, ServiceResponseError>| {
                     return Self::request_vote_response_handler(inner_state.clone(), peer, response);

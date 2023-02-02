@@ -75,7 +75,7 @@ impl FollowerState {
         let service_request_state = state.clone();
         let peers = Peers::from(vec![peer.clone()]);
 
-        handler_hook_state.get_replica_reference().send_to_with_handler_hook(
+        handler_hook_state.get_replica_reference().pipeline_mode().send_to_with_handler_hook(
             &peers,
             move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
             Arc::new(Box::new(move |peer, response: Result<PipelinedResponse, ServiceResponseError>| {
@@ -109,7 +109,7 @@ impl FollowerState {
             let service_request_state = state.clone();
             let peers = Peers::from(vec![peer.clone()]);
 
-            handler_hook_state.get_replica_reference().send_to_with_handler_hook(
+            handler_hook_state.get_replica_reference().pipeline_mode().send_to_with_handler_hook(
                 &peers,
                 move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
                 Arc::new(Box::new(move |peer, response: Result<PipelinedResponse, ServiceResponseError>| {
