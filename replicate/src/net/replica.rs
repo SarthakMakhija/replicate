@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::future::Future;
 use std::sync::Arc;
@@ -10,7 +11,8 @@ use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::service_client::ServiceRequest;
-use crate::net::peers::Peers;
+use crate::net::peers::{Peer, Peers};
+use crate::net::pipeline::{Pipeline, PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator};
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 use crate::net::request_waiting_list::response_callback::{AnyResponse, ResponseCallbackType, ResponseErrorType};
@@ -24,6 +26,7 @@ pub struct Replica {
     id: ReplicaId,
     self_address: HostAndPort,
     peers: Peers,
+    pipeline_by_peer: HashMap<Peer, Arc<Pipeline>>,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: Arc<SingularUpdateQueue>,
 }
@@ -52,12 +55,21 @@ impl Replica {
             request_waiting_list_config,
         );
 
+        let peers = Peers::new(peer_addresses);
+        let singular_update_queue = Arc::new(SingularUpdateQueue::new());
+        let pipeline_by_peer = peers
+            .all_peers()
+            .iter()
+            .map(|peer| (peer.clone(), Arc::new(Pipeline::new(peer.clone(), self_address, singular_update_queue.clone()))))
+            .collect::<HashMap<Peer, Arc<Pipeline>>>();
+
         return Replica {
             id,
             self_address,
-            peers: Peers::new(peer_addresses),
+            peers,
+            pipeline_by_peer,
             request_waiting_list,
-            singular_update_queue: Arc::new(SingularUpdateQueue::new()),
+            singular_update_queue,
         };
     }
 
@@ -103,15 +115,11 @@ impl Replica {
         return total_failed_sends;
     }
 
-    pub fn send_to_replicas_with_handler_hook<Payload, S, Response, F, T, U>(&self,
-                                                                             service_request_constructor: S,
-                                                                             response_handler_generator: Arc<F>,
-                                                                             response_callback_generator: U)
-        where Payload: Send + 'static,
-              Response: Send + Debug + 'static,
-              S: Fn() -> ServiceRequest<Payload, Response>,
-              F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
-              T: Future<Output=()> + Send + 'static,
+    pub fn send_to_replicas_with_handler_hook<S, U>(&self,
+                                                    service_request_constructor: S,
+                                                    response_handler_generator: Arc<ResponseHandlerGenerator>,
+                                                    response_callback_generator: U)
+        where S: Fn() -> ServiceRequest<PipelinedRequest, PipelinedResponse>,
               U: Fn() -> Option<ResponseCallbackType> {
         self.send_to_with_handler_hook(
             &self.peers,
@@ -121,42 +129,30 @@ impl Replica {
         );
     }
 
-    pub fn send_to_with_handler_hook<Payload, S, Response, F, T, U>(&self,
-                                                                    peers: &Peers,
-                                                                    service_request_constructor: S,
-                                                                    response_handler_generator: Arc<F>,
-                                                                    response_callback_generator: U)
-        where Payload: Send + 'static,
-              Response: Send + Debug + 'static,
-              S: Fn() -> ServiceRequest<Payload, Response>,
-              F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
-              T: Future<Output=()> + Send + 'static,
+    pub fn send_to_with_handler_hook<S, U>(&self,
+                                           peers: &Peers,
+                                           service_request_constructor: S,
+                                           response_handler_generator: Arc<ResponseHandlerGenerator>,
+                                           response_callback_generator: U)
+        where S: Fn() -> ServiceRequest<PipelinedRequest, PipelinedResponse>,
               U: Fn() -> Option<ResponseCallbackType> {
-        for peer_address in peers.get_peer_addresses() {
-            if peer_address.eq(&self.self_address) {
+        for peer in peers.all_peers() {
+            if peer.has_address(&self.self_address) {
                 continue;
             }
 
-            let peer_address = peer_address.clone();
-            let source_address = self.self_address.clone();
-            let singular_update_queue = self.singular_update_queue.clone();
-            let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
+            let peer_address = peer.get_address().clone();
+            let service_request = service_request_constructor();
             let peer_handler_generator = response_handler_generator.clone();
 
             if let Some(response_callback) = response_callback_generator() {
                 let correlation_id = service_request.correlation_id;
                 self.request_waiting_list.add(correlation_id, peer_address.clone(), response_callback);
             }
-            tokio::spawn(async move {
-                let response = AsyncNetwork::send_with_source_footprint(
-                    service_request,
-                    source_address,
-                    peer_address,
-                ).await;
 
-                if let Some(handler) = peer_handler_generator(peer_address, response) {
-                    let _ = singular_update_queue.add(handler).await;
-                }
+            let pipeline = self.pipeline_by_peer.get(&peer).unwrap().clone();
+            tokio::spawn(async move {
+                let _ = pipeline.submit(service_request, peer_handler_generator).await;
             });
         }
     }
@@ -224,7 +220,6 @@ impl Replica {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::future::Future;
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, RwLock};
     use std::sync::atomic::{AtomicI8, Ordering};
@@ -241,8 +236,10 @@ mod tests {
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::peers::Peers;
+    use crate::net::pipeline::{PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator};
     use crate::net::replica::Replica;
     use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse, ResponseCounter};
+    use crate::singular_update_queue::singular_update_queue::AsyncBlock;
 
     mod setup {
         use std::error::Error;
@@ -257,6 +254,7 @@ mod tests {
         use crate::net::connect::error::ServiceResponseError;
         use crate::net::connect::host_and_port::HostAndPort;
         use crate::net::connect::service_client::ServiceClientProvider;
+        use crate::net::pipeline::{PipelinedRequest, PipelinedResponse};
 
         #[derive(Debug)]
         pub struct GetValueRequest {}
@@ -276,9 +274,23 @@ mod tests {
         }
 
         #[async_trait]
+        impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for GetValueRequestSuccessClient {
+            async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+                return Ok(Response::new(Box::new(())));
+            }
+        }
+
+        #[async_trait]
         impl ServiceClientProvider<GetValueRequest, ()> for GetValueRequestSuccessClient {
             async fn call(&self, _: Request<GetValueRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<()>, ServiceResponseError> {
                 return Ok(Response::new(()));
+            }
+        }
+
+        #[async_trait]
+        impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for GetValueRequestFailureClient {
+            async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+                return Err(Box::new(TestError { message: "Test error".to_string() }));
             }
         }
 
@@ -400,17 +412,15 @@ mod tests {
         let any_other_replica_port = 8988;
 
         let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
-        let replica = blocking_runtime.block_on(async {
-            return Replica::new(
-                10,
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
-                vec![
-                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
-                    HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
-                ],
-                Box::new(SystemClock::new()),
-            );
-        });
+        let replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_replica_port),
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), any_other_replica_port),
+            ],
+            Box::new(SystemClock::new()),
+        );
 
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let async_quorum_callback = AsyncQuorumCallback::<()>::new(3, 2);
@@ -427,7 +437,7 @@ mod tests {
                 replica.send_to_replicas(service_request_constructor, async_quorum_callback.clone()).await;
 
             assert_eq!(2, total_failed_sends);
-        })
+        });
     }
 
     #[test]
@@ -602,8 +612,9 @@ mod tests {
 
             let correlation_id_generator = RandomCorrelationIdGenerator::new();
             let service_request_constructor = move || {
+                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    GetValueRequest {},
+                    payload,
                     Box::new(GetValueRequestSuccessClient {}),
                     correlation_id_generator.generate(),
                 )
@@ -611,12 +622,12 @@ mod tests {
 
             let response_counter = Arc::new(ResponseCounter { counter: AtomicI8::new(0) });
             let inner_response_counter = response_counter.clone();
-            let response_handler_generator = move |_peer, response: Result<(), ServiceResponseError>| {
+            let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_peer, response: Result<PipelinedResponse, ServiceResponseError>| {
                 if response.is_ok() {
                     return Some(handler(&response_counter, 1, sender.clone()));
                 }
                 return Some(handler(&response_counter, -1, sender.clone()));
-            };
+            });
             let response_handler_generator = Arc::new(response_handler_generator);
 
             inner_replica.send_to_replicas_with_handler_hook(
@@ -649,8 +660,9 @@ mod tests {
 
             let correlation_id_generator = RandomCorrelationIdGenerator::new();
             let service_request_constructor = move || {
+                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    GetValueRequest {},
+                    payload,
                     Box::new(GetValueRequestFailureClient {}),
                     correlation_id_generator.generate(),
                 )
@@ -658,12 +670,13 @@ mod tests {
 
             let response_counter = Arc::new(ResponseCounter { counter: AtomicI8::new(0) });
             let inner_response_counter = response_counter.clone();
-            let response_handler_generator = Arc::new(move |_peer, response: Result<(), ServiceResponseError>| {
+            let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_peer, response: Result<PipelinedResponse, ServiceResponseError>| {
                 if response.is_ok() {
                     return Some(handler(&response_counter, 1, sender.clone()));
                 }
                 return Some(handler(&response_counter, -1, sender.clone()));
             });
+            let response_handler_generator = Arc::new(response_handler_generator);
 
             inner_replica.send_to_replicas_with_handler_hook(
                 service_request_constructor,
@@ -694,28 +707,31 @@ mod tests {
         runtime.block_on(async move {
             let correlation_id_generator = FixedCorrelationIdGenerator::new(30);
             let service_request_constructor = move || {
+                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    GetValueRequest {},
+                    payload,
                     Box::new(GetValueRequestSuccessClient {}),
                     correlation_id_generator.generate(),
                 )
             };
 
             let replica = inner_replica.clone();
-            let response_handler_generator = move |_peer, _response: Result<(), ServiceResponseError>| {
+            let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_peer, _response: Result<PipelinedResponse, ServiceResponseError>| {
                 let replica = inner_replica.clone();
-                return Some(async move {
+                return Some(Box::pin(async move {
                     replica.register_response(
                         30,
                         self_address,
                         Ok(Box::new(String::from("success response"))),
                     )
-                });
-            };
+                }));
+            });
+            let response_handler_generator = Arc::new(response_handler_generator);
+
             let callback = AsyncQuorumCallback::<String>::new(1, 1);
             replica.send_to_replicas_with_handler_hook(
                 service_request_constructor,
-                Arc::new(response_handler_generator),
+                response_handler_generator,
                 || Some(callback.clone()),
             );
 
@@ -744,30 +760,32 @@ mod tests {
         runtime.block_on(async move {
             let correlation_id_generator = FixedCorrelationIdGenerator::new(30);
             let service_request_constructor = move || {
+                let payload: PipelinedRequest = Box::new(GetValueRequest {});
                 ServiceRequest::new(
-                    GetValueRequest {},
+                    payload,
                     Box::new(GetValueRequestSuccessClient {}),
                     correlation_id_generator.generate(),
                 )
             };
 
             let replica = inner_replica.clone();
-            let response_handler_generator = move |_peer, _response: Result<(), ServiceResponseError>| {
+            let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_peer, _response: Result<PipelinedResponse, ServiceResponseError>| {
                 let replica = inner_replica.clone();
-                return Some(async move {
+                return Some(Box::pin(async move {
                     replica.register_response(
                         30,
                         self_address,
                         Ok(Box::new(String::from("success response"))),
                     )
-                });
-            };
+                }));
+            });
             let callback = AsyncQuorumCallback::<String>::new(1, 1);
             let peers = Peers::new(vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989)]);
+            let response_handler_generator = Arc::new(response_handler_generator);
             replica.send_to_with_handler_hook(
                 &peers,
                 service_request_constructor,
-                Arc::new(response_handler_generator),
+                response_handler_generator,
                 || Some(callback.clone()),
             );
 
@@ -778,11 +796,11 @@ mod tests {
         });
     }
 
-    fn handler(response_counter: &Arc<ResponseCounter>, value_add: i8, sender: Sender<()>) -> impl Future<Output=()> {
+    fn handler(response_counter: &Arc<ResponseCounter>, value_add: i8, sender: Sender<()>) -> AsyncBlock {
         let response_counter = response_counter.clone();
-        return async move {
+        return Box::pin(async move {
             response_counter.counter.fetch_add(value_add, Ordering::SeqCst);
             let _ = sender.send(()).await;
-        };
+        });
     }
 }

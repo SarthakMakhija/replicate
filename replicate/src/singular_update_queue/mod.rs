@@ -1,1 +1,1 @@
-pub(crate) mod singular_update_queue;
+pub mod singular_update_queue;

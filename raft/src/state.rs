@@ -5,9 +5,11 @@ use std::time::{Duration, SystemTime};
 use replicate::clock::clock::Clock;
 use replicate::heartbeat::heartbeat_scheduler::SingleThreadedHeartbeatScheduler;
 use replicate::net::connect::error::{AnyError, ServiceResponseError};
+use replicate::net::pipeline::PipelinedResponse;
 use replicate::net::replica::{Replica, ReplicaId};
 use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
+use replicate::singular_update_queue::singular_update_queue::AsyncBlock;
 
 use crate::election::election::Election;
 use crate::follower_state::FollowerState;
@@ -128,13 +130,14 @@ impl State {
         Self::restart_heartbeat_sender(self.clone(), &self.heartbeat_send_scheduler);
     }
 
-    pub(crate) fn get_heartbeat_response_handler(self: Arc<State>, append_entry_response: AppendEntriesResponse) -> impl Future<Output=()> {
+    pub(crate) fn get_heartbeat_response_handler(self: Arc<State>, response: PipelinedResponse) -> AsyncBlock {
         let inner_state = self.clone();
-        return async move {
+        return Box::pin(async move {
+            let append_entry_response = response.downcast::<AppendEntriesResponse>().unwrap();
             if !append_entry_response.success {
                 inner_state.change_to_follower(append_entry_response.term);
             }
-        };
+        });
     }
 
     pub(crate) fn get_heartbeat_checker<F>(self: Arc<State>, heartbeat_timeout: Duration, election_starter: F) -> impl Future<Output=Result<(), AnyError>>
@@ -261,12 +264,12 @@ impl State {
             };
 
             let response_handler_generator =
-                move |_peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                Box::new(move |_peer, response: Result<PipelinedResponse, ServiceResponseError>| {
                     match response {
                         Ok(response) => Some(self.clone().get_heartbeat_response_handler(response)),
                         Err(_) => None
                     }
-                };
+                });
 
             state.get_replica_reference().send_to_replicas_with_handler_hook(
                 service_request_constructor,
@@ -406,11 +409,11 @@ mod tests {
         let state = State::new(some_replica, HeartbeatConfig::default());
         state.get_replicated_log_reference().append(
             &Command { command: String::from("first").as_bytes().to_vec() },
-            1
+            1,
         );
         state.get_replicated_log_reference().append(
             &Command { command: String::from("second").as_bytes().to_vec() },
-            1
+            1,
         );
 
         let clone = state.clone();
@@ -456,11 +459,11 @@ mod tests {
         let state = State::new(some_replica, HeartbeatConfig::default());
         state.get_replicated_log_reference().append(
             &Command { command: String::from("second").as_bytes().to_vec() },
-            1
+            1,
         );
         state.get_replicated_log_reference().append(
             &Command { command: String::from("second").as_bytes().to_vec() },
-            1
+            1,
         );
         state.clone().change_to_leader();
         state.clone().change_to_follower(2);
@@ -1071,12 +1074,11 @@ mod tests {
         use replicate::net::connect::error::ServiceResponseError;
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
+        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
         use replicate::net::replica::ReplicaId;
 
         use crate::net::builder::heartbeat::{HeartbeatRequestBuilder, HeartbeatResponseBuilder};
         use crate::net::factory::service_request::ServiceRequestFactory;
-        use crate::net::rpc::grpc::AppendEntries;
-        use crate::net::rpc::grpc::AppendEntriesResponse;
 
         #[derive(PartialEq)]
         pub(crate) enum HeartbeatResponseClientType {
@@ -1090,7 +1092,7 @@ mod tests {
         }
 
         impl ServiceRequestFactory for IncrementingCorrelationIdServiceRequestFactory {
-            fn heartbeat(&self, term: u64, leader_id: ReplicaId) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
+            fn heartbeat(&self, term: u64, leader_id: ReplicaId) -> ServiceRequest<PipelinedRequest, PipelinedResponse> {
                 {
                     let write_guard = self.base_correlation_id.write().unwrap();
                     write_guard.fetch_add(1, Ordering::SeqCst);
@@ -1099,14 +1101,15 @@ mod tests {
                 let guard = self.base_correlation_id.read().unwrap();
                 let correlation_id: CorrelationId = guard.load(Ordering::SeqCst);
 
-                let client: Box<dyn ServiceClientProvider<AppendEntries, AppendEntriesResponse>> = if self.heartbeat_response_client_type == HeartbeatResponseClientType::Success {
+                let client: Box<dyn ServiceClientProvider<PipelinedRequest, PipelinedResponse>> = if self.heartbeat_response_client_type == HeartbeatResponseClientType::Success {
                     Box::new(TestHeartbeatSuccessClient {})
                 } else {
                     Box::new(TestHeartbeatFailureClient {})
                 };
 
+                let payload: PipelinedRequest = Box::new(HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id));
                 return ServiceRequest::new(
-                    HeartbeatRequestBuilder::heartbeat_request(term, leader_id, correlation_id),
+                    payload,
                     client,
                     correlation_id,
                 );
@@ -1116,10 +1119,10 @@ mod tests {
         struct TestHeartbeatSuccessClient {}
 
         #[async_trait]
-        impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatSuccessClient {
-            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
+        impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for TestHeartbeatSuccessClient {
+            async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(HeartbeatResponseBuilder::success_response(1, 10))
+                    Response::new(Box::new(HeartbeatResponseBuilder::success_response(1, 10)))
                 );
             }
         }
@@ -1127,10 +1130,10 @@ mod tests {
         struct TestHeartbeatFailureClient {}
 
         #[async_trait]
-        impl ServiceClientProvider<AppendEntries, AppendEntriesResponse> for TestHeartbeatFailureClient {
-            async fn call(&self, _: Request<AppendEntries>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<AppendEntriesResponse>, ServiceResponseError> {
+        impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for TestHeartbeatFailureClient {
+            async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
-                    Response::new(HeartbeatResponseBuilder::failure_response(5, 20))
+                    Response::new(Box::new(HeartbeatResponseBuilder::failure_response(5, 20)))
                 );
             }
         }

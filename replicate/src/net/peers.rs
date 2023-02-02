@@ -8,7 +8,7 @@ pub struct Peers {
     peers: Vec<Peer>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub(crate) struct Peer {
     address: HostAndPort,
 }
@@ -22,6 +22,10 @@ impl Peers {
 
     pub fn get_peer_addresses(&self) -> Vec<HostAndPort> {
         return self.peers.iter().map(|peer| peer.address).collect();
+    }
+
+    pub(crate) fn all_peers(&self) -> Vec<Peer> {
+        return self.peers.clone();
     }
 }
 
@@ -42,5 +46,9 @@ impl Peer {
 
     pub(crate) fn get_address(&self) -> &HostAndPort {
         return &self.address;
+    }
+
+    pub(crate) fn has_address(&self, address: &HostAndPort) -> bool {
+        return self.address.eq(address);
     }
 }

@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
@@ -7,7 +6,9 @@ use replicate::callback::async_quorum_callback::AsyncQuorumCallback;
 use replicate::net::connect::correlation_id::RESERVED_CORRELATION_ID;
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::pipeline::PipelinedResponse;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
+use replicate::singular_update_queue::singular_update_queue::AsyncBlock;
 
 use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 use crate::net::rpc::grpc::RequestVoteResponse;
@@ -43,9 +44,9 @@ impl Election {
 
             replica_reference.send_to_replicas_with_handler_hook(
                 || { service_request_factory.request_vote(replica_reference.get_id(), term, last_log_index, last_log_term) },
-                Arc::new(move |peer, response: Result<RequestVoteResponse, ServiceResponseError>| {
+                Arc::new(Box::new(move |peer, response: Result<PipelinedResponse, ServiceResponseError>| {
                     return Self::request_vote_response_handler(inner_state.clone(), peer, response);
-                }),
+                })),
                 || Some(inner_async_quorum_callback.clone() as Arc<dyn ResponseCallback>),
             );
 
@@ -71,22 +72,25 @@ impl Election {
     fn request_vote_response_handler(
         state: Arc<State>,
         peer: HostAndPort,
-        response: Result<RequestVoteResponse, ServiceResponseError>,
-    ) -> Option<impl Future<Output=()>> {
+        response: Result<PipelinedResponse, ServiceResponseError>,
+    ) -> Option<AsyncBlock> {
         return Some(
-            async move {
-                match response {
-                    Ok(request_vote_response) => {
-                        println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
-                        let _ = state
-                            .get_replica_reference()
-                            .register_response(request_vote_response.correlation_id, peer, Ok(Box::new(request_vote_response)));
-                    }
-                    Err(_err) => {
-                        eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
+            Box::pin(
+                async move {
+                    match response {
+                        Ok(pipelined_response) => {
+                            let request_vote_response = pipelined_response.downcast::<RequestVoteResponse>().unwrap();
+                            println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
+                            let _ = state
+                                .get_replica_reference()
+                                .register_response(request_vote_response.correlation_id, peer, Ok(request_vote_response));
+                        }
+                        Err(_err) => {
+                            eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
+                        }
                     }
                 }
-            }
+            )
         );
     }
 }
@@ -94,8 +98,8 @@ impl Election {
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
-    use std::sync::RwLock;
     use std::sync::atomic::AtomicU64;
+    use std::sync::RwLock;
     use std::thread;
     use std::time::Duration;
 
@@ -123,13 +127,12 @@ mod tests {
         use replicate::net::connect::error::ServiceResponseError;
         use replicate::net::connect::host_and_port::HostAndPort;
         use replicate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
+        use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
         use replicate::net::replica::ReplicaId;
 
         use crate::election::election::tests::setup::ClientType::Success;
         use crate::net::builder::request_vote::{RequestVoteBuilder, RequestVoteResponseBuilder};
         use crate::net::factory::service_request::ServiceRequestFactory;
-        use crate::net::rpc::grpc::RequestVote;
-        use crate::net::rpc::grpc::RequestVoteResponse;
 
         #[derive(PartialEq)]
         pub(crate) enum ClientType {
@@ -148,7 +151,7 @@ mod tests {
                             term: u64,
                             last_log_index: Option<u64>,
                             last_log_term: Option<u64>,
-            ) -> ServiceRequest<RequestVote, RequestVoteResponse> {
+            ) -> ServiceRequest<PipelinedRequest, PipelinedResponse> {
                 {
                     let write_guard = self.base_correlation_id.write().unwrap();
                     write_guard.fetch_add(1, Ordering::SeqCst);
@@ -156,20 +159,21 @@ mod tests {
 
                 let guard = self.base_correlation_id.read().unwrap();
                 let correlation_id: CorrelationId = guard.load(Ordering::SeqCst);
-                let client: Box<dyn ServiceClientProvider<RequestVote, RequestVoteResponse>> = if self.client_type == Success {
+                let client: Box<dyn ServiceClientProvider<PipelinedRequest, PipelinedResponse>> = if self.client_type == Success {
                     Box::new(VotedRequestVoteClient { correlation_id })
                 } else {
                     Box::new(NotVotedRequestVoteClient { correlation_id })
                 };
 
+                let payload: PipelinedRequest = Box::new(RequestVoteBuilder::request_vote_with_log(
+                    replica_id,
+                    term,
+                    correlation_id,
+                    last_log_index,
+                    last_log_term,
+                ));
                 return ServiceRequest::new(
-                    RequestVoteBuilder::request_vote_with_log(
-                        replica_id,
-                        term,
-                        correlation_id,
-                        last_log_index,
-                        last_log_term,
-                    ),
+                    payload,
                     client,
                     correlation_id,
                 );
@@ -185,22 +189,22 @@ mod tests {
         }
 
         #[async_trait]
-        impl ServiceClientProvider<RequestVote, RequestVoteResponse> for VotedRequestVoteClient {
-            async fn call(&self, _: Request<RequestVote>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
+        impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for VotedRequestVoteClient {
+            async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(
-                        RequestVoteResponseBuilder::voted_response(1, self.correlation_id)
+                        Box::new(RequestVoteResponseBuilder::voted_response(1, self.correlation_id))
                     )
                 );
             }
         }
 
         #[async_trait]
-        impl ServiceClientProvider<RequestVote, RequestVoteResponse> for NotVotedRequestVoteClient {
-            async fn call(&self, _: Request<RequestVote>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
+        impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for NotVotedRequestVoteClient {
+            async fn call(&self, _: Request<PipelinedRequest>, _: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
                 return Ok(
                     Response::new(
-                        RequestVoteResponseBuilder::not_voted_response(1, self.correlation_id)
+                        Box::new(RequestVoteResponseBuilder::not_voted_response(1, self.correlation_id))
                     )
                 );
             }

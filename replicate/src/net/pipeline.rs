@@ -17,17 +17,17 @@ use crate::net::connect::service_client::ServiceRequest;
 use crate::net::peers::Peer;
 use crate::singular_update_queue::singular_update_queue::{AsyncBlock, SingularUpdateQueue};
 
-pub(crate) type PipelinedRequest = Box<dyn Any + Send>;
-pub(crate) type PipelinedResponse = Box<dyn Any + Send>;
+pub type PipelinedRequest = Box<dyn Any + Send>;
+pub type PipelinedResponse = Box<dyn Any + Send>;
 
-type ResponseHandlerGenerator = Box<dyn Fn(HostAndPort, Result<PipelinedResponse, ServiceResponseError>) -> Option<AsyncBlock> + Send + Sync + 'static>;
+pub type ResponseHandlerGenerator = Box<dyn Fn(HostAndPort, Result<PipelinedResponse, ServiceResponseError>) -> Option<AsyncBlock> + Send + Sync + 'static>;
 
 struct ResponseHandlerByRequest {
     service_request: ServiceRequest<PipelinedRequest, PipelinedResponse>,
     response_handler_generator: Arc<ResponseHandlerGenerator>,
 }
 
-struct Pipeline {
+pub(crate) struct Pipeline {
     peer: Peer,
     self_address: HostAndPort,
     sender: Sender<ResponseHandlerByRequest>,
@@ -51,6 +51,7 @@ impl Pipeline {
     pub(crate) async fn submit(&self,
                                service_request: ServiceRequest<PipelinedRequest, PipelinedResponse>,
                                response_handler_generator: Arc<ResponseHandlerGenerator>) -> Result<(), Box<dyn Error>> {
+
         match self.sender.clone().send(ResponseHandlerByRequest { service_request, response_handler_generator }).await {
             Ok(_) =>
                 Ok(()),
@@ -65,6 +66,7 @@ impl Pipeline {
              source_address: HostAndPort,
              singular_update_queue: Arc<SingularUpdateQueue>,
              channel_builder: impl ChannelBuilder) {
+
         let peer_address = peer.get_address().clone();
         self.runtime.spawn(async move {
             let mut channel: Option<Channel> = None;
@@ -188,9 +190,8 @@ mod tests {
     fn send_a_request_to_be_pipelined() {
         let self_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8918);
         let peer = Peer::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7118));
-        let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
 
-        let pipeline = runtime.block_on(async {
+        let pipeline = Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
             Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()))
         });
 
@@ -205,9 +206,8 @@ mod tests {
     fn send_multiple_requests_to_be_pipelined() {
         let self_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8918);
         let peer = Peer::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7118));
-        let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
 
-        let pipeline = runtime.block_on(async {
+        let pipeline = Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
             Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()))
         });
 

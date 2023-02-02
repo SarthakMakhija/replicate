@@ -30,6 +30,10 @@ impl<Payload: Send, Response> ServiceRequest<Payload, Response>
     pub fn get_payload(&self) -> &Payload {
         return &self.payload;
     }
+
+    pub fn into_payload(self) -> Payload {
+        return self.payload;
+    }
 }
 
 #[async_trait]

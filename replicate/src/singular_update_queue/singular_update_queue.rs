@@ -10,7 +10,7 @@ pub(crate) struct Task {
     block: Pin<Box<dyn Future<Output=()> + Send>>,
 }
 
-pub(crate) type AsyncBlock = Pin<Box<dyn Future<Output=()> + Send + 'static>>;
+pub type AsyncBlock = Pin<Box<dyn Future<Output=()> + Send + 'static>>;
 
 pub(crate) struct SingularUpdateQueue {
     sender: Sender<Task>,

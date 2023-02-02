@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -7,9 +6,11 @@ use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::peers::Peers;
+use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
 use replicate::net::replica::Replica;
+use replicate::singular_update_queue::singular_update_queue::AsyncBlock;
 
-use crate::net::rpc::grpc::{AppendEntries, AppendEntriesResponse, Command, Entry};
+use crate::net::rpc::grpc::{AppendEntriesResponse, Command, Entry};
 use crate::state::{ReplicaRole, State};
 
 type NextLogIndex = u64;
@@ -53,7 +54,7 @@ impl FollowerState {
             self.acknowledge_log_index(from);
             return;
         }
-        self.retry_reducing_log_index(state,from);
+        self.retry_reducing_log_index(state, from);
     }
 
     pub(crate) fn reset_next_log_index_to(&self, latest_log_index: u64) {
@@ -78,9 +79,9 @@ impl FollowerState {
         handler_hook_state.get_replica_reference().send_to_with_handler_hook(
             &peers,
             move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
-            Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
+            Arc::new(Box::new(move |peer, response: Result<PipelinedResponse, ServiceResponseError>| {
                 return Self::append_entries_response_handler(follower_state.clone(), state.clone(), peer, response);
-            }),
+            })),
             || None,
         )
     }
@@ -92,7 +93,7 @@ impl FollowerState {
 
     fn retry_reducing_log_index(self: Arc<FollowerState>, state: Arc<State>, peer: HostAndPort) {
         let next_log_index_by_peer = self.next_log_index_by_peer_for(&peer);
-        let (previous_log_index, _) = self.previous_log_index_term(&state,next_log_index_by_peer.1);
+        let (previous_log_index, _) = self.previous_log_index_term(&state, next_log_index_by_peer.1);
 
         if let Some(previous_log_index) = previous_log_index {
             {
@@ -112,15 +113,15 @@ impl FollowerState {
             handler_hook_state.get_replica_reference().send_to_with_handler_hook(
                 &peers,
                 move || self.service_request(&service_request_state, next_log_index_by_peer.1, term),
-                Arc::new(move |peer, response: Result<AppendEntriesResponse, ServiceResponseError>| {
+                Arc::new(Box::new(move |peer, response: Result<PipelinedResponse, ServiceResponseError>| {
                     return Self::append_entries_response_handler(follower_state.clone(), state.clone(), peer, response);
-                }),
+                })),
                 || None,
             )
         }
     }
 
-    fn service_request(&self, state: &Arc<State>, next_log_index: NextLogIndex, term: u64) -> ServiceRequest<AppendEntries, AppendEntriesResponse> {
+    fn service_request(&self, state: &Arc<State>, next_log_index: NextLogIndex, term: u64) -> ServiceRequest<PipelinedRequest, PipelinedResponse> {
         let (previous_log_index, previous_log_term) = self.previous_log_index_term(state, next_log_index);
 
         let entry = match state.get_replicated_log_reference().get_log_entry_at(next_log_index as usize) {
@@ -169,43 +170,47 @@ impl FollowerState {
     fn append_entries_response_handler(follower_state: Arc<FollowerState>,
                                        state: Arc<State>,
                                        peer: HostAndPort,
-                                       response: Result<AppendEntriesResponse, ServiceResponseError>,
-    ) -> Option<impl Future<Output=()>> {
+                                       response: Result<PipelinedResponse, ServiceResponseError>,
+    ) -> Option<AsyncBlock> {
         let inner_follower_state = follower_state.clone();
         return Some(
-            async move {
-                match response {
-                    Ok(append_entries_response) => {
-                        let state = state.clone();
-                        let term = state.get_term();
-                        if append_entries_response.term > term {
-                            state.clone().change_to_follower(append_entries_response.term);
-                        }
-                        let replica_role = state.get_role();
-                        if replica_role == ReplicaRole::Leader {
-                            if append_entries_response.success {
-                                let replicated_log = state.get_replicated_log_reference();
-                                let log_entry_index = append_entries_response.log_entry_index.unwrap() as usize;
+            Box::pin(
+                async move {
+                    match response {
+                        Ok(pipelined_response) => {
+                            let append_entries_response = pipelined_response.downcast::<AppendEntriesResponse>().unwrap();
+                            let state = state.clone();
+                            let term = state.get_term();
 
-                                replicated_log.acknowledge_log_entry_at(log_entry_index);
-                                if replicated_log.is_entry_replicated(log_entry_index) {
-                                    replicated_log.commit(|commit_index| {
-                                        state.get_pending_committed_log_entries_reference().handle_response(
-                                            commit_index,
-                                            state.get_replica_reference().get_self_address(),
-                                            Ok(Box::new(())),
-                                        );
-                                    });
-                                }
+                            if append_entries_response.term > term {
+                                state.clone().change_to_follower(append_entries_response.term);
                             }
-                            inner_follower_state.register(state, append_entries_response, peer);
+                            let replica_role = state.get_role();
+                            if replica_role == ReplicaRole::Leader {
+                                if append_entries_response.success {
+                                    let replicated_log = state.get_replicated_log_reference();
+                                    let log_entry_index = append_entries_response.log_entry_index.unwrap() as usize;
+
+                                    replicated_log.acknowledge_log_entry_at(log_entry_index);
+                                    if replicated_log.is_entry_replicated(log_entry_index) {
+                                        replicated_log.commit(|commit_index| {
+                                            state.get_pending_committed_log_entries_reference().handle_response(
+                                                commit_index,
+                                                state.get_replica_reference().get_self_address(),
+                                                Ok(Box::new(())),
+                                            );
+                                        });
+                                    }
+                                }
+                                inner_follower_state.register(state, *append_entries_response, peer);
+                            }
                         }
-                    }
-                    Err(_err) => {
-                        eprintln!("received AppendEntriesResponse with an error from the host {:?}", peer);
+                        Err(_err) => {
+                            eprintln!("received AppendEntriesResponse with an error from the host {:?}", peer);
+                        }
                     }
                 }
-            }
+            )
         );
     }
 }
@@ -226,6 +231,7 @@ mod tests {
     use crate::net::builder::log::ReplicateLogResponseBuilder;
     use crate::net::rpc::grpc::Command;
     use crate::state::{ReplicaRole, State};
+    use crate::net::rpc::grpc::AppendEntries;
 
     #[test]
     fn service_request_with_term() {
@@ -259,7 +265,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         assert_eq!(1, payload.term);
     }
 
@@ -293,7 +299,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         assert_eq!(None, payload.leader_commit_index);
     }
 
@@ -338,7 +344,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         assert_eq!(Some(0), payload.leader_commit_index);
     }
 
@@ -372,7 +378,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         assert_eq!(None, payload.previous_log_index);
         assert_eq!(None, payload.previous_log_term);
     }
@@ -407,7 +413,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         assert_eq!(Some(0), payload.previous_log_index);
         assert_eq!(None, payload.previous_log_term);
     }
@@ -449,7 +455,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         assert_eq!(Some(0), payload.previous_log_index);
         assert_eq!(Some(1), payload.previous_log_term);
     }
@@ -484,7 +490,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         assert_eq!(None, payload.entry);
     }
 
@@ -525,7 +531,7 @@ mod tests {
             term,
         );
 
-        let payload = service_request.get_payload();
+        let payload = service_request.into_payload().downcast::<AppendEntries>().unwrap();
         let entry = payload.entry.as_ref().unwrap();
         assert_eq!(1, entry.term);
         assert_eq!(0, entry.index);
@@ -622,7 +628,7 @@ mod tests {
             follower_state,
             state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-            Ok(ReplicateLogResponseBuilder::failure_response(3, 10)),
+            Ok(Box::new(ReplicateLogResponseBuilder::failure_response(3, 10))),
         );
 
         runtime.block_on(async {
@@ -667,7 +673,7 @@ mod tests {
             follower_state.clone(),
             state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-            Ok(ReplicateLogResponseBuilder::failure_response(3, 10)),
+            Ok(Box::new(ReplicateLogResponseBuilder::failure_response(3, 10))),
         );
 
         runtime.block_on(async {
@@ -677,14 +683,14 @@ mod tests {
                 follower_state.clone(),
                 state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-                Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
+                Ok(Box::new(ReplicateLogResponseBuilder::success_response(0, 10, 0))),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
                 state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-                Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
+                Ok(Box::new(ReplicateLogResponseBuilder::success_response(0, 10, 0))),
             ).unwrap().await;
 
             assert_eq!(ReplicaRole::Follower, state.get_role());
@@ -726,7 +732,7 @@ mod tests {
             follower_state.clone(),
             state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-            Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
+            Ok(Box::new(ReplicateLogResponseBuilder::success_response(0, 10, 0))),
         );
 
         runtime.block_on(async {
@@ -769,7 +775,7 @@ mod tests {
             follower_state.clone(),
             state.clone(),
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-            Ok(ReplicateLogResponseBuilder::failure_response(1, 10)),
+            Ok(Box::new(ReplicateLogResponseBuilder::failure_response(1, 10))),
         );
 
         runtime.block_on(async {
@@ -811,14 +817,14 @@ mod tests {
                 follower_state.clone(),
                 state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-                Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
+                Ok(Box::new(ReplicateLogResponseBuilder::success_response(0, 10, 0))),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
                 state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
-                Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
+                Ok(Box::new(ReplicateLogResponseBuilder::success_response(0, 10, 0))),
             ).unwrap().await;
 
             assert_eq!(0, state.get_replicated_log_reference().get_commit_index().unwrap());
@@ -859,21 +865,21 @@ mod tests {
                 follower_state.clone(),
                 state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061),
-                Ok(ReplicateLogResponseBuilder::failure_response(0, 10)),
+                Ok(Box::new(ReplicateLogResponseBuilder::failure_response(0, 10))),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
                 state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
-                Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
+                Ok(Box::new(ReplicateLogResponseBuilder::success_response(0, 10, 0))),
             ).unwrap().await;
 
             FollowerState::append_entries_response_handler(
                 follower_state.clone(),
                 state.clone(),
                 HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2062),
-                Ok(ReplicateLogResponseBuilder::success_response(0, 10, 0)),
+                Ok(Box::new(ReplicateLogResponseBuilder::success_response(0, 10, 0))),
             ).unwrap().await;
 
             assert_eq!(0, state.get_replicated_log_reference().get_commit_index().unwrap());
