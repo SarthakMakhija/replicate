@@ -24,8 +24,12 @@ impl Peers {
         return self.peers.iter().map(|peer| peer.address).collect();
     }
 
-    pub(crate) fn all_peers(&self) -> Vec<Peer> {
-        return self.peers.clone();
+    pub(crate) fn all_peers_excluding(&self, peer: Peer) -> Vec<Peer> {
+        return self.peers.iter().filter(|a_peer| a_peer.ne(&&peer)).map(|a_peer| a_peer.clone()).collect();
+    }
+
+    pub(crate) fn total_peer_count_excluding(&self, peer: Peer) -> usize {
+        self.peers.iter().filter(|a_peer| a_peer.ne(&&peer)).count()
     }
 }
 

@@ -58,7 +58,7 @@ impl Replica {
         let peers = Peers::new(peer_addresses);
         let singular_update_queue = Arc::new(SingularUpdateQueue::new());
         let pipeline_by_peer = peers
-            .all_peers()
+            .all_peers_excluding(Peer::new(self_address))
             .iter()
             .map(|peer| (peer.clone(), Arc::new(Pipeline::new(peer.clone(), self_address, singular_update_queue.clone()))))
             .collect::<HashMap<Peer, Arc<Pipeline>>>();
@@ -89,12 +89,9 @@ impl Replica {
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response> {
-        let mut send_task_handles = Vec::new();
-        for peer in peers.all_peers() {
-            if peer.has_address(&self.self_address) {
-                continue;
-            }
 
+        let mut send_task_handles = Vec::new();
+        for peer in peers.all_peers_excluding(Peer::new(self.self_address)) {
             let service_request: ServiceRequest<Payload, Response> = service_request_constructor();
             send_task_handles.push(self.send(
                 &self.request_waiting_list,
@@ -136,11 +133,8 @@ impl Replica {
                                            response_callback_generator: U)
         where S: Fn() -> ServiceRequest<PipelinedRequest, PipelinedResponse>,
               U: Fn() -> Option<ResponseCallbackType> {
-        for peer in peers.all_peers() {
-            if peer.has_address(&self.self_address) {
-                continue;
-            }
 
+        for peer in peers.all_peers_excluding(Peer::new(self.self_address)) {
             let peer_address = peer.get_address().clone();
             let service_request = service_request_constructor();
             let peer_handler_generator = response_handler_generator.clone();
@@ -173,8 +167,7 @@ impl Replica {
     }
 
     pub fn total_peer_count(&self) -> usize {
-        let self_address = self.self_address;
-        return self.peers.get_peer_addresses().iter().filter(|peer_address| peer_address.ne(&&self_address)).count();
+        return self.peers.total_peer_count_excluding(Peer::new(self.self_address));
     }
 
     pub fn get_self_address(&self) -> HostAndPort {
