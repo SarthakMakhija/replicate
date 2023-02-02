@@ -1,9 +1,10 @@
 use tonic::Request;
+use tonic::transport::Channel;
 
-use crate::net::connect::host_and_port::HostAndPort;
-use crate::net::connect::service_client::ServiceRequest;
 use crate::net::connect::error::ServiceResponseError;
+use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::host_port_extractor::HostAndPortHeaderAdder;
+use crate::net::connect::service_client::ServiceRequest;
 
 pub struct AsyncNetwork {}
 
@@ -13,18 +14,48 @@ impl AsyncNetwork {
         source_address: HostAndPort,
         target_address: HostAndPort,
     ) -> Result<R, ServiceResponseError>
-        where Payload: Send { return Self::send(service_request, Some(source_address), target_address).await; }
+        where Payload: Send {
+        return Self::send(
+            service_request,
+            Some(source_address),
+            target_address,
+            None,
+        ).await;
+    }
 
     pub async fn send_without_source_footprint<Payload: Send, R>(
         service_request: ServiceRequest<Payload, R>,
         target_address: HostAndPort,
     ) -> Result<R, ServiceResponseError>
-        where Payload: Send { return Self::send(service_request, None, target_address).await; }
+        where Payload: Send {
+        return Self::send(
+            service_request,
+            None,
+            target_address,
+            None,
+        ).await;
+    }
+
+    pub async fn send_with_source_footprint_on<Payload: Send, R>(
+        service_request: ServiceRequest<Payload, R>,
+        source_address: HostAndPort,
+        target_address: HostAndPort,
+        channel: Option<Channel>,
+    ) -> Result<R, ServiceResponseError>
+        where Payload: Send {
+        return Self::send(
+            service_request,
+            Some(source_address),
+            target_address,
+            channel,
+        ).await;
+    }
 
     async fn send<Payload: Send, R>(
         service_request: ServiceRequest<Payload, R>,
         source_address: Option<HostAndPort>,
         target_address: HostAndPort,
+        channel: Option<Channel>,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
         let client = &service_request.service_client;
@@ -35,7 +66,7 @@ impl AsyncNetwork {
             request.add_host_port(address);
         }
 
-        let result = client.call(request, target_address, None).await;
+        let result = client.call(request, target_address, channel).await;
         return match result {
             Ok(response) => { Ok(response.into_inner()) }
             Err(e) => { Err(e) }
@@ -79,10 +110,10 @@ mod tests {
 
         use crate::net::connect::async_network::tests::setup_error::TestError;
         use crate::net::connect::correlation_id::{CorrelationId, CorrelationIdGenerator};
-        use crate::net::connect::host_port_extractor::HostAndPortExtractor;
-        use crate::net::connect::host_and_port::HostAndPort;
-        use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
         use crate::net::connect::error::ServiceResponseError;
+        use crate::net::connect::host_and_port::HostAndPort;
+        use crate::net::connect::host_port_extractor::HostAndPortExtractor;
+        use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
 
         pub(crate) struct TestRequest {
             pub(crate) id: u8,

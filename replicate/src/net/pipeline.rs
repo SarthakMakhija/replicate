@@ -4,9 +4,11 @@ use std::fmt;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tonic::transport::Channel;
 
 use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::error::ServiceResponseError;
@@ -22,7 +24,7 @@ type ResponseHandlerGenerator = Box<dyn Fn(HostAndPort, Result<PipelinedResponse
 
 struct ResponseHandlerByRequest {
     service_request: ServiceRequest<PipelinedRequest, PipelinedResponse>,
-    response_handler_generator: Arc<ResponseHandlerGenerator>
+    response_handler_generator: Arc<ResponseHandlerGenerator>,
 }
 
 struct Pipeline {
@@ -42,7 +44,7 @@ impl Pipeline {
             runtime: Self::single_threaded_runtime(),
         };
 
-        pipeline.start(receiver, pipeline.peer, pipeline.self_address, singular_update_queue);
+        pipeline.start(receiver, pipeline.peer, pipeline.self_address, singular_update_queue, BuiltInChannelBuilder::new());
         return pipeline;
     }
 
@@ -61,21 +63,21 @@ impl Pipeline {
              mut receiver: Receiver<ResponseHandlerByRequest>,
              peer: Peer,
              source_address: HostAndPort,
-             singular_update_queue: Arc<SingularUpdateQueue>) {
-
+             singular_update_queue: Arc<SingularUpdateQueue>,
+             channel_builder: impl ChannelBuilder) {
         let peer_address = peer.get_address().clone();
         self.runtime.spawn(async move {
+            let mut channel: Option<Channel> = None;
             while let Some(response_handler_by_request) = receiver.recv().await {
-                let service_request = response_handler_by_request.service_request;
-                let response_handler_generator = response_handler_by_request.response_handler_generator;
-
-                let response = AsyncNetwork::send_with_source_footprint(
-                    service_request,
+                channel = channel_builder.build(&peer).await;
+                let response = AsyncNetwork::send_with_source_footprint_on(
+                    response_handler_by_request.service_request,
                     source_address,
                     peer_address,
+                    channel,
                 ).await;
 
-                if let Some(handler) = response_handler_generator(peer_address, response) {
+                if let Some(handler) = (response_handler_by_request.response_handler_generator)(peer_address, response) {
                     let _ = singular_update_queue.submit(handler).await;
                 }
             }
@@ -84,6 +86,29 @@ impl Pipeline {
 
     fn single_threaded_runtime() -> Runtime {
         return Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
+    }
+}
+
+#[async_trait]
+pub(crate) trait ChannelBuilder: Send + Sync + 'static {
+    async fn build(&self, peer: &Peer) -> Option<Channel>;
+}
+
+struct BuiltInChannelBuilder {}
+
+impl BuiltInChannelBuilder {
+    fn new() -> Self {
+        return BuiltInChannelBuilder {};
+    }
+}
+
+#[async_trait]
+impl ChannelBuilder for BuiltInChannelBuilder {
+    async fn build(&self, peer: &Peer) -> Option<Channel> {
+        return match peer.get_endpoint().connect().await {
+            Ok(channel) => Some(channel),
+            Err(_) => None
+        };
     }
 }
 
