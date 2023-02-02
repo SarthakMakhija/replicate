@@ -90,8 +90,8 @@ impl Replica {
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response> {
         let mut send_task_handles = Vec::new();
-        for address in peers.get_peer_addresses() {
-            if address.eq(&self.self_address) {
+        for peer in peers.all_peers() {
+            if peer.has_address(&self.self_address) {
                 continue;
             }
 
@@ -99,7 +99,7 @@ impl Replica {
             send_task_handles.push(self.send(
                 &self.request_waiting_list,
                 service_request,
-                address.clone(),
+                peer.get_address().clone(),
                 response_callback.clone(),
             ));
         }
