@@ -8,7 +8,7 @@ use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::peers::Peers;
 use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse};
 use replicate::net::replica::Replica;
-use replicate::singular_update_queue::singular_update_queue::AsyncBlock;
+use replicate::singular_update_queue::singular_update_queue::{AsyncBlock, ToAsyncBlock};
 
 use crate::net::rpc::grpc::{AppendEntriesResponse, Command, Entry};
 use crate::state::{ReplicaRole, State};
@@ -174,43 +174,41 @@ impl FollowerState {
     ) -> Option<AsyncBlock> {
         let inner_follower_state = follower_state.clone();
         return Some(
-            Box::pin(
-                async move {
-                    match response {
-                        Ok(pipelined_response) => {
-                            let append_entries_response = pipelined_response.downcast::<AppendEntriesResponse>().unwrap();
-                            let state = state.clone();
-                            let term = state.get_term();
+            async move {
+                match response {
+                    Ok(pipelined_response) => {
+                        let append_entries_response = pipelined_response.downcast::<AppendEntriesResponse>().unwrap();
+                        let state = state.clone();
+                        let term = state.get_term();
 
-                            if append_entries_response.term > term {
-                                state.clone().change_to_follower(append_entries_response.term);
-                            }
-                            let replica_role = state.get_role();
-                            if replica_role == ReplicaRole::Leader {
-                                if append_entries_response.success {
-                                    let replicated_log = state.get_replicated_log_reference();
-                                    let log_entry_index = append_entries_response.log_entry_index.unwrap() as usize;
-
-                                    replicated_log.acknowledge_log_entry_at(log_entry_index);
-                                    if replicated_log.is_entry_replicated(log_entry_index) {
-                                        replicated_log.commit(|commit_index| {
-                                            state.get_pending_committed_log_entries_reference().handle_response(
-                                                commit_index,
-                                                state.get_replica_reference().get_self_address(),
-                                                Ok(Box::new(())),
-                                            );
-                                        });
-                                    }
-                                }
-                                inner_follower_state.register(state, *append_entries_response, peer);
-                            }
+                        if append_entries_response.term > term {
+                            state.clone().change_to_follower(append_entries_response.term);
                         }
-                        Err(_err) => {
-                            eprintln!("received AppendEntriesResponse with an error from the host {:?}", peer);
+                        let replica_role = state.get_role();
+                        if replica_role == ReplicaRole::Leader {
+                            if append_entries_response.success {
+                                let replicated_log = state.get_replicated_log_reference();
+                                let log_entry_index = append_entries_response.log_entry_index.unwrap() as usize;
+
+                                replicated_log.acknowledge_log_entry_at(log_entry_index);
+                                if replicated_log.is_entry_replicated(log_entry_index) {
+                                    replicated_log.commit(|commit_index| {
+                                        state.get_pending_committed_log_entries_reference().handle_response(
+                                            commit_index,
+                                            state.get_replica_reference().get_self_address(),
+                                            Ok(Box::new(())),
+                                        );
+                                    });
+                                }
+                            }
+                            inner_follower_state.register(state, *append_entries_response, peer);
                         }
                     }
+                    Err(_err) => {
+                        eprintln!("received AppendEntriesResponse with an error from the host {:?}", peer);
+                    }
                 }
-            )
+            }.async_block()
         );
     }
 }
@@ -229,9 +227,9 @@ mod tests {
     use crate::follower_state::{FollowerState, NextLogIndex};
     use crate::heartbeat_config::HeartbeatConfig;
     use crate::net::builder::log::ReplicateLogResponseBuilder;
+    use crate::net::rpc::grpc::AppendEntries;
     use crate::net::rpc::grpc::Command;
     use crate::state::{ReplicaRole, State};
-    use crate::net::rpc::grpc::AppendEntries;
 
     #[test]
     fn service_request_with_term() {

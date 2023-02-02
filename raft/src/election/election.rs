@@ -8,7 +8,7 @@ use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::pipeline::PipelinedResponse;
 use replicate::net::request_waiting_list::response_callback::ResponseCallback;
-use replicate::singular_update_queue::singular_update_queue::AsyncBlock;
+use replicate::singular_update_queue::singular_update_queue::{AsyncBlock, ToAsyncBlock};
 
 use crate::net::builder::request_vote::RequestVoteResponseBuilder;
 use crate::net::rpc::grpc::RequestVoteResponse;
@@ -75,22 +75,20 @@ impl Election {
         response: Result<PipelinedResponse, ServiceResponseError>,
     ) -> Option<AsyncBlock> {
         return Some(
-            Box::pin(
-                async move {
-                    match response {
-                        Ok(pipelined_response) => {
-                            let request_vote_response = pipelined_response.downcast::<RequestVoteResponse>().unwrap();
-                            println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
-                            let _ = state
-                                .get_replica_reference()
-                                .register_response(request_vote_response.correlation_id, peer, Ok(request_vote_response));
-                        }
-                        Err(_err) => {
-                            eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
-                        }
+            async move {
+                match response {
+                    Ok(pipelined_response) => {
+                        let request_vote_response = pipelined_response.downcast::<RequestVoteResponse>().unwrap();
+                        println!("received RequestVoteResponse with voted? {}", request_vote_response.voted);
+                        let _ = state
+                            .get_replica_reference()
+                            .register_response(request_vote_response.correlation_id, peer, Ok(request_vote_response));
+                    }
+                    Err(_err) => {
+                        eprintln!("received RequestVoteResponse with an error from the host {:?}", peer);
                     }
                 }
-            )
+            }.async_block()
         );
     }
 }

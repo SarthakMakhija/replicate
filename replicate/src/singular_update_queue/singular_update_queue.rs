@@ -6,11 +6,21 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::mpsc::error::SendError;
 
+pub type AsyncBlock = Pin<Box<dyn Future<Output=()> + Send + 'static>>;
+
 pub(crate) struct Task {
-    block: Pin<Box<dyn Future<Output=()> + Send>>,
+    block: AsyncBlock,
 }
 
-pub type AsyncBlock = Pin<Box<dyn Future<Output=()> + Send + 'static>>;
+pub trait ToAsyncBlock {
+    fn async_block(self) -> AsyncBlock;
+}
+
+impl<T: Future<Output=()> + Send + 'static> ToAsyncBlock for T {
+    fn async_block(self) -> AsyncBlock {
+        return Box::pin(self);
+    }
+}
 
 pub(crate) struct SingularUpdateQueue {
     sender: Sender<Task>,
@@ -38,7 +48,7 @@ impl SingularUpdateQueue {
     pub(crate) async fn add<F>(&self, handler: F) -> Result<(), SendError<Task>>
         where
             F: Future<Output=()> + Send + 'static {
-        let block = Box::pin(handler);
+        let block = handler.async_block();
         return self.sender.clone().send(Task { block }).await;
     }
 
@@ -66,7 +76,7 @@ mod tests {
 
     use tokio::sync::mpsc;
 
-    use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
+    use crate::singular_update_queue::singular_update_queue::{SingularUpdateQueue, ToAsyncBlock};
 
     #[tokio::test]
     async fn get_with_insert_by_a_single_task() {
@@ -158,10 +168,10 @@ mod tests {
         let singular_update_queue = SingularUpdateQueue::new();
 
         let (sender, mut receiver) = mpsc::channel(1);
-        let _ = singular_update_queue.submit(Box::pin(async move {
+        let _ = singular_update_queue.submit(async move {
             storage.write().unwrap().insert("WAL".to_string(), "write-ahead log".to_string());
             sender.send(()).await.unwrap();
-        })).await;
+        }.async_block()).await;
 
         let _ = receiver.recv().await.unwrap();
         let read_storage = readable_storage.read().unwrap();

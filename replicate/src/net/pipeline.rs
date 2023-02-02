@@ -160,7 +160,7 @@ mod tests {
     use crate::net::connect::service_client::{ServiceClientProvider, ServiceRequest};
     use crate::net::peers::Peer;
     use crate::net::pipeline::{Pipeline, PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest, ToPipelinedResponse};
-    use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
+    use crate::singular_update_queue::singular_update_queue::{SingularUpdateQueue, ToAsyncBlock};
 
     pub(crate) struct TestRequest {
         pub(crate) id: u8,
@@ -251,10 +251,10 @@ mod tests {
         let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_host, response: Result<PipelinedResponse, ServiceResponseError>| {
             let inner_sender = sender.clone();
             return Some(
-                Box::pin(async move {
+                async move {
                     let test_response = response.unwrap().downcast::<TestResponse>().unwrap();
                     let _ = inner_sender.send(test_response).await;
-                })
+                }.async_block()
             );
         });
 
@@ -275,10 +275,10 @@ mod tests {
         let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_host, response: Result<PipelinedResponse, ServiceResponseError>| {
             let inner_sender = sender.clone();
             return Some(
-                Box::pin(async move {
+                async move {
                     let get_value_response = response.unwrap().downcast::<GetValueResponse>().unwrap();
                     let _ = inner_sender.send(get_value_response).await;
-                })
+                }.async_block()
             );
         });
 

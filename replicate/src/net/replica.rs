@@ -236,10 +236,10 @@ mod tests {
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;
     use crate::net::connect::service_client::ServiceRequest;
     use crate::net::peers::Peers;
-    use crate::net::pipeline::{PipelinedRequest, PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest};
+    use crate::net::pipeline::{PipelinedResponse, ResponseHandlerGenerator, ToPipelinedRequest};
     use crate::net::replica::Replica;
     use crate::net::replica::tests::setup::{FixedCorrelationIdGenerator, GetValueRequest, GetValueRequestFailureClient, GetValueRequestSuccessClient, GetValueResponse, ResponseCounter};
-    use crate::singular_update_queue::singular_update_queue::AsyncBlock;
+    use crate::singular_update_queue::singular_update_queue::{AsyncBlock, ToAsyncBlock};
 
     mod setup {
         use std::error::Error;
@@ -715,13 +715,13 @@ mod tests {
             let replica = inner_replica.clone();
             let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_peer, _response: Result<PipelinedResponse, ServiceResponseError>| {
                 let replica = inner_replica.clone();
-                return Some(Box::pin(async move {
+                return Some(async move {
                     replica.register_response(
                         30,
                         self_address,
                         Ok(Box::new(String::from("success response"))),
                     )
-                }));
+                }.async_block());
             });
             let response_handler_generator = Arc::new(response_handler_generator);
 
@@ -767,13 +767,13 @@ mod tests {
             let replica = inner_replica.clone();
             let response_handler_generator: ResponseHandlerGenerator = Box::new(move |_peer, _response: Result<PipelinedResponse, ServiceResponseError>| {
                 let replica = inner_replica.clone();
-                return Some(Box::pin(async move {
+                return Some(async move {
                     replica.register_response(
                         30,
                         self_address,
                         Ok(Box::new(String::from("success response"))),
                     )
-                }));
+                }.async_block());
             });
             let callback = AsyncQuorumCallback::<String>::new(1, 1);
             let peers = Peers::new(vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1989)]);
@@ -794,9 +794,9 @@ mod tests {
 
     fn handler(response_counter: &Arc<ResponseCounter>, value_add: i8, sender: Sender<()>) -> AsyncBlock {
         let response_counter = response_counter.clone();
-        return Box::pin(async move {
+        return async move {
             response_counter.counter.fetch_add(value_add, Ordering::SeqCst);
             let _ = sender.send(()).await;
-        });
+        }.async_block();
     }
 }

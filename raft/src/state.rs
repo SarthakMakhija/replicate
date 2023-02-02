@@ -9,7 +9,7 @@ use replicate::net::pipeline::PipelinedResponse;
 use replicate::net::replica::{Replica, ReplicaId};
 use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
-use replicate::singular_update_queue::singular_update_queue::AsyncBlock;
+use replicate::singular_update_queue::singular_update_queue::{AsyncBlock, ToAsyncBlock};
 
 use crate::election::election::Election;
 use crate::follower_state::FollowerState;
@@ -132,12 +132,12 @@ impl State {
 
     pub(crate) fn get_heartbeat_response_handler(self: Arc<State>, response: PipelinedResponse) -> AsyncBlock {
         let inner_state = self.clone();
-        return Box::pin(async move {
+        return async move {
             let append_entry_response = response.downcast::<AppendEntriesResponse>().unwrap();
             if !append_entry_response.success {
                 inner_state.change_to_follower(append_entry_response.term);
             }
-        });
+        }.async_block();
     }
 
     pub(crate) fn get_heartbeat_checker<F>(self: Arc<State>, heartbeat_timeout: Duration, election_starter: F) -> impl Future<Output=Result<(), AnyError>>
