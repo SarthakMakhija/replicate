@@ -4,6 +4,7 @@ use tonic::transport::Channel;
 
 use replicate::net::connect::error::ServiceResponseError;
 use replicate::net::connect::host_and_port::HostAndPort;
+use replicate::net::connect::request_transformer::RequestTransformer;
 use replicate::net::connect::service_client::ServiceClientProvider;
 use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedResponse};
 
@@ -20,8 +21,7 @@ pub struct ReplicateLogClient {}
 #[async_trait]
 impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for RequestVoteClient {
     async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
-        let payload = request.into_inner().downcast::<RequestVote>().unwrap();
-        let request = Request::new(*payload);
+        let request = request.transform::<RequestVote>();
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_request_vote(request).await?;
 
@@ -32,8 +32,7 @@ impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for RequestVoteC
 #[async_trait]
 impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for HeartbeatClient {
     async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
-        let payload = request.into_inner().downcast::<AppendEntries>().unwrap();
-        let request = Request::new(*payload);
+        let request = request.transform::<AppendEntries>();
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_heartbeat(request).await?;
 
@@ -44,8 +43,7 @@ impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for HeartbeatCli
 #[async_trait]
 impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for ReplicateLogClient {
     async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
-        let payload = request.into_inner().downcast::<AppendEntries>().unwrap();
-        let request = Request::new(*payload);
+        let request = request.transform::<AppendEntries>();
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_replicate_log(request).await?;
 

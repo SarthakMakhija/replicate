@@ -7,3 +7,4 @@ pub mod random_correlation_id_generator;
 pub mod host_port_extractor;
 pub mod extension;
 pub mod error;
+pub mod request_transformer;
