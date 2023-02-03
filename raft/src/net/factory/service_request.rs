@@ -4,6 +4,8 @@ use replicate::net::connect::service_client::ServiceRequest;
 use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedRequest};
 use replicate::net::replica::ReplicaId;
 
+use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse};
+
 use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
 use crate::net::builder::log::ReplicateLogRequestBuilder;
 use crate::net::builder::request_vote::RequestVoteBuilder;
@@ -16,7 +18,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                     term: u64,
                     last_log_index: Option<u64>,
                     last_log_term: Option<u64>,
-    ) -> ServiceRequest<PipelinedRequest, PipelinedResponse> {
+    ) -> ServiceRequest<RequestVote, RequestVoteResponse> {
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
         let correlation_id = correlation_id_generator.generate();
 
@@ -27,7 +29,7 @@ pub(crate) trait ServiceRequestFactory: Send + Sync {
                 correlation_id,
                 last_log_index,
                 last_log_term,
-            ).pipeline_request(),
+            ),
             Box::new(RequestVoteClient {}),
             correlation_id,
         );

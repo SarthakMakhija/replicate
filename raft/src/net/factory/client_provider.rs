@@ -10,7 +10,7 @@ use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedR
 
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::raft_client::RaftClient;
-use crate::net::rpc::grpc::RequestVote;
+use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse};
 
 pub struct RequestVoteClient {}
 
@@ -19,13 +19,12 @@ pub struct HeartbeatClient {}
 pub struct ReplicateLogClient {}
 
 #[async_trait]
-impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for RequestVoteClient {
-    async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
-        let request = request.transform::<RequestVote>();
+impl ServiceClientProvider<RequestVote, RequestVoteResponse> for RequestVoteClient {
+    async fn call(&self, request: Request<RequestVote>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
         let mut client = RaftClient::connect(address.as_string_with_http()).await?;
         let response = client.acknowledge_request_vote(request).await?;
 
-        return Ok(Response::new(response.into_inner().pipeline_response()));
+        return Ok(response);
     }
 }
 
@@ -70,7 +69,7 @@ mod tests {
     async fn request_vote_client_with_connection_error() {
         let client = RequestVoteClient {};
         let request = Request::new(
-            RequestVoteBuilder::request_vote(10, 1, 10).pipeline_request()
+            RequestVoteBuilder::request_vote(10, 1, 10)
         );
         let address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7080);
 
