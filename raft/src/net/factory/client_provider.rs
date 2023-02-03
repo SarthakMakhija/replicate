@@ -21,6 +21,7 @@ pub struct ReplicateLogClient {}
 #[async_trait]
 impl ServiceClientProvider<RequestVote, RequestVoteResponse> for RequestVoteClient {
     async fn call(&self, request: Request<RequestVote>, address: HostAndPort, channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
+        println!("RequestVote client provider, received existing channel? {}", channel.is_some());
         let mut client = match channel {
             None => RaftClient::connect(address.as_string_with_http()).await?,
             Some(channel) => RaftClient::new(channel)
@@ -33,6 +34,7 @@ impl ServiceClientProvider<RequestVote, RequestVoteResponse> for RequestVoteClie
 #[async_trait]
 impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for HeartbeatClient {
     async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+        println!("Heartbeat client provider, received existing channel? {}", channel.is_some());
         let request = request.transform::<AppendEntries>();
         let mut client = match channel {
             None => RaftClient::connect(address.as_string_with_http()).await?,
@@ -46,6 +48,7 @@ impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for HeartbeatCli
 #[async_trait]
 impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for ReplicateLogClient {
     async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+        println!("ReplicateLog client provider, received existing channel? {}", channel.is_some());
         let request = request.transform::<AppendEntries>();
         let mut client = match channel {
             None => RaftClient::connect(address.as_string_with_http()).await?,
