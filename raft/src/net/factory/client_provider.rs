@@ -8,9 +8,9 @@ use replicate::net::connect::request_transformer::RequestTransformer;
 use replicate::net::connect::service_client::ServiceClientProvider;
 use replicate::net::pipeline::{PipelinedRequest, PipelinedResponse, ToPipelinedResponse};
 
+use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse};
 use crate::net::rpc::grpc::AppendEntries;
 use crate::net::rpc::grpc::raft_client::RaftClient;
-use crate::net::rpc::grpc::{RequestVote, RequestVoteResponse};
 
 pub struct RequestVoteClient {}
 
@@ -20,32 +20,38 @@ pub struct ReplicateLogClient {}
 
 #[async_trait]
 impl ServiceClientProvider<RequestVote, RequestVoteResponse> for RequestVoteClient {
-    async fn call(&self, request: Request<RequestVote>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
-        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
+    async fn call(&self, request: Request<RequestVote>, address: HostAndPort, channel: Option<Channel>) -> Result<Response<RequestVoteResponse>, ServiceResponseError> {
+        let mut client = match channel {
+            None => RaftClient::connect(address.as_string_with_http()).await?,
+            Some(channel) => RaftClient::new(channel)
+        };
         let response = client.acknowledge_request_vote(request).await?;
-
         return Ok(response);
     }
 }
 
 #[async_trait]
 impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for HeartbeatClient {
-    async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+    async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
         let request = request.transform::<AppendEntries>();
-        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
+        let mut client = match channel {
+            None => RaftClient::connect(address.as_string_with_http()).await?,
+            Some(channel) => RaftClient::new(channel)
+        };
         let response = client.acknowledge_heartbeat(request).await?;
-
         return Ok(Response::new(response.into_inner().pipeline_response()));
     }
 }
 
 #[async_trait]
 impl ServiceClientProvider<PipelinedRequest, PipelinedResponse> for ReplicateLogClient {
-    async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, _channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
+    async fn call(&self, request: Request<PipelinedRequest>, address: HostAndPort, channel: Option<Channel>) -> Result<Response<PipelinedResponse>, ServiceResponseError> {
         let request = request.transform::<AppendEntries>();
-        let mut client = RaftClient::connect(address.as_string_with_http()).await?;
+        let mut client = match channel {
+            None => RaftClient::connect(address.as_string_with_http()).await?,
+            Some(channel) => RaftClient::new(channel)
+        };
         let response = client.acknowledge_replicate_log(request).await?;
-
         return Ok(Response::new(response.into_inner().pipeline_response()));
     }
 }
@@ -58,7 +64,7 @@ mod tests {
 
     use replicate::net::connect::host_and_port::HostAndPort;
     use replicate::net::connect::service_client::ServiceClientProvider;
-    use replicate::net::pipeline::{ToPipelinedRequest};
+    use replicate::net::pipeline::ToPipelinedRequest;
 
     use crate::net::builder::heartbeat::HeartbeatRequestBuilder;
     use crate::net::builder::log::ReplicateLogRequestBuilder;
