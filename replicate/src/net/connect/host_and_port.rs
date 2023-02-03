@@ -45,7 +45,7 @@ impl HostAndPort {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use crate::net::connect::host_and_port::HostAndPort;

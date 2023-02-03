@@ -65,7 +65,7 @@ pub trait HostAndPortHeaderAdder {
     fn add_host_port(&mut self, address: HostAndPort);
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use tonic::Request;

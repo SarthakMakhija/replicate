@@ -4,7 +4,6 @@ use std::fmt;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -19,8 +18,9 @@ use crate::singular_update_queue::singular_update_queue::{AsyncBlock, SingularUp
 
 pub type PipelinedRequest = Box<dyn Any + Send>;
 pub type PipelinedResponse = Box<dyn Any + Send>;
-
 pub type ResponseHandlerGenerator = Box<dyn Fn(HostAndPort, Result<PipelinedResponse, ServiceResponseError>) -> Option<AsyncBlock> + Send + Sync + 'static>;
+
+type DropMessage = bool;
 
 pub trait ToPipelinedRequest {
     fn pipeline_request(self) -> PipelinedRequest;
@@ -55,7 +55,40 @@ pub(crate) struct Pipeline {
 }
 
 impl Pipeline {
+
+    #[cfg(not(feature = "test_type_unit"))]
     pub(crate) fn new(peer: Peer, self_address: HostAndPort, singular_update_queue: Arc<SingularUpdateQueue>) -> Self {
+        return Self::initialize(
+            peer,
+            self_address,
+            singular_update_queue,
+            |peer, err| {
+                eprintln!("error while connecting to {:?}, {:?}", peer.get_address(), err);
+                true
+            },
+        );
+    }
+
+    #[cfg(feature = "test_type_unit")]
+    pub(crate) fn new(peer: Peer, self_address: HostAndPort, singular_update_queue: Arc<SingularUpdateQueue>) -> Self {
+        return Self::initialize(
+            peer,
+            self_address,
+            singular_update_queue,
+            |peer, err| {
+                eprintln!("error while connecting to {:?}, {:?}", peer.get_address(), err);
+                false
+            },
+        );
+    }
+
+    fn initialize<E>(
+        peer: Peer,
+        self_address: HostAndPort,
+        singular_update_queue: Arc<SingularUpdateQueue>,
+        channel_connection_error_handler: E,
+    ) -> Pipeline
+        where E: Fn(&Peer, tonic::transport::Error) -> DropMessage + Send + 'static {
         let (sender, receiver) = mpsc::channel(100);
         let pipeline = Pipeline {
             peer,
@@ -64,7 +97,13 @@ impl Pipeline {
             runtime: Self::single_threaded_runtime(),
         };
 
-        pipeline.start(receiver, pipeline.peer, pipeline.self_address, singular_update_queue, BuiltInChannelBuilder::new());
+        pipeline.start(
+            receiver,
+            pipeline.peer,
+            pipeline.self_address,
+            singular_update_queue,
+            channel_connection_error_handler
+        );
         return pipeline;
     }
 
@@ -79,17 +118,28 @@ impl Pipeline {
         }
     }
 
-    fn start(&self,
-             mut receiver: Receiver<ResponseHandlerByRequest>,
-             peer: Peer,
-             source_address: HostAndPort,
-             singular_update_queue: Arc<SingularUpdateQueue>,
-             channel_builder: impl ChannelBuilder) {
+    fn start<E>(&self,
+                mut receiver: Receiver<ResponseHandlerByRequest>,
+                peer: Peer,
+                source_address: HostAndPort,
+                singular_update_queue: Arc<SingularUpdateQueue>,
+                channel_connection_error_handler: E)
+        where E: Fn(&Peer, tonic::transport::Error) -> DropMessage + Send + 'static {
         let peer_address = peer.get_address().clone();
+
         self.runtime.spawn(async move {
+            let channel_builder = ChannelBuilder {};
             let mut channel: Option<Channel> = None;
+
             while let Some(response_handler_by_request) = receiver.recv().await {
-                channel = channel_builder.build(&peer).await;
+                let reconnected_channel = match channel_builder.build(&peer).await {
+                    Ok(channel) => Some(channel),
+                    Err(err) => {
+                        let drop_message = channel_connection_error_handler(&peer, err);
+                        if drop_message { continue; } else { None }
+                    }
+                };
+                channel = reconnected_channel;
                 let response = AsyncNetwork::send_with_source_footprint_on(
                     response_handler_by_request.service_request,
                     source_address,
@@ -109,26 +159,11 @@ impl Pipeline {
     }
 }
 
-#[async_trait]
-pub(crate) trait ChannelBuilder: Send + Sync + 'static {
-    async fn build(&self, peer: &Peer) -> Option<Channel>;
-}
+struct ChannelBuilder {}
 
-struct BuiltInChannelBuilder {}
-
-impl BuiltInChannelBuilder {
-    fn new() -> Self {
-        return BuiltInChannelBuilder {};
-    }
-}
-
-#[async_trait]
-impl ChannelBuilder for BuiltInChannelBuilder {
-    async fn build(&self, peer: &Peer) -> Option<Channel> {
-        return match peer.get_endpoint().connect().await {
-            Ok(channel) => Some(channel),
-            Err(_) => None
-        };
+impl ChannelBuilder {
+    async fn build(&self, peer: &Peer) -> Result<Channel, tonic::transport::Error> {
+        return peer.get_endpoint().connect().await;
     }
 }
 
@@ -143,7 +178,7 @@ impl<T> fmt::Display for PipelineSubmissionError<T> {
 
 impl<T: Debug> Error for PipelineSubmissionError<T> {}
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;

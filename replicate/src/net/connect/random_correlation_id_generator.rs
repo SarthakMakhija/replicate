@@ -20,7 +20,7 @@ impl RandomCorrelationIdGenerator {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use crate::net::connect::correlation_id::CorrelationIdGenerator;
     use crate::net::connect::random_correlation_id_generator::RandomCorrelationIdGenerator;

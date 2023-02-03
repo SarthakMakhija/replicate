@@ -43,7 +43,7 @@ impl ExpiredCallbackRemover {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::{Arc, Mutex};

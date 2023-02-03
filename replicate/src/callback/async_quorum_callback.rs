@@ -62,7 +62,7 @@ impl<Response: Any + Send + Sync + Debug> AsyncQuorumCallback<Response> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::borrow::BorrowMut;
     use std::collections::HashMap;

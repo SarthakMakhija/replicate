@@ -13,6 +13,7 @@ use replicate::net::replica::Replica;
 use raft::net::rpc::grpc::raft_server::RaftServer;
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn send_heartbeats_to_followers() {
     let runtime = Builder::new_multi_thread()
         .thread_name("send_heartbeats".to_string())

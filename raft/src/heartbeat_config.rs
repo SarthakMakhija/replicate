@@ -43,7 +43,7 @@ impl HeartbeatConfig {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::time::Duration;
 

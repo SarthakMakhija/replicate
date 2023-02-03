@@ -20,6 +20,7 @@ use replicate::net::connect::service_registration::{AllServicesShutdownHandle, S
 use replicate::net::replica::Replica;
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn replicate_log() {
     let runtime = Builder::new_multi_thread()
         .thread_name("replicate_log".to_string())
@@ -72,6 +73,7 @@ fn replicate_log() {
 }
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn replicate_multiple_logs_sequentially() {
     let runtime = Builder::new_multi_thread()
         .thread_name("replicate_multiple_logs_sequentially".to_string())

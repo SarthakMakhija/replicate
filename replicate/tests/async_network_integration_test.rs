@@ -45,6 +45,7 @@ impl ServiceClientProvider<EchoRequest, EchoResponse> for EchoServiceClient {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "test_type_integration")]
 async fn send() {
     let server_address = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
     let server_address_clone_one = server_address.clone();

@@ -48,6 +48,7 @@ impl ServiceClientProvider<PutKeyValueRequest, PutKeyValueResponse> for PutKeyVa
 }
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn put_key_value() {
     let runtime = Builder::new_multi_thread()
         .thread_name("put_key_value".to_string())
@@ -89,6 +90,7 @@ fn put_key_value() {
 }
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn get_value_for_non_existing_key() {
     let runtime = Builder::new_multi_thread()
         .thread_name("get_key_value".to_string())
@@ -124,6 +126,7 @@ fn get_value_for_non_existing_key() {
 }
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn get_latest_value_after_read_repair() {
     let runtime = Builder::new_multi_thread()
         .thread_name("read_repair_key_value".to_string())

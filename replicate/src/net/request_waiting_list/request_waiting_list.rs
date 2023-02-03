@@ -56,7 +56,7 @@ impl RequestWaitingList {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::collections::HashMap;
     use std::net::{IpAddr, Ipv4Addr};

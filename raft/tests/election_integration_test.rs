@@ -16,6 +16,7 @@ use replicate::net::connect::service_registration::{AllServicesShutdownHandle, S
 use replicate::net::replica::Replica;
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn start_elections_with_new_term() {
     let runtime = Builder::new_multi_thread()
         .thread_name("start_election".to_string())
@@ -58,6 +59,7 @@ fn start_elections_with_new_term() {
 }
 
 #[test]
+#[cfg(feature = "test_type_integration")]
 fn elect_a_leader() {
     let runtime = Builder::new_multi_thread()
         .thread_name("elect_a_leader".to_string())

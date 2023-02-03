@@ -33,7 +33,7 @@ impl<Payload> HostAndPortHeaderAdder for Request<Payload>  {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use tonic::metadata::MetadataValue;

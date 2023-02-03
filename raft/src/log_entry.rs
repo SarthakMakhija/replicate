@@ -81,7 +81,7 @@ impl LogCommand {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use crate::log_entry::LogEntry;
     use crate::net::rpc::grpc::Command;

@@ -20,7 +20,12 @@ jobs:
       with:
         version: '3.x'
     - uses: actions/checkout@v3
+
     - name: Build
       run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+
+    - name: Run unit tests
+      run: cargo test --no-default-features --features test_type_unit --verbose
+
+    - name: Run integration tests
+      run: cargo test --no-default-features --features test_type_integration --verbose

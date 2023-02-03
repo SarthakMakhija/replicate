@@ -242,7 +242,7 @@ impl ReplicatedLog {
 }
 
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::sync::{Arc, Mutex};
 

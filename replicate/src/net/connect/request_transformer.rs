@@ -17,7 +17,7 @@ impl RequestTransformer for Request<PipelinedRequest> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use tonic::Request;
     use crate::net::connect::host_port_extractor::{HostAndPortExtractor, REFERRAL_HOST};

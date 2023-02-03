@@ -71,7 +71,7 @@ impl SingleThreadedHeartbeatScheduler {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="test_type_unit"))]
 mod tests {
     use std::future::Future;
     use std::sync::Arc;

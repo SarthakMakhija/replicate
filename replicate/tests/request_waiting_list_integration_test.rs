@@ -11,6 +11,7 @@ use replicate::net::request_waiting_list::request_waiting_list::RequestWaitingLi
 use replicate::net::request_waiting_list::request_waiting_list_config::RequestWaitingListConfig;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "test_type_integration")]
 async fn handle_single_response_type() {
     let clock = Box::new(SystemClock::new());
     let request_waiting_list = RequestWaitingList::new(
@@ -51,6 +52,7 @@ async fn handle_single_response_type() {
 
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "test_type_integration")]
 async fn handle_multiple_response_types() {
     let clock = Box::new(SystemClock::new());
     let request_waiting_list = RequestWaitingList::new(
@@ -114,6 +116,7 @@ async fn handle_multiple_response_types() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "test_type_integration")]
 async fn handle_multiple_response_types_with_error() {
     let clock = Box::new(SystemClock::new());
     let request_waiting_list = RequestWaitingList::new(
