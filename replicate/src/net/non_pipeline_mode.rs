@@ -1,5 +1,9 @@
 use std::fmt::Debug;
+use std::future::Future;
+use std::sync::Arc;
+
 use tokio::task::JoinHandle;
+
 use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::error::ServiceResponseError;
@@ -9,19 +13,23 @@ use crate::net::peers::{Peer, Peers};
 use crate::net::replica::TotalFailedSends;
 use crate::net::request_waiting_list::request_waiting_list::RequestWaitingList;
 use crate::net::request_waiting_list::response_callback::ResponseCallbackType;
+use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 
 pub struct NonPipelineMode<'a> {
     self_address: HostAndPort,
+    singular_update_queue: Arc<SingularUpdateQueue>,
     request_waiting_list: &'a RequestWaitingList,
     peers: &'a Peers,
 }
 
 impl<'a> NonPipelineMode<'a> {
     pub(crate) fn new(self_address: HostAndPort,
+                      singular_update_queue: Arc<SingularUpdateQueue>,
                       request_waiting_list: &'a RequestWaitingList,
                       peers: &'a Peers) -> Self {
         return NonPipelineMode {
             self_address,
+            singular_update_queue,
             request_waiting_list,
             peers,
         };
@@ -43,7 +51,6 @@ impl<'a> NonPipelineMode<'a> {
         where Payload: Send + 'static,
               Response: Send + Debug + 'static,
               S: Fn() -> ServiceRequest<Payload, Response> {
-
         let mut send_task_handles = Vec::new();
 
         for peer in peers.all_peers_excluding(Peer::new(self.self_address)) {
@@ -65,6 +72,43 @@ impl<'a> NonPipelineMode<'a> {
             }
         }
         return total_failed_sends;
+    }
+
+    pub fn send_to_replicas_with_handler_hook<Payload, S, Response, F, T, U>(&self,
+                                                                             service_request_constructor: S,
+                                                                             response_handler_generator: Arc<F>,
+                                                                             response_callback_generator: U)
+        where Payload: Send + 'static,
+              Response: Send + Debug + 'static,
+              S: Fn() -> ServiceRequest<Payload, Response>,
+              F: Fn(HostAndPort, Result<Response, ServiceResponseError>) -> Option<T> + Send + Sync + 'static,
+              T: Future<Output=()> + Send + 'static,
+              U: Fn() -> Option<ResponseCallbackType> {
+
+        for peer in self.peers.all_peers_excluding(Peer::new(self.self_address)) {
+            let peer_address = peer.get_address().clone();
+            let source_address = self.self_address.clone();
+            let singular_update_queue = self.singular_update_queue.clone();
+            let service_request = service_request_constructor();
+            let peer_handler_generator = response_handler_generator.clone();
+
+            if let Some(response_callback) = response_callback_generator() {
+                let correlation_id = service_request.correlation_id;
+                self.request_waiting_list.add(correlation_id, peer_address.clone(), response_callback);
+            }
+
+            tokio::spawn(async move {
+                let response = AsyncNetwork::send_with_source_footprint(
+                    service_request,
+                    source_address,
+                    peer_address,
+                ).await;
+
+                if let Some(handler) = peer_handler_generator(peer_address, response) {
+                    let _ = singular_update_queue.add(handler).await;
+                }
+            });
+        }
     }
 
     fn send<Payload, Response>(&self,

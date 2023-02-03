@@ -55,10 +55,6 @@ impl Peer {
     pub(crate) fn get_address(&self) -> &HostAndPort {
         return &self.address;
     }
-
-    pub(crate) fn has_address(&self, address: &HostAndPort) -> bool {
-        return self.address.eq(address);
-    }
 }
 
 #[cfg(test)]
