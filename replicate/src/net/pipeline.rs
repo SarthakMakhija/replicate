@@ -140,6 +140,8 @@ impl Pipeline {
                     }
                 };
                 channel = reconnected_channel;
+
+                //TODO: This will block the receiver task, need to either change Raft to message passing or remove Grpc
                 let response = AsyncNetwork::send_with_source_footprint_on(
                     response_handler_by_request.service_request,
                     source_address,
