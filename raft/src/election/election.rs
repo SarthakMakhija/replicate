@@ -35,7 +35,7 @@ impl Election {
 
         let request_vote_handler = async move {
             let term = inner_state.change_to_candidate();
-            println!("starting election with term {}", term);
+            println!("starting election with term {} on {:?}", term, inner_state.get_replica_reference().get_self_address());
             let state = inner_state.clone();
             let service_request_factory = state.get_service_request_factory_reference();
             let replica_reference = state.get_replica_reference();
@@ -61,6 +61,7 @@ impl Election {
 
         let _ = replica.add_to_queue(async move {
             if quorum_completion_response.is_success() {
+                println!("{:?} becoming a leader", response_state.get_replica_reference().get_self_address());
                 response_state.change_to_leader();
             } else {
                 response_state.change_to_follower(election_term);

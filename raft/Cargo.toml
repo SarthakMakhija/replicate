@@ -8,6 +8,7 @@ edition = "2021"
 default = []
 test_type_unit = ["replicate/test_type_unit"]
 test_type_integration = ["replicate/test_type_integration"]
+test_type_simulation = ["replicate/test_type_simulation"]
 
 [dependencies]
 replicate = {path = "../replicate" }

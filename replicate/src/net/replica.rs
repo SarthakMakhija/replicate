@@ -131,6 +131,16 @@ impl Replica {
     pub fn get_clock(&self) -> Box<dyn Clock> {
         return self.request_waiting_list.get_clock().clone();
     }
+
+    #[cfg(feature = "test_type_simulation")]
+    pub fn drop_requests_to(&self, peer: Peer) {
+        self.network.drop_requests_to(peer.get_address().clone());
+    }
+
+    #[cfg(feature = "test_type_simulation")]
+    pub fn drop_requests_after(&self, count: u64, peer: Peer) {
+        self.network.drop_requests_after(count, peer.get_address().clone());
+    }
 }
 
 

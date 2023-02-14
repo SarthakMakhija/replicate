@@ -28,6 +28,7 @@ impl InducedFailure {
 
     pub(crate) fn should_drop_to(&self, target_address: &HostAndPort) -> bool {
         if self.drop_requests_to.contains_key(&target_address) {
+            println!("dropping request to {:?}", target_address);
             return true;
         }
         if let Some(entry) = self.drop_requests_after.get(&target_address) {

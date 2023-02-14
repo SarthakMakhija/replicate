@@ -174,10 +174,6 @@ impl State {
         };
     }
 
-    pub(crate) fn get_replica_reference(&self) -> &Replica {
-        return &self.replica;
-    }
-
     pub(crate) fn vote_for(&self, replica_id: ReplicaId) {
         let mut write_guard = self.consensus_state.write().unwrap();
         let mut consensus_state = &mut *write_guard;
@@ -231,6 +227,10 @@ impl State {
 
     pub(crate) fn get_service_request_factory_reference(&self) -> &Box<dyn ServiceRequestFactory> {
         return &self.service_request_factory;
+    }
+
+    pub fn get_replica_reference(&self) -> &Replica {
+        return &self.replica;
     }
 
     pub fn get_replicated_log_reference(&self) -> &ReplicatedLog {

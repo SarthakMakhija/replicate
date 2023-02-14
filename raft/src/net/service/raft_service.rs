@@ -30,7 +30,7 @@ impl Raft for RaftService {
         let request = request.into_inner();
         let correlation_id = request.correlation_id;
 
-        println!("received RequestVote with term {}", request.term);
+        println!("received RequestVote with term {} on host {:?}", request.term, self.state.get_replica_reference().get_self_address());
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term = state.get_term();
