@@ -15,17 +15,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
-      with:
-        version: '3.x'
-    - uses: actions/checkout@v3
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          version: '3.x'
+      - uses: actions/checkout@v3
 
-    - name: Build
-      run: cargo build --verbose
+      - name: Build
+        run: cargo build --verbose
 
-    - name: Run unit tests
-      run: cargo test --no-default-features --features test_type_unit --verbose
+      - name: Run unit tests
+        run: cargo test --no-default-features --features test_type_unit,test_type_simulation --verbose
 
-    - name: Run integration tests
-      run: cargo test --no-default-features --features test_type_integration --verbose
+      - name: Run integration tests
+        run: cargo test --no-default-features --features test_type_integration --verbose
