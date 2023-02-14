@@ -8,3 +8,5 @@ pub mod host_port_extractor;
 pub mod extension;
 pub mod error;
 pub mod request_transformer;
+#[cfg(feature = "test_type_simulation")]
+mod induced_failure;

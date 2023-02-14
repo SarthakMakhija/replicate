@@ -1,14 +1,30 @@
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+
 use tonic::Request;
 use tonic::transport::Channel;
 
 use crate::net::connect::error::ServiceResponseError;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::connect::host_port_extractor::HostAndPortHeaderAdder;
+#[cfg(feature = "test_type_simulation")]
+use crate::net::connect::induced_failure::InducedFailure;
 use crate::net::connect::service_client::ServiceRequest;
 
-pub struct AsyncNetwork {}
+pub struct AsyncNetwork {
+    #[cfg(feature = "test_type_simulation")]
+    induced_failure: InducedFailure,
+}
 
 impl AsyncNetwork {
+    #[cfg(feature = "test_type_simulation")]
+    pub fn new() -> Self {
+        return AsyncNetwork {
+            induced_failure: InducedFailure::new()
+        };
+    }
+
+    #[cfg(not(feature = "test_type_simulation"))]
     pub fn new() -> Self {
         return AsyncNetwork {};
     }
@@ -58,6 +74,16 @@ impl AsyncNetwork {
         ).await;
     }
 
+    #[cfg(feature = "test_type_simulation")]
+    pub fn drop_requests_to(&self, address: HostAndPort) {
+        self.induced_failure.drop_requests_to(address);
+    }
+
+    #[cfg(feature = "test_type_simulation")]
+    pub fn drop_requests_after(&self, count: u64, address: HostAndPort) {
+        self.induced_failure.drop_requests_after(count, address);
+    }
+
     async fn send<Payload: Send, R>(
         &self,
         service_request: ServiceRequest<Payload, R>,
@@ -66,6 +92,15 @@ impl AsyncNetwork {
         channel: Option<Channel>,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
+        #[cfg(feature = "test_type_simulation")]
+        if self.induced_failure.should_drop_to(&target_address) {
+            return Err(Box::new(RequestDropError {
+                host_and_port: target_address
+            }));
+        }
+        #[cfg(feature = "test_type_simulation")]
+        self.induced_failure.increase_request_count_for(target_address.clone());
+
         let client = &service_request.service_client;
         let payload = service_request.payload;
         let mut request = Request::new(payload);
@@ -81,6 +116,19 @@ impl AsyncNetwork {
         };
     }
 }
+
+#[derive(Debug)]
+pub struct RequestDropError {
+    pub host_and_port: HostAndPort,
+}
+
+impl Display for RequestDropError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "message meant to be dropped to {:?}", self.host_and_port)
+    }
+}
+
+impl Error for RequestDropError {}
 
 #[cfg(all(test, feature = "test_type_unit"))]
 mod tests {

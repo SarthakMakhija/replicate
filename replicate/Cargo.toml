@@ -8,6 +8,7 @@ edition = "2021"
 default = []
 test_type_unit = []
 test_type_integration = []
+test_type_simulation = []
 
 [dependencies]
 replicate-macro = { path = "../replicate-macro" }
