@@ -52,7 +52,7 @@ impl InducedFailure {
 }
 
 #[cfg(test)]
-#[cfg(all(feature = "test_type_unit", feature = "test_type_simulation"))]
+#[cfg(feature = "test_type_simulation")]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use crate::net::connect::host_and_port::HostAndPort;

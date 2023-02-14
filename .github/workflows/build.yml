@@ -25,7 +25,10 @@ jobs:
         run: cargo build --verbose
 
       - name: Run unit tests
-        run: cargo test --no-default-features --features test_type_unit,test_type_simulation --verbose
+        run: cargo test --no-default-features --features test_type_unit --verbose
 
       - name: Run integration tests
         run: cargo test --no-default-features --features test_type_integration --verbose
+
+      - name: Run unit tests
+        run: cargo test --no-default-features --features test_type_simulation --verbose
