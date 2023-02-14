@@ -1,0 +1,21 @@
+[package]
+name = "replicate-simulation"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = []
+test_type_unit = ["replicate/test_type_unit"]
+test_type_integration = ["replicate/test_type_integration"]
+
+[dependencies]
+replicate = {path = "../replicate" }
+tonic = "0.8"
+prost = "0.11"
+tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
+async-trait = "0.1.58"
+dashmap = "5.4.0"
+
+[build-dependencies]
+tonic-build = "0.8"

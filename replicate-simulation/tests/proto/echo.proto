@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package simulation.tests.echo;
+
+service Echo {
+  rpc acknowledge_echo(EchoRequest) returns (EchoResponse){}
+}
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoResponse {
+  string message = 1;
+}

@@ -8,9 +8,9 @@ use crate::net::connect::host_and_port::HostAndPort;
 
 pub struct ServiceRequest<Payload, Response>
     where Payload: Send {
-    pub(crate) payload: Payload,
-    pub(crate) service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
-    pub(crate) correlation_id: CorrelationId,
+    pub payload: Payload,
+    pub service_client: Box<dyn ServiceClientProvider<Payload, Response>>,
+    pub correlation_id: CorrelationId,
 }
 
 impl<Payload: Send, Response> ServiceRequest<Payload, Response>
