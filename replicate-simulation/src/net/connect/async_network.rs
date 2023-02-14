@@ -1,8 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use dashmap::DashMap;
-use dashmap::mapref::one::Ref;
 use tonic::Request;
 use tonic::transport::Channel;
 
@@ -11,18 +9,16 @@ use replicate::net::connect::host_and_port::HostAndPort;
 use replicate::net::connect::host_port_extractor::HostAndPortHeaderAdder;
 use replicate::net::connect::service_client::ServiceRequest;
 
+use crate::net::connect::induced_failure::InducedFailure;
+
 pub struct AsyncNetwork {
-    drop_requests_to: DashMap<HostAndPort, bool>,
-    drop_requests_after: DashMap<HostAndPort, u64>,
-    request_count_by_host_and_port: DashMap<HostAndPort, u64>,
+    induced_failure: InducedFailure,
 }
 
 impl AsyncNetwork {
     pub fn new() -> Self {
         return AsyncNetwork {
-            drop_requests_to: DashMap::new(),
-            drop_requests_after: DashMap::new(),
-            request_count_by_host_and_port: DashMap::new(),
+            induced_failure: InducedFailure::new()
         };
     }
 
@@ -71,13 +67,12 @@ impl AsyncNetwork {
         ).await;
     }
 
-    pub fn drop_requests_to(&self, host_and_port: HostAndPort) {
-        self.drop_requests_to.insert(host_and_port, true);
+    pub fn drop_requests_to(&self, address: HostAndPort) {
+        self.induced_failure.drop_requests_to(address);
     }
 
-    pub fn drop_requests_after(&self, count: u64, host_and_port: HostAndPort) {
-        self.drop_requests_to.remove(&host_and_port);
-        self.drop_requests_after.insert(host_and_port, count);
+    pub fn drop_requests_after(&self, count: u64, address: HostAndPort) {
+        self.induced_failure.drop_requests_after(count, address);
     }
 
     async fn send<Payload: Send, R>(
@@ -88,21 +83,13 @@ impl AsyncNetwork {
         channel: Option<Channel>,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
-        if self.drop_requests_to.contains_key(&target_address) {
+        if self.induced_failure.should_drop_to(&target_address) {
             return Err(Box::new(RequestDropError {
                 host_and_port: target_address
             }));
         }
-        if let Some(entry) = self.drop_requests_after.get(&target_address) {
-            let request_count: Option<Ref<HostAndPort, u64>> = self.request_count_by_host_and_port.get(&target_address);
-            if request_count.is_some() && request_count.unwrap().value() >= entry.value() {
-                return Err(Box::new(RequestDropError {
-                    host_and_port: target_address
-                }));
-            }
-        }
 
-        self.increase_request_count_for(target_address.clone());
+        self.induced_failure.increase_request_count_for(target_address.clone());
         let client = &service_request.service_client;
         let payload = service_request.payload;
         let mut request = Request::new(payload);
@@ -115,12 +102,6 @@ impl AsyncNetwork {
             Ok(response) => { Ok(response.into_inner()) }
             Err(e) => { Err(e) }
         };
-    }
-
-    fn increase_request_count_for(&self, target_address: HostAndPort) {
-        let mut count = self.request_count_by_host_and_port.entry(target_address).or_insert(0);
-        let count = count.pair_mut().1;
-        *count = *count + 1;
     }
 }
 
