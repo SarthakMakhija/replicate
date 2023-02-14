@@ -84,5 +84,5 @@ async fn send_client_request(target_address: HostAndPort) -> Result<EchoResponse
         Box::new(EchoServiceClient {}),
         correlation_id,
     );
-    return AsyncNetwork::send_without_source_footprint(service_request, target_address).await;
+    return AsyncNetwork::new().send_without_source_footprint(service_request, target_address).await;
 }

@@ -3,6 +3,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use crate::clock::clock::Clock;
+use crate::net::connect::async_network::AsyncNetwork;
 use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::non_pipeline_mode::NonPipelineMode;
@@ -25,6 +26,7 @@ pub struct Replica {
     pipeline_by_peer: HashMap<Peer, Arc<Pipeline>>,
     request_waiting_list: RequestWaitingList,
     singular_update_queue: Arc<SingularUpdateQueue>,
+    network: Arc<AsyncNetwork>,
 }
 
 impl Replica {
@@ -53,10 +55,16 @@ impl Replica {
 
         let peers = Peers::new(peer_addresses);
         let singular_update_queue = Arc::new(SingularUpdateQueue::new());
+        let network = Arc::new(AsyncNetwork::new());
         let pipeline_by_peer = peers
             .all_peers_excluding(Peer::new(self_address))
             .iter()
-            .map(|peer| (peer.clone(), Arc::new(Pipeline::new(peer.clone(), self_address, singular_update_queue.clone()))))
+            .map(|peer| (peer.clone(), Arc::new(Pipeline::new(
+                peer.clone(),
+                self_address,
+                singular_update_queue.clone(),
+                network.clone()
+            ))))
             .collect::<HashMap<Peer, Arc<Pipeline>>>();
 
         return Replica {
@@ -66,6 +74,7 @@ impl Replica {
             pipeline_by_peer,
             request_waiting_list,
             singular_update_queue,
+            network,
         };
     }
 
@@ -82,6 +91,7 @@ impl Replica {
         return NonPipelineMode::new(
             self.self_address,
             self.singular_update_queue.clone(),
+            self.network.clone(),
             &self.request_waiting_list,
             &self.peers
         );

@@ -243,7 +243,7 @@ fn send_get_request(self_host_and_port: HostAndPort, rt: &Runtime, key: String) 
 
     let address = self_host_and_port.clone();
     let handle = rt.spawn(async move {
-        return AsyncNetwork::send_without_source_footprint(service_request, address).await;
+        return AsyncNetwork::new().send_without_source_footprint(service_request, address).await;
     });
     return handle;
 }
@@ -258,7 +258,7 @@ fn send_put_request(self_host_and_port: HostAndPort, rt: &Runtime, key: String, 
 
     let address = self_host_and_port.clone();
     let handle = rt.spawn(async move {
-        return AsyncNetwork::send_without_source_footprint(service_request, address).await;
+        return AsyncNetwork::new().send_without_source_footprint(service_request, address).await;
     });
     return handle;
 }

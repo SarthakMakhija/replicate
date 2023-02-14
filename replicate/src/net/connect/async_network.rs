@@ -9,13 +9,18 @@ use crate::net::connect::service_client::ServiceRequest;
 pub struct AsyncNetwork {}
 
 impl AsyncNetwork {
+    pub fn new() -> Self {
+        return AsyncNetwork {};
+    }
+
     pub async fn send_with_source_footprint<Payload: Send, R>(
+        &self,
         service_request: ServiceRequest<Payload, R>,
         source_address: HostAndPort,
         target_address: HostAndPort,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
-        return Self::send(
+        return self.send(
             service_request,
             Some(source_address),
             target_address,
@@ -24,11 +29,12 @@ impl AsyncNetwork {
     }
 
     pub async fn send_without_source_footprint<Payload: Send, R>(
+        &self,
         service_request: ServiceRequest<Payload, R>,
         target_address: HostAndPort,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
-        return Self::send(
+        return self.send(
             service_request,
             None,
             target_address,
@@ -37,13 +43,14 @@ impl AsyncNetwork {
     }
 
     pub async fn send_with_source_footprint_on<Payload: Send, R>(
+        &self,
         service_request: ServiceRequest<Payload, R>,
         source_address: HostAndPort,
         target_address: HostAndPort,
         channel: Option<Channel>,
     ) -> Result<R, ServiceResponseError>
         where Payload: Send {
-        return Self::send(
+        return self.send(
             service_request,
             Some(source_address),
             target_address,
@@ -52,6 +59,7 @@ impl AsyncNetwork {
     }
 
     async fn send<Payload: Send, R>(
+        &self,
         service_request: ServiceRequest<Payload, R>,
         source_address: Option<HostAndPort>,
         target_address: HostAndPort,
@@ -74,7 +82,7 @@ impl AsyncNetwork {
     }
 }
 
-#[cfg(all(test, feature="test_type_unit"))]
+#[cfg(all(test, feature = "test_type_unit"))]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
@@ -185,7 +193,7 @@ mod tests {
         let id = 100;
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
 
-        let result = AsyncNetwork::send_with_source_footprint(
+        let result = AsyncNetwork::new().send_with_source_footprint(
             test_success_service_request(id, &correlation_id_generator),
             source_address,
             target_address,
@@ -202,7 +210,7 @@ mod tests {
 
         let id = 100;
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
-        let result = AsyncNetwork::send_with_source_footprint(
+        let result = AsyncNetwork::new().send_with_source_footprint(
             test_failure_service_request(id, &correlation_id_generator),
             source_address,
             target_address,
@@ -219,7 +227,7 @@ mod tests {
         let id = 100;
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
 
-        let result = AsyncNetwork::send_with_source_footprint(
+        let result = AsyncNetwork::new().send_with_source_footprint(
             test_service_request_with_footprint(id, &correlation_id_generator),
             source_address,
             target_address,
@@ -236,7 +244,7 @@ mod tests {
         let id = 100;
         let correlation_id_generator = RandomCorrelationIdGenerator::new();
 
-        let result = AsyncNetwork::send_without_source_footprint(
+        let result = AsyncNetwork::new().send_without_source_footprint(
             test_service_request_with_footprint(id, &correlation_id_generator),
             target_address,
         ).await;

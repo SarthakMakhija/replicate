@@ -52,16 +52,18 @@ pub(crate) struct Pipeline {
     self_address: HostAndPort,
     sender: Sender<ResponseHandlerByRequest>,
     runtime: Runtime,
+    network: Arc<AsyncNetwork>,
 }
 
 impl Pipeline {
 
     #[cfg(not(feature = "test_type_unit"))]
-    pub(crate) fn new(peer: Peer, self_address: HostAndPort, singular_update_queue: Arc<SingularUpdateQueue>) -> Self {
+    pub(crate) fn new(peer: Peer, self_address: HostAndPort, singular_update_queue: Arc<SingularUpdateQueue>, network: Arc<AsyncNetwork>) -> Self {
         return Self::initialize(
             peer,
             self_address,
             singular_update_queue,
+            network,
             |peer, err| {
                 eprintln!("error while connecting to {:?}, {:?}", peer.get_address(), err);
                 true
@@ -70,11 +72,12 @@ impl Pipeline {
     }
 
     #[cfg(feature = "test_type_unit")]
-    pub(crate) fn new(peer: Peer, self_address: HostAndPort, singular_update_queue: Arc<SingularUpdateQueue>) -> Self {
+    pub(crate) fn new(peer: Peer, self_address: HostAndPort, singular_update_queue: Arc<SingularUpdateQueue>, network: Arc<AsyncNetwork>) -> Self {
         return Self::initialize(
             peer,
             self_address,
             singular_update_queue,
+            network,
             |peer, err| {
                 eprintln!("error while connecting to {:?}, {:?}", peer.get_address(), err);
                 false
@@ -86,6 +89,7 @@ impl Pipeline {
         peer: Peer,
         self_address: HostAndPort,
         singular_update_queue: Arc<SingularUpdateQueue>,
+        network: Arc<AsyncNetwork>,
         channel_connection_error_handler: E,
     ) -> Pipeline
         where E: Fn(&Peer, tonic::transport::Error) -> DropMessage + Send + 'static {
@@ -95,6 +99,7 @@ impl Pipeline {
             self_address,
             sender,
             runtime: Self::single_threaded_runtime(),
+            network,
         };
 
         pipeline.start(
@@ -126,6 +131,7 @@ impl Pipeline {
                 channel_connection_error_handler: E)
         where E: Fn(&Peer, tonic::transport::Error) -> DropMessage + Send + 'static {
         let peer_address = peer.get_address().clone();
+        let network = self.network.clone();
 
         self.runtime.spawn(async move {
             let channel_builder = ChannelBuilder {};
@@ -142,7 +148,7 @@ impl Pipeline {
                 channel = reconnected_channel;
 
                 //TODO: This will block the receiver task, need to either change Raft to message passing or remove Grpc
-                let response = AsyncNetwork::send_with_source_footprint_on(
+                let response = network.send_with_source_footprint_on(
                     response_handler_by_request.service_request,
                     source_address,
                     peer_address,
@@ -191,6 +197,7 @@ mod tests {
     use tokio::sync::mpsc::Receiver;
     use tonic::{Request, Response};
     use tonic::transport::Channel;
+    use crate::net::connect::async_network::AsyncNetwork;
 
     use crate::net::connect::error::ServiceResponseError;
     use crate::net::connect::host_and_port::HostAndPort;
@@ -247,7 +254,7 @@ mod tests {
         let peer = Peer::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7118));
 
         let pipeline = Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
-            Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()))
+            Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()), Arc::new(AsyncNetwork::new()))
         });
 
         Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
@@ -263,7 +270,7 @@ mod tests {
         let peer = Peer::new(HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7118));
 
         let pipeline = Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
-            Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()))
+            Pipeline::new(peer, self_address, Arc::new(SingularUpdateQueue::new()), Arc::new(AsyncNetwork::new()))
         });
 
         Builder::new_current_thread().enable_all().build().unwrap().block_on(async {

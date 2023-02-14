@@ -18,6 +18,7 @@ use crate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
 pub struct NonPipelineMode<'a> {
     self_address: HostAndPort,
     singular_update_queue: Arc<SingularUpdateQueue>,
+    network: Arc<AsyncNetwork>,
     request_waiting_list: &'a RequestWaitingList,
     peers: &'a Peers,
 }
@@ -25,11 +26,13 @@ pub struct NonPipelineMode<'a> {
 impl<'a> NonPipelineMode<'a> {
     pub(crate) fn new(self_address: HostAndPort,
                       singular_update_queue: Arc<SingularUpdateQueue>,
+                      network: Arc<AsyncNetwork>,
                       request_waiting_list: &'a RequestWaitingList,
                       peers: &'a Peers) -> Self {
         return NonPipelineMode {
             self_address,
             singular_update_queue,
+            network,
             request_waiting_list,
             peers,
         };
@@ -97,8 +100,9 @@ impl<'a> NonPipelineMode<'a> {
                 self.request_waiting_list.add(correlation_id, peer_address.clone(), response_callback);
             }
 
+            let network = self.network.clone();
             tokio::spawn(async move {
-                let response = AsyncNetwork::send_with_source_footprint(
+                let response = network.send_with_source_footprint(
                     service_request,
                     source_address,
                     peer_address,
@@ -122,8 +126,13 @@ impl<'a> NonPipelineMode<'a> {
         request_waiting_list.add(correlation_id, target_address.clone(), response_callback);
 
         let source_address = self.self_address.clone();
+        let network = self.network.clone();
         return tokio::spawn(async move {
-            let result = AsyncNetwork::send_with_source_footprint(service_request, source_address, target_address.clone()).await;
+            let result = network.send_with_source_footprint(
+                service_request,
+                source_address,
+                target_address.clone()
+            ).await;
             return (result, correlation_id, target_address);
         });
     }
