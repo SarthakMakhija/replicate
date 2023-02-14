@@ -48,8 +48,57 @@ fn elect_a_leader_with_one_peer_completely_out_of_network() {
         all_services_shutdown_handle_three.shutdown().await.unwrap();
     });
 
-    //state_peer_one.get_role() == ReplicaRole::Leader ||
     assert!(state.get_role() == ReplicaRole::Leader ||
+        state_peer_two.get_role() == ReplicaRole::Leader
+    );
+
+    let mut leader_count = 0;
+    if state.get_role() == ReplicaRole::Leader {
+        leader_count = leader_count + 1
+    }
+    if state_peer_one.get_role() == ReplicaRole::Leader {
+        leader_count = leader_count + 1
+    }
+    if state_peer_two.get_role() == ReplicaRole::Leader {
+        leader_count = leader_count + 1
+    }
+
+    assert_eq!(1, leader_count);
+}
+
+#[test]
+#[cfg(feature = "test_type_simulation")]
+fn elect_a_leader_with_one_peer_partially_out_of_network() {
+    let runtime = Builder::new_multi_thread()
+        .thread_name("elect_a_leader".to_string())
+        .worker_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2140);
+    let peer_one = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2149);
+    let peer_other = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2242);
+
+    let (all_services_shutdown_handle_one, state) = spin_self(&runtime, self_host_and_port.clone(), vec![peer_one, peer_other]);
+    let (all_services_shutdown_handle_two, state_peer_one) = spin_peer(&runtime, peer_one.clone(), vec![self_host_and_port, peer_other]);
+    let (all_services_shutdown_handle_three, state_peer_two) = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
+
+    state.get_replica_reference().drop_requests_to(Peer::new(peer_one.clone()));
+    state_peer_two.get_replica_reference().drop_requests_to(Peer::new(peer_one.clone()));
+
+    thread::sleep(Duration::from_secs(2));
+
+    let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    blocking_runtime.block_on(async move {
+        all_services_shutdown_handle_one.shutdown().await.unwrap();
+        all_services_shutdown_handle_two.shutdown().await.unwrap();
+        all_services_shutdown_handle_three.shutdown().await.unwrap();
+    });
+
+    assert!(
+        state.get_role() == ReplicaRole::Leader ||
+        state_peer_one.get_role() == ReplicaRole::Leader ||
         state_peer_two.get_role() == ReplicaRole::Leader
     );
 
