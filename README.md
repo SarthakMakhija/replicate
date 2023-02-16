@@ -11,9 +11,10 @@
 - [ ] Raft
   - [X] Election 
   - [X] Election timer 
-  - [ ] State transition (leader/follower/candidate) 
-  - [ ] Log
-  - [ ] Log replication 
+  - [X] State transition (leader/follower/candidate) 
+  - [X] Log
+  - [X] Log replication 
+  - [ ] WAL 
   - [ ] Retries
   - [X] Heartbeat sender
 - [ ] Viewstamped replication
