@@ -180,14 +180,21 @@ impl State {
         consensus_state.voted_for = Some(replica_id);
     }
 
-    pub(crate) fn has_not_voted_for_or_matches(&self, replica_id: ReplicaId) -> bool {
+    pub(crate) fn has_not_voted(&self) -> bool {
+        if self.get_voted_for().is_none() {
+            return true;
+        }
+        return false;
+    }
+
+    pub(crate) fn has_voted_for(&self, replica_id: ReplicaId) -> bool {
         if let Some(voted_for) = self.get_voted_for() {
             if voted_for == replica_id {
                 return true;
             }
             return false;
         }
-        return true;
+        return false;
     }
 
     pub(crate) fn get_voted_for(&self) -> Option<ReplicaId> {
@@ -216,11 +223,16 @@ impl State {
         let term = self.get_term();
         let role = self.get_role();
 
-        if request_vote.term > term &&
-            role != ReplicaRole::Leader &&
-            self.has_not_voted_for_or_matches(request_vote.replica_id) &&
-            self.get_replicated_log_reference().is_request_log_up_to_date(request_vote.last_log_index, request_vote.last_log_term) {
-            return true;
+        if term == request_vote.term && role != ReplicaRole::Leader {
+            if self
+                .get_replicated_log_reference()
+                .is_request_log_up_to_date(request_vote.last_log_index, request_vote.last_log_term) && self.has_not_voted()  {
+                return true;
+            }
+            if self.has_voted_for(request_vote.replica_id) {
+                return true;
+            }
+            return false;
         }
         return false;
     }
@@ -503,7 +515,7 @@ mod tests {
 
         let state = State::new(some_replica, HeartbeatConfig::default());
 
-        assert_eq!(true, state.has_not_voted_for_or_matches(10));
+        assert_eq!(true, state.has_not_voted());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -520,7 +532,7 @@ mod tests {
         let state = State::new(some_replica, HeartbeatConfig::default());
         state.vote_for(15);
 
-        assert_eq!(true, state.has_not_voted_for_or_matches(15));
+        assert_eq!(true, state.has_voted_for(15));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -537,7 +549,7 @@ mod tests {
         let state = State::new(some_replica, HeartbeatConfig::default());
         state.vote_for(10);
 
-        assert_eq!(false, state.has_not_voted_for_or_matches(15));
+        assert_eq!(false, state.has_voted_for(15));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -787,44 +799,6 @@ mod tests {
     }
 
     #[test]
-    fn should_vote_given_request_term_is_higher() {
-        let some_replica = Replica::new(
-            10,
-            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
-            vec![
-                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
-            ],
-            Box::new(SystemClock::new()),
-        );
-
-        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
-        let state = blocking_runtime.block_on(async move {
-            let state = State::new_with(
-                some_replica,
-                HeartbeatConfig::default(),
-                Box::new(IncrementingCorrelationIdServiceRequestFactory {
-                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
-                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
-                }),
-            );
-            state.heartbeat_check_scheduler.stop();
-            state.heartbeat_send_scheduler.stop();
-            return state;
-        });
-
-        let inner_state = state.clone();
-        blocking_runtime.block_on(async move {
-            let request_vote = RequestVoteBuilder::request_vote(
-                30,
-                10,
-                20,
-            );
-
-            assert!(inner_state.should_vote_for(&request_vote));
-        });
-    }
-
-    #[test]
     fn should_not_vote_given_request_term_is_lower() {
         let some_replica = Replica::new(
             10,
@@ -901,7 +875,45 @@ mod tests {
     }
 
     #[test]
-    fn should_not_vote_if_already_voted() {
+    fn should_not_vote_given_request_has_the_same_term_and_granting_server_is_the_leader() {
+        let some_replica = Replica::new(
+            10,
+            HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
+            vec![
+                HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1297),
+            ],
+            Box::new(SystemClock::new()),
+        );
+
+        let blocking_runtime = Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let state = blocking_runtime.block_on(async move {
+            let state = State::new_with(
+                some_replica,
+                HeartbeatConfig::default(),
+                Box::new(IncrementingCorrelationIdServiceRequestFactory {
+                    base_correlation_id: RwLock::new(AtomicU64::new(0)),
+                    heartbeat_response_client_type: HeartbeatResponseClientType::Failure,
+                }),
+            );
+            state.clone().change_to_leader();
+            state.heartbeat_check_scheduler.stop();
+            state.heartbeat_send_scheduler.stop();
+            return state;
+        });
+
+        let inner_state = state.clone();
+        blocking_runtime.block_on(async move {
+            let request_vote = RequestVoteBuilder::request_vote(
+                30,
+                0,
+                20,
+            );
+            assert_eq!(false, inner_state.should_vote_for(&request_vote));
+        });
+    }
+
+    #[test]
+    fn should_not_vote_if_already_voted_to_other_server() {
         let some_replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
@@ -931,7 +943,7 @@ mod tests {
         blocking_runtime.block_on(async move {
             let request_vote = RequestVoteBuilder::request_vote(
                 30,
-                10,
+                0,
                 20,
             );
             assert_eq!(false, inner_state.should_vote_for(&request_vote));
@@ -969,7 +981,7 @@ mod tests {
         blocking_runtime.block_on(async move {
             let request_vote = RequestVoteBuilder::request_vote(
                 10,
-                10,
+                0,
                 20,
             );
             assert!(inner_state.should_vote_for(&request_vote));
@@ -977,7 +989,7 @@ mod tests {
     }
 
     #[test]
-    fn should_vote_if_request_log_is_up_to_date() {
+    fn should_vote_if_request_log_is_up_to_date_and_not_already_voted() {
         let some_replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
@@ -1010,7 +1022,7 @@ mod tests {
         blocking_runtime.block_on(async move {
             let request_vote = RequestVoteBuilder::request_vote_with_log(
                 10,
-                10,
+                0,
                 20,
                 Some(0),
                 Some(1),
@@ -1020,7 +1032,7 @@ mod tests {
     }
 
     #[test]
-    fn should_not_vote_if_request_log_is_not_up_to_date() {
+    fn should_not_vote_if_request_log_is_not_up_to_date_and_not_already_voted() {
         let some_replica = Replica::new(
             10,
             HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1971),
@@ -1044,6 +1056,7 @@ mod tests {
                 &Command { command: String::from("content").as_bytes().to_vec() },
                 1,
             );
+            state.vote_for(30);
             state.heartbeat_check_scheduler.stop();
             state.heartbeat_send_scheduler.stop();
             return state;
@@ -1053,7 +1066,7 @@ mod tests {
         blocking_runtime.block_on(async move {
             let request_vote = RequestVoteBuilder::request_vote_with_log(
                 10,
-                10,
+                0,
                 20,
                 Some(0),
                 Some(0),

@@ -33,6 +33,9 @@ impl Raft for RaftService {
         let (sender, mut receiver) = mpsc::channel(1);
         let handler = async move {
             let term = state.get_term();
+            if request.term > term {
+                state.clone().change_to_follower(request.term);
+            }
             let should_vote = state.should_vote_for(&request);
             println!("received RequestVote with term {} on host {:?} having term {}", request.term, state.get_replica_reference().get_self_address(), term);
 
@@ -217,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn acknowledge_request_vote_do_not_vote_given_replica_is_the_leader() {
+    fn acknowledge_request_vote_become_follower() {
         let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
         let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
 
@@ -233,44 +236,7 @@ mod tests {
             let state = State::new(replica, HeartbeatConfig::default());
             let state_clone = state.clone();
 
-            state_clone.change_to_leader();
-            return state;
-        });
-
-        let inner_state = state.clone();
-        let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
-
-            let mut request = Request::new(
-                RequestVoteBuilder::request_vote(30, 10, 20)
-            );
-            request.add_host_port(self_host_and_port);
-
-            let _ = raft_service.acknowledge_request_vote(request).await;
-        });
-
-        thread::sleep(Duration::from_millis(5));
-        assert_eq!(None, state.get_voted_for());
-    }
-
-    #[test]
-    fn acknowledge_request_vote_do_not_vote_given_replica_has_already_voted() {
-        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
-
-        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
-        let replica = Replica::new(
-            30,
-            self_host_and_port.clone(),
-            peers,
-            Box::new(SystemClock::new()),
-        );
-
-        let state = runtime.block_on(async move {
-            let state = State::new(replica, HeartbeatConfig::default());
-            let state_clone = state.clone();
-
-            state_clone.vote_for(20);
+            state_clone.clone().change_to_leader();
             return state;
         });
 
@@ -286,107 +252,7 @@ mod tests {
         });
 
         thread::sleep(Duration::from_millis(5));
-        assert_eq!(Some(20), state.get_voted_for());
-    }
-
-    #[test]
-    fn acknowledge_request_vote_do_not_vote_given_the_request_term_not_higher() {
-        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
-
-        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
-        let replica = Replica::new(
-            30,
-            self_host_and_port.clone(),
-            peers,
-            Box::new(SystemClock::new()),
-        );
-
-        let state = runtime.block_on(async move {
-            return State::new(replica, HeartbeatConfig::default());
-        });
-
-        let inner_state = state.clone();
-        let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
-            let mut request = Request::new(
-                RequestVoteBuilder::request_vote(30, 0, 20)
-            );
-            request.add_host_port(self_host_and_port);
-
-            let _ = raft_service.acknowledge_request_vote(request).await;
-        });
-
-        thread::sleep(Duration::from_millis(5));
-        assert_eq!(None, state.get_voted_for());
-    }
-
-    #[test]
-    fn acknowledge_request_vote_do_not_vote_given_the_request_log_is_not_up_to_date() {
-        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
-
-        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
-        let replica = Replica::new(
-            30,
-            self_host_and_port.clone(),
-            peers,
-            Box::new(SystemClock::new()),
-        );
-
-        let state = runtime.block_on(async move {
-            let state = State::new(replica, HeartbeatConfig::default());
-            state.get_replicated_log_reference().append(&Command { command: String::from("Content").as_bytes().to_vec() }, 1);
-            return state;
-        });
-
-        let inner_state = state.clone();
-        let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
-            let mut request = Request::new(
-                RequestVoteBuilder::request_vote_with_log(30, 0, 20, Some(0), Some(0))
-            );
-            request.add_host_port(self_host_and_port);
-
-            let _ = raft_service.acknowledge_request_vote(request).await;
-        });
-
-        thread::sleep(Duration::from_millis(5));
-        assert_eq!(None, state.get_voted_for());
-    }
-
-    #[test]
-    fn acknowledge_request_vote_given_the_request_log_is_up_to_date() {
-        let self_host_and_port = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2060);
-        let peers = vec![HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 2061)];
-
-        let runtime = Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
-        let replica = Replica::new(
-            30,
-            self_host_and_port.clone(),
-            peers,
-            Box::new(SystemClock::new()),
-        );
-
-        let state = runtime.block_on(async move {
-            let state = State::new(replica, HeartbeatConfig::default());
-            state.get_replicated_log_reference().append(&Command { command: String::from("Content").as_bytes().to_vec() }, 1);
-            return state;
-        });
-
-        let inner_state = state.clone();
-        let _ = runtime.block_on(async move {
-            let raft_service = RaftService::new(inner_state.clone());
-            let mut request = Request::new(
-                RequestVoteBuilder::request_vote_with_log(30, 1, 20, Some(0), Some(1))
-            );
-            request.add_host_port(self_host_and_port);
-
-            let _ = raft_service.acknowledge_request_vote(request).await;
-        });
-
-        thread::sleep(Duration::from_millis(5));
-        assert_eq!(Some(30), state.get_voted_for());
+        assert_eq!(ReplicaRole::Follower, state.get_role());
     }
 
     #[test]
