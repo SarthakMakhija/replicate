@@ -87,7 +87,7 @@ fn elect_a_leader_with_one_peer_partially_out_of_network() {
     state.get_replica_reference().drop_requests_to(Peer::new(peer_one.clone()));
     state_peer_two.get_replica_reference().drop_requests_to(Peer::new(peer_one.clone()));
 
-    thread::sleep(Duration::from_secs(2));
+    thread::sleep(Duration::from_millis(400));
 
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
     blocking_runtime.block_on(async move {
