@@ -181,6 +181,7 @@ impl ReplicatedLog {
     pub(crate) fn is_request_log_up_to_date(&self,
                                             request_last_log_index: Option<u64>,
                                             request_last_log_term: Option<u64>) -> bool {
+
         let (self_last_log_index, self_last_log_term): (Option<u64>, Option<u64>) =
             self.get_last_log_index_and_term();
 
@@ -188,13 +189,12 @@ impl ReplicatedLog {
             None => true,
             Some(self_last_log_index) => {
                 return if let Some(last_log_index) = request_last_log_index {
-                    if self_last_log_index > last_log_index {
-                        return false;
+                    if request_last_log_term.unwrap() > self_last_log_term.unwrap() ||
+                        (request_last_log_term.unwrap() == self_last_log_term.unwrap() &&
+                            last_log_index >= self_last_log_index) {
+                        return true
                     }
-                    if self_last_log_term.unwrap() > request_last_log_term.unwrap() {
-                        return false;
-                    }
-                    true
+                    false
                 } else { false };
             }
         };
@@ -242,7 +242,7 @@ impl ReplicatedLog {
 }
 
 
-#[cfg(all(test, feature="test_type_unit"))]
+#[cfg(all(test, feature = "test_type_unit"))]
 mod tests {
     use std::sync::{Arc, Mutex};
 
@@ -848,7 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn request_log_is_up_to_date_given_incoming_log_index_is_greater_with_no_entries_on_other_side() {
+    fn request_log_is_up_to_date_given_incoming_log_term_is_greater_with_no_entries_on_other_side() {
         let replicated_log = ReplicatedLog::new(2);
         assert!(replicated_log.is_request_log_up_to_date(Some(2), Some(1)));
     }
@@ -869,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn request_log_is_not_up_to_date_given_incoming_log_index_is_smaller() {
+    fn request_log_is_not_up_to_date_given_incoming_log_term_is_smaller() {
         let replicated_log = ReplicatedLog::new(2);
         {
             let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
@@ -889,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn request_log_is_not_up_to_date_given_incoming_log_term_is_smaller() {
+    fn request_log_is_not_up_to_date_given_incoming_log_term_is_same_but_incoming_log_index_is_smaller() {
         let replicated_log = ReplicatedLog::new(2);
         {
             let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
@@ -905,27 +905,7 @@ mod tests {
                 &Command { command: String::from("second").as_bytes().to_vec() },
             ));
         }
-        assert_eq!(false, replicated_log.is_request_log_up_to_date(Some(1), Some(0)));
-    }
-
-    #[test]
-    fn request_log_is_up_to_date_given_incoming_log_index_is_greater() {
-        let replicated_log = ReplicatedLog::new(2);
-        {
-            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
-            let replicated_log_state = &mut *write_guard;
-            replicated_log_state.log_entries.push(LogEntry::new(
-                1,
-                0,
-                &Command { command: String::from("first").as_bytes().to_vec() },
-            ));
-            replicated_log_state.log_entries.push(LogEntry::new(
-                1,
-                1,
-                &Command { command: String::from("second").as_bytes().to_vec() },
-            ));
-        }
-        assert!(replicated_log.is_request_log_up_to_date(Some(2), Some(1)));
+        assert_eq!(false, replicated_log.is_request_log_up_to_date(Some(0), Some(1)));
     }
 
     #[test]
@@ -946,5 +926,45 @@ mod tests {
             ));
         }
         assert!(replicated_log.is_request_log_up_to_date(Some(1), Some(2)));
+    }
+
+    #[test]
+    fn request_log_is_up_to_date_given_incoming_log_term_is_same_with_incoming_log_index_greater() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("first").as_bytes().to_vec() },
+            ));
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                1,
+                &Command { command: String::from("second").as_bytes().to_vec() },
+            ));
+        }
+        assert!(replicated_log.is_request_log_up_to_date(Some(2), Some(1)));
+    }
+
+    #[test]
+    fn request_log_is_up_to_date_given_incoming_log_term_is_same_with_incoming_log_index_same() {
+        let replicated_log = ReplicatedLog::new(2);
+        {
+            let mut write_guard = replicated_log.replicated_log_state.write().unwrap();
+            let replicated_log_state = &mut *write_guard;
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                0,
+                &Command { command: String::from("first").as_bytes().to_vec() },
+            ));
+            replicated_log_state.log_entries.push(LogEntry::new(
+                1,
+                1,
+                &Command { command: String::from("second").as_bytes().to_vec() },
+            ));
+        }
+        assert!(replicated_log.is_request_log_up_to_date(Some(1), Some(1)));
     }
 }
