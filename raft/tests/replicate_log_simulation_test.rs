@@ -39,6 +39,9 @@ fn replicate_log_with_leader_getting_disconnected_completely_results_in_new_lead
     let (all_services_shutdown_handle_three, state_peer_other) = spin_other_peer(&runtime, peer_other.clone(), vec![self_host_and_port, peer_one]);
     let blocking_runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
+    //disconnect one of the peers
+    state.get_replica_reference().drop_requests_to(Peer::new(peer_other.clone()));
+
     let election = Election::new();
     blocking_runtime.block_on(async {
         election.start(state.clone()).await;
@@ -60,7 +63,7 @@ fn replicate_log_with_leader_getting_disconnected_completely_results_in_new_lead
 
         assert_eq!(1, state.get_replicated_log_reference().total_log_entries());
         assert_eq!(1, state_peer_one.get_replicated_log_reference().total_log_entries());
-        assert_eq!(1, state_peer_other.get_replicated_log_reference().total_log_entries());
+        assert_eq!(0, state_peer_other.get_replicated_log_reference().total_log_entries());
 
         //disconnect the leader completely
         state.get_replica_reference().drop_requests_to(Peer::new(peer_one.clone()));
@@ -74,7 +77,7 @@ fn replicate_log_with_leader_getting_disconnected_completely_results_in_new_lead
         all_services_shutdown_handle_two.shutdown().await.unwrap();
         all_services_shutdown_handle_three.shutdown().await.unwrap();
 
-        assert!(state_peer_one.get_role() == ReplicaRole::Leader || state_peer_other.get_role() == ReplicaRole::Leader);
+        assert_eq!(state_peer_one.get_role(), ReplicaRole::Leader);
     });
 }
 
