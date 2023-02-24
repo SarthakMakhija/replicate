@@ -8,11 +8,11 @@ use crate::net::connect::correlation_id::CorrelationId;
 use crate::net::connect::host_and_port::HostAndPort;
 use crate::net::request_waiting_list::request_timeout_error::RequestTimeoutError;
 
-pub(crate) type ResponseErrorType = Box<dyn Error + Send + Sync>;
+pub type ResponseErrorType = Box<dyn Error + Send + Sync>;
+
+pub type AnyResponse = Box<dyn Any>;
 
 pub(crate) type ResponseCallbackType = Arc<dyn ResponseCallback + 'static>;
-
-pub(crate) type AnyResponse = Box<dyn Any>;
 
 pub trait ResponseCallback: Send + Sync {
     fn on_response(&self, from: HostAndPort, response: Result<AnyResponse, ResponseErrorType>);

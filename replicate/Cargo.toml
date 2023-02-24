@@ -10,6 +10,9 @@ test_type_unit = []
 test_type_integration = []
 test_type_simulation = []
 
+[dev-dependencies]
+criterion = "0.4"
+
 [dependencies]
 replicate-macro = { path = "../replicate-macro" }
 dashmap = "5.4.0"
@@ -23,3 +26,7 @@ rand = "0.8.5"
 [build-dependencies]
 replicate-macro = { path = "../replicate-macro" }
 tonic-build = "0.8"
+
+[[bench]]
+name    = "bench_main"
+harness = false

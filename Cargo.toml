@@ -7,3 +7,6 @@ members = [
     "replicate-examples",
     "raft"
 ]
+
+[profile.release]
+opt-level = 3

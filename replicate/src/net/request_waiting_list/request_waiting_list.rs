@@ -30,6 +30,18 @@ impl RequestWaitingList {
         return request_waiting_list;
     }
 
+    pub fn new_with_disabled_expired_callbacks_removal(clock: Box<dyn Clock>) -> Self <> {
+        return Self::new_with_capacity_and_disabled_expired_callbacks_removal(0, clock);
+    }
+
+    pub fn new_with_capacity_and_disabled_expired_callbacks_removal(
+        capacity: usize,
+        clock: Box<dyn Clock>) -> Self <> {
+        let pending_requests = Arc::new(DashMap::with_capacity(capacity));
+
+        return RequestWaitingList { pending_requests, clock };
+    }
+
     pub fn add(&self, correlation_id: CorrelationId, target_address: HostAndPort, callback: ResponseCallbackType) {
         let timestamped_callback = TimestampedCallback::new(callback, target_address, self.clock.now());
         self.pending_requests.insert(correlation_id, timestamped_callback);
@@ -41,6 +53,10 @@ impl RequestWaitingList {
             let timestamped_callback = callback_by_key.1;
             timestamped_callback.on_response(from, response);
         }
+    }
+
+    pub fn size(&self) -> usize {
+        return self.pending_requests.len();
     }
 
     pub(crate) fn get_clock(&self) -> &Box<dyn Clock> {
