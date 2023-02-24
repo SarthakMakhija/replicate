@@ -38,7 +38,7 @@ impl TimestampedCallback {
     }
 
     pub(crate) fn on_timeout_response(&self, correlation_id: &CorrelationId) {
-        eprintln!("Request timed out for correlation_id {}", correlation_id);
+        //eprintln!("Request timed out for correlation_id {}", correlation_id);
         self.callback.on_response(self.target_address, Err(Box::new(RequestTimeoutError {
             correlation_id: *correlation_id
         })));
