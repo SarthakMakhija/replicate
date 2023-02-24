@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use criterion::{Criterion, criterion_group};
+use criterion::{BatchSize, Criterion, criterion_group};
 use tokio::runtime::Builder;
 
 use replicate::singular_update_queue::singular_update_queue::SingularUpdateQueue;
@@ -12,6 +12,8 @@ struct State {
 struct Value {
     count: u64,
 }
+
+const SIZE: usize = 1024 * 1024;
 
 fn add(criterion: &mut Criterion) {
     let singular_update_queue = SingularUpdateQueue::new();
@@ -26,19 +28,25 @@ fn add(criterion: &mut Criterion) {
 
         bencher
             .to_async(runtime)
-            .iter(|| {
-                let inner_state = state.clone();
-                async {
-                    let result = singular_update_queue.add(async move {
-                        let mut value = inner_state.value.write().unwrap();
-                        value.count = value.count + 1;
-                    }).await;
+            .iter_batched(
+                || (0..SIZE).collect::<Vec<_>>(),
+                |ids| {
+                    async {
+                        for _id in ids {
+                            let inner_state = state.clone();
 
-                    if let Err(err) = result {
-                        panic!("error while submitting a task to singular_update_queue: {}", err.to_string());
+                            let result = singular_update_queue.add(async move {
+                                let mut value = inner_state.value.write().unwrap();
+                                value.count = value.count + 1;
+                            }).await;
+
+                            if let Err(err) = result {
+                                panic!("error while submitting a task to singular_update_queue: {}", err.to_string());
+                            }
+                        }
                     }
-                }
-            });
+                }, BatchSize::SmallInput,
+            );
     });
 }
 
