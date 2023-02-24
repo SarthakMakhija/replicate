@@ -11,7 +11,7 @@ test_type_integration = []
 test_type_simulation = []
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = { version = "0.4", features = ["async_tokio"] }
 
 [dependencies]
 replicate-macro = { path = "../replicate-macro" }
@@ -28,5 +28,5 @@ replicate-macro = { path = "../replicate-macro" }
 tonic-build = "0.8"
 
 [[bench]]
-name    = "bench_main"
+name = "bench_main"
 harness = false

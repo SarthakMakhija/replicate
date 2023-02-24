@@ -13,14 +13,14 @@ use replicate::net::request_waiting_list::response_callback::{AnyResponse, Respo
 
 const SIZE: usize = 1024 * 1024;
 
-struct SuccessResponseCallback {}
+struct NoResponseCallback {}
 
-impl ResponseCallback for SuccessResponseCallback {
+impl ResponseCallback for NoResponseCallback {
     fn on_response(&self, _: HostAndPort, _: Result<AnyResponse, ResponseErrorType>) {}
 }
 
 fn add(criterion: &mut Criterion) {
-    let success_response_callback = Arc::new(SuccessResponseCallback {});
+    let success_response_callback = Arc::new(NoResponseCallback {});
     let from = HostAndPort::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 50051);
 
     let mut group = criterion.benchmark_group("request waiting list add");

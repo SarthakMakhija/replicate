@@ -8,7 +8,7 @@ use tokio::sync::mpsc::error::SendError;
 
 pub type AsyncBlock = Pin<Box<dyn Future<Output=()> + Send + 'static>>;
 
-pub(crate) struct Task {
+pub struct Task {
     block: AsyncBlock,
 }
 
@@ -22,13 +22,13 @@ impl<T: Future<Output=()> + Send + 'static> ToAsyncBlock for T {
     }
 }
 
-pub(crate) struct SingularUpdateQueue {
+pub struct SingularUpdateQueue {
     sender: Sender<Task>,
     single_thread_pool: Runtime,
 }
 
 impl SingularUpdateQueue {
-    pub(crate) fn new() -> SingularUpdateQueue {
+    pub fn new() -> SingularUpdateQueue {
         let single_thread_pool = Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -45,14 +45,14 @@ impl SingularUpdateQueue {
         return singular_update_queue;
     }
 
-    pub(crate) async fn add<F>(&self, handler: F) -> Result<(), SendError<Task>>
+    pub async fn add<F>(&self, handler: F) -> Result<(), SendError<Task>>
         where
             F: Future<Output=()> + Send + 'static {
         let block = handler.async_block();
         return self.sender.clone().send(Task { block }).await;
     }
 
-    pub(crate) async fn submit(&self, handler: AsyncBlock) -> Result<(), SendError<Task>> {
+    pub async fn submit(&self, handler: AsyncBlock) -> Result<(), SendError<Task>> {
         return self.sender.clone().send(Task { block: handler }).await;
     }
 
