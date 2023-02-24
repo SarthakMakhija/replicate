@@ -28,10 +28,16 @@ fn add(criterion: &mut Criterion) {
             .to_async(runtime)
             .iter(|| {
                 let inner_state = state.clone();
-                singular_update_queue.add(async move {
-                    let mut value = inner_state.value.write().unwrap();
-                    value.count = value.count + 1;
-                })
+                async {
+                    let result = singular_update_queue.add(async move {
+                        let mut value = inner_state.value.write().unwrap();
+                        value.count = value.count + 1;
+                    }).await;
+
+                    if let Err(err) = result {
+                        panic!("error while submitting a task to singular_update_queue: {}", err.to_string());
+                    }
+                }
             });
     });
 }
