@@ -7,8 +7,8 @@
 - [X] Quorum callback
 - [X] Async network calls (grpc)
 - [X] Heartbeat scheduler
-- [X] Quorum (as example using the building blocks)
-- [ ] Raft
+- [X] Quorum (as an example using the building blocks)
+- [ ] Raft (as an example using the building blocks)
   - [X] Election 
   - [X] Election timer 
   - [X] State transition (leader/follower/candidate) 
