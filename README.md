@@ -3,7 +3,7 @@
 `replicate` is the rust version of Unmesh Joshi's [replicate](https://github.com/unmeshjoshi/replicate). It is a basic framework to quickly build and test replication algorithms.
 `replicate` implements various distributed systems patterns and provides a foundation to implement any consensus algorithm.
 
-## Distributed Systems patterns
+## Features and Distributed Systems patterns
 
 - [X] [Singular update queue](https://martinfowler.com/articles/patterns-of-distributed-systems/singular-update-queue.html)
 - [X] [Request waiting list](https://martinfowler.com/articles/patterns-of-distributed-systems/request-waiting-list.html)
@@ -17,6 +17,9 @@
   - [X] Log replication 
   - [ ] WAL 
   - [X] Heartbeat sender
+- [X] Async Network calls
+- [X] Support for simulation
+- [X] Benchmarks for replication using Criterion
 
 Example implementations of `quorum` and `raft` are provided, both of which are implemented using `replicate` as the foundation.
 
