@@ -9,7 +9,7 @@
 - [X] [Request waiting list](https://martinfowler.com/articles/patterns-of-distributed-systems/request-waiting-list.html)
 - [X] [Heartbeat](https://martinfowler.com/articles/patterns-of-distributed-systems/heartbeat.html)
 - [X] [Quorum](https://martinfowler.com/articles/patterns-of-distributed-systems/quorum.html) (as an example using the building blocks)
-- [ ] [Raf](https://martinfowler.com/articles/patterns-of-distributed-systems/replicated-log.html) (as an example using the building blocks)
+- [ ] [Raft](https://martinfowler.com/articles/patterns-of-distributed-systems/replicated-log.html) (as an example using the building blocks)
   - [X] Election 
   - [X] Election timer 
   - [X] State transition (leader/follower/candidate) 
@@ -19,7 +19,7 @@
   - [X] Heartbeat sender
 - [X] Async Network calls
 - [X] Support for simulation
-- [X] Benchmarks for replication using Criterion
+- [X] Benchmarks for replicate using Criterion
 
 Example implementations of `quorum` and `raft` are provided, both of which are implemented using `replicate` as the foundation.
 
